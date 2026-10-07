@@ -158,6 +158,19 @@ describe("FSA official alert imports", () => {
 });
 
 describe("FDA enforcement report imports", () => {
+  it("derives a stable key for a legacy empty ID and preserves an official recall number", () => {
+    const legacyRecord = fdaRecord({
+      recall_number: "",
+      event_id: "99453",
+      recalling_firm: "MARKON",
+      product_description: "MARKON salad",
+      report_date: "20260819",
+    });
+
+    expect(parseFdaRecord(legacyRecord).sourceId).toBe("unclassified-20260819-markon-markon-salad");
+    expect(parseFdaRecord(fdaRecord({ recall_number: "F-1000-2026" })).sourceId).toBe("F-1000-2026");
+  });
+
   it("maps only explicit completed/terminated statuses to resolved", () => {
     expect(parseFdaRecord(fdaRecord({ status: "Ongoing" })).status).toBe("active");
     expect(parseFdaRecord(fdaRecord({ status: "Completed" })).status).toBe("resolved");
@@ -208,6 +221,72 @@ describe("FDA enforcement report imports", () => {
     }));
 
     await expect(fdaSource.fetchIncidents(["F-OLD-2024"])).rejects.toThrow(/status lookup failed/);
+  });
+
+  it("preserves a legacy synthetic warning when its current ongoing record gains an official number", async () => {
+    const legacyRecord = fdaRecord({
+      recall_number: "",
+      event_id: "99453",
+      recalling_firm: "Taylor Farms",
+      product_description: "MARKON BLEND LETT/ROM 80/20 WITH SEP BAGGIES",
+      report_date: "20260819",
+      code_info: "Lot code 12345",
+    });
+    const legacyId = parseFdaRecord(legacyRecord).sourceId;
+    const currentRecord = { ...legacyRecord, recall_number: "H-1298-2026" };
+    const calls: URL[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      const limit = Number(url.searchParams.get("limit"));
+      return jsonResponse({
+        meta: { results: { skip: 0, limit, total: 1 } },
+        results: [currentRecord],
+      });
+    }));
+
+    const incidents = await fdaSource.fetchIncidents([legacyId]);
+
+    expect(incidents.map((incident) => incident.sourceId)).toEqual(["H-1298-2026"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].searchParams.get("search")).toContain('status:"Ongoing"');
+  });
+
+  it("fails closed when a legacy synthetic key matches multiple current recalls", async () => {
+    const sharedIdentity = {
+      recalling_firm: "Taylor Farms",
+      product_description: "MARKON BLEND LETT/ROM 80/20 WITH SEP BAGGIES",
+      report_date: "20260819",
+    };
+    const legacyId = parseFdaRecord(fdaRecord({ ...sharedIdentity, recall_number: "" })).sourceId;
+    const records = [
+      fdaRecord({ ...sharedIdentity, recall_number: "H-1298-2026" }),
+      fdaRecord({ ...sharedIdentity, recall_number: "H-1299-2026" }),
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const limit = Number(url.searchParams.get("limit"));
+      return jsonResponse({
+        meta: { results: { skip: 0, limit, total: records.length } },
+        results: records,
+      });
+    }));
+
+    await expect(fdaSource.fetchIncidents([legacyId])).rejects.toThrow(/ambiguously matches multiple ongoing recalls/);
+  });
+
+  it("fails closed when a legacy synthetic key has no current official match", async () => {
+    const legacyId = parseFdaRecord(fdaRecord({ recall_number: "" })).sourceId;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const limit = Number(url.searchParams.get("limit"));
+      return jsonResponse({
+        meta: { results: { skip: 0, limit, total: 1 } },
+        results: [fdaRecord({ recall_number: "H-1298-2026", recalling_firm: "Different Firm" })],
+      });
+    }));
+
+    await expect(fdaSource.fetchIncidents([legacyId])).rejects.toThrow(/without its official recall number/);
   });
 });
 

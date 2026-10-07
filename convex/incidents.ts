@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
-import { fdaSource } from "../src/lib/incidents/fda";
+import { fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
 import { fsisSource } from "../src/lib/incidents/fsis";
 import { fsaSource } from "../src/lib/incidents/fsa";
 import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "../src/lib/incidents/types";
@@ -17,6 +17,7 @@ import { requireServerSecret } from "./security";
 const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource];
 const UPSERT_BATCH_SIZE = 25;
 const DATASET_PAGE_SIZE = 100;
+const LEGACY_FDA_REPAIR_PAGE_SIZE = 25;
 
 function normalisedTargetValue(target: NormalisedTarget): string {
   if (target.type === "gtin") return normaliseGtin(target.value);
@@ -260,6 +261,59 @@ export const getActiveSourceIdsPage = internalQuery({
   },
 });
 
+export const repairLegacyFdaSourceIdsBatch = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db
+      .query("incidents")
+      .withIndex("by_authority_sourceId", (q) => q.eq("authority", fdaSource.name).eq("sourceId", ""))
+      .paginate({ numItems: LEGACY_FDA_REPAIR_PAGE_SIZE, cursor });
+    let repaired = 0;
+
+    for (const row of page.page) {
+      const sourceId = parseFdaRecord(row.originalSourceData).sourceId;
+      if (!sourceId.trim()) throw new Error(`Cannot derive an FDA source ID for incident ${row._id}`);
+
+      const collision = await ctx.db
+        .query("incidents")
+        .withIndex("by_authority_sourceId", (q) => q.eq("authority", row.authority).eq("sourceId", sourceId))
+        .unique();
+      if (collision && collision._id !== row._id) {
+        throw new Error(`FDA source ID repair for incident ${row._id} would collide with ${collision._id}`);
+      }
+
+      await ctx.db.patch(row._id, { sourceId });
+      const compact = await ctx.db
+        .query("incidentMatchData")
+        .withIndex("by_incidentId", (q) => q.eq("incidentId", row._id))
+        .unique();
+      if (compact) await ctx.db.patch(compact._id, { sourceId });
+      repaired += 1;
+    }
+
+    return { repaired, isDone: page.isDone, continueCursor: page.continueCursor };
+  },
+});
+
+export const repairLegacyFdaSourceIdsInternal = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let cursor: string | null = null;
+    let isDone = false;
+    let repaired = 0;
+    while (!isDone) {
+      const page: { repaired: number; isDone: boolean; continueCursor: string | null } = await ctx.runMutation(
+        internal.incidents.repairLegacyFdaSourceIdsBatch,
+        { cursor },
+      );
+      cursor = page.continueCursor;
+      isDone = page.isDone;
+      repaired += page.repaired;
+    }
+    return { repaired };
+  },
+});
+
 export const beginRun = internalMutation({
   args: {
     source: v.string(),
@@ -399,6 +453,7 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
   try {
     const existingSourceIds: string[] = [];
     if (source.id === "fda") {
+      await ctx.runAction(internal.incidents.repairLegacyFdaSourceIdsInternal, {});
       let cursor: string | null = null;
       let isDone = false;
       while (!isDone) {

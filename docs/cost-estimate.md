@@ -35,6 +35,22 @@ The last column is a stress scenario showing why cache efficiency matters. It is
 
 Convex Starter is modelled through 100,000 monthly checks and Professional thereafter. Using Professional earlier adds a $25 developer subscription and changes included allowances. A personal noncommercial prototype may fit free hosting; the table budgets Vercel Pro for a public service.
 
+## Observed deployment adjustment
+
+Production was verified on 2026-10-07 in Convex’s Ireland region (`eu-west-1`); Vercel function compute remains modelled in `iad1`. Ireland adds 30% to Convex usage charges, not the developer subscription or Vercel bill. Applying that surcharge to the same assumptions gives:
+
+| Monthly active users | Checks/month | 90% snapshot-cache hit rate | All snapshots fetched again |
+| ---: | ---: | ---: | ---: |
+| 100 | 1,000 | ~$20 | ~$22 |
+| 1,000 | 10,000 | ~$22 | ~$44 |
+| 10,000 | 100,000 | ~$45 | ~$265 |
+| 100,000 | 1,000,000 | ~$265 | ~$2,230 |
+| 1,000,000 | 10,000,000 | ~$2,700 | ~$22,800 |
+
+These are the current deployment’s planning figures. Account plan, seats and actual cache efficiency remain unverified. [Convex regional pricing](https://docs.convex.dev/production/regions)
+
+Production FSA and FDA announcement imports succeeded during automation verification. FSIS returned HTTP 403 from Convex, so the earlier local FSIS projection is not evidence of healthy production US coverage. Import failures must remain visible even when retained warnings are available.
+
 ## Published prices used
 
 Vercel Pro starts at $20/developer/month with $20 eligible usage credit. [Vercel pricing](https://vercel.com/pricing)

@@ -111,11 +111,20 @@ function incidentStatus(sourceStatus: string): "active" | "resolved" {
   }
 }
 
+function legacySourceId(record: z.infer<typeof recordSchema>): string {
+  const productName = record.product_description.trim().slice(0, 300);
+  return `unclassified-${record.report_date}-${slugify(`${record.recalling_firm}-${productName}`)}`;
+}
+
+function sourceIdForRecord(record: z.infer<typeof recordSchema>): string {
+  return record.recall_number.trim() || legacySourceId(record);
+}
+
 export function parseFdaRecord(value: unknown): NormalisedIncident {
   const record = recordSchema.parse(value);
   const productName = record.product_description.trim().slice(0, 300);
   const recallNumber = record.recall_number.trim();
-  const sourceId = recallNumber || `unclassified-${record.report_date}-${slugify(`${record.recalling_firm}-${productName}`)}`;
+  const sourceId = sourceIdForRecord(record);
   const reportedAt = parseFdaDate(record.report_date, "report date");
   const startsAt = parseFdaDate(record.recall_initiation_date, "recall initiation date");
   const officialApiUrl = recallNumber
@@ -187,7 +196,7 @@ async function fetchAllWithStatus(status: string): Promise<NormalisedIncident[]>
   if (records.length !== total) throw new Error(`FDA ${status} import received ${records.length} of ${total} records`);
   const ids = new Set<string>();
   for (const record of records) {
-    const id = record.recall_number.trim() || `unclassified-${record.report_date}-${slugify(`${record.recalling_firm}-${record.product_description.slice(0, 300)}`)}`;
+    const id = sourceIdForRecord(record);
     if (ids.has(id)) throw new Error(`FDA ${status} query repeated recall ${id}`);
     ids.add(id);
   }
@@ -216,13 +225,40 @@ async function fetchRecallByNumber(recallNumber: string): Promise<NormalisedInci
 async function resolvePreviouslyActive(existingSourceIds: string[], current: NormalisedIncident[]): Promise<NormalisedIncident[]> {
   const currentIds = new Set(current.map((incident) => incident.sourceId));
   const missingIds = [...new Set(existingSourceIds)].filter((sourceId) => !currentIds.has(sourceId));
-  const lookedUp: NormalisedIncident[] = [];
+  const needsLegacyAliases = missingIds.some((sourceId) => sourceId.startsWith("unclassified-"));
+  const legacyAliases = new Map<string, NormalisedIncident[]>();
 
-  for (let index = 0; index < missingIds.length; index += DETAIL_CONCURRENCY) {
-    const group = missingIds.slice(index, index + DETAIL_CONCURRENCY);
-    if (group.some((sourceId) => !sourceId || sourceId.startsWith("unclassified-"))) {
+  if (needsLegacyAliases) {
+    for (const incident of current) {
+      const parsedRecord = recordSchema.safeParse(incident.originalSourceData);
+      if (!parsedRecord.success) {
+        throw new Error(`FDA could not verify the legacy source ID for current recall ${incident.sourceId}`);
+      }
+      const legacyId = legacySourceId(parsedRecord.data);
+      if (legacyId === incident.sourceId) continue;
+      const aliases = legacyAliases.get(legacyId) ?? [];
+      aliases.push(incident);
+      legacyAliases.set(legacyId, aliases);
+    }
+  }
+
+  const lookupIds: string[] = [];
+  for (const sourceId of missingIds) {
+    if (sourceId.startsWith("unclassified-")) {
+      const matches = legacyAliases.get(sourceId) ?? [];
+      if (matches.length === 1 && matches[0].status === "active") continue;
+      if (matches.length > 1) {
+        throw new Error(`FDA legacy source ID ${sourceId} ambiguously matches multiple ongoing recalls`);
+      }
       throw new Error("FDA cannot safely status-check a previously active recall without its official recall number");
     }
+    lookupIds.push(sourceId);
+  }
+
+  const lookedUp: NormalisedIncident[] = [];
+
+  for (let index = 0; index < lookupIds.length; index += DETAIL_CONCURRENCY) {
+    const group = lookupIds.slice(index, index + DETAIL_CONCURRENCY);
     const results = await Promise.allSettled(group.map(fetchRecallByNumber));
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (failures.length) {
