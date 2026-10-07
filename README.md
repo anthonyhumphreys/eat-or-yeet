@@ -15,7 +15,24 @@ The internal `EAT` enum remains for stored-result compatibility. It is not the p
 
 Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4, shadcn/ui components, Convex Cloud, native BarcodeDetector with a ZXing fallback, Zod, Vitest and Playwright.
 
-Requires Node.js 24+, pnpm 10+ and a Convex account.
+Requires Node.js 24+ and pnpm 10+. Choose the setup that matches how you contribute.
+
+### Community contributors
+
+Fork the repository and submit pull requests. You do not need a seat on our Convex team, a Vercel account or production credentials. Run the full account-free local stack with:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+The launcher creates local configuration and secrets, starts Convex and Next.js, and seeds fictional examples. Existing configuration is preserved. Ctrl-C stops both servers. The unit suite can run without a backend. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, development data, checks and PR guidance.
+
+### Core contributors
+
+Maintainers with access to the shared Convex project use their own development deployment for hosted integration work and manage preview/production releases. This setup requires a Convex account and project access. Core contributors can also use the community local setup. With an existing personal cloud development selector, `pnpm dev` watches that backend and starts Next.js without changing cloud secrets or seeding cloud data.
+
+To configure your hosted development deployment:
 
 ```bash
 pnpm install
@@ -32,14 +49,14 @@ pnpm dev
 
 Next loads `.env.development.local` only in development. Values needed by both `pnpm dev` and `pnpm start` belong in `.env.local`, or must be supplied by the hosting environment. Keep development and production credentials separate.
 
-Fictional data is opt-in and does not establish source health. Set local `ALLOW_DEMO_DATA=true`, then:
+For hosted development, fictional data is opt-in and does not establish source health. Set local `ALLOW_DEMO_DATA=true`, then:
 
 ```bash
 pnpm exec convex env set ALLOW_DEMO_DATA true
 pnpm data:seed
 ```
 
-Never enable demo data in production.
+Never enable demo data in production. Use `pnpm dev:web` to start only Next.js when managing the backend separately.
 
 ## Environment
 

@@ -16,7 +16,7 @@ const demos: Array<{
     hazard: "Possible Salmonella contamination", pathogen: "Salmonella",
     summary: "DEMO DATA. A fictional recall used to test an exact barcode and batch match.",
     consumerAdvice: "DEMO DATA. Do not use this notice as real food-safety advice.", sourceId: "DEMO-EXACT-001", severity: "high",
-    targets: [["gtin", "05000000000006", 70], ["batch", "24182", 65], ["product", "Northstar Peanut Bites", 35]],
+    targets: [["gtin", "05000000000005", 70], ["batch", "24182", 65], ["product", "Northstar Peanut Bites", 35]],
   },
   {
     title: "DEMO: Demo Valley Foods producer investigation", slug: "demo-valley-foods-producer", region: "UK",
@@ -86,7 +86,7 @@ export const demo = mutation({
       if (existingMatch) await ctx.db.patch(existingMatch._id, matchRecord);
       else await ctx.db.insert("incidentMatchData", matchRecord);
     }
-    const gtin = normaliseGtin("5000000000006");
+    const gtin = normaliseGtin("5000000000005");
     const product = await ctx.db.query("products").withIndex("by_gtin", (q) => q.eq("gtin", gtin)).unique();
     const productRecord = { gtin, name: "Northstar Peanut Bites", brand: "Northstar", category: "Snacks", metadata: { demo: true }, updatedAt: now };
     if (product) await ctx.db.patch(product._id, productRecord);

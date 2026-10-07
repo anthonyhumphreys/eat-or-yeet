@@ -19,6 +19,12 @@ describe("incident browsing", () => {
     expect(browseCategories({ title: "Mixed food items", targets: [], originalSourceData: {} })).toEqual(["Other foods"]);
   });
 
+  it("groups complete meals before their individual ingredients", () => {
+    for (const product of ["Chicken curry", "Cheese pizza", "Tuna sandwich", "Chicken salad"]) {
+      expect(browseCategories({ title: product, targets: [{ type: "product", value: product }], originalSourceData: {} })).toEqual(["Prepared foods"]);
+    }
+  });
+
   it("recognises food names from current official notices without treating hazard text as a category", () => {
     const products = [
       ["Outshine Fruit Bars Grape", "Snacks & sweets"],

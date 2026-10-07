@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { DatasetStatus, VerdictResult } from "@/lib/domain/types";
+import { publicOfficialSource } from "@/lib/incidents/public-source";
 
 type PresentedVerdict = {
   headline: string;
@@ -68,6 +69,7 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
   const Icon = view.Icon;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const topMatch = result.matches[0];
+  const officialSource = topMatch ? publicOfficialSource(topMatch.incident) : null;
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const checkedAt = formatDate(result.datasetStatus?.checkedAt ?? result.checkedAt);
@@ -173,9 +175,10 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
             <div><dt className="text-muted-foreground">Warning updated</dt><dd className="font-semibold">{formatDate(topMatch.incident.updatedAt.toString()) ?? "See official source"}</dd></div>
           </dl>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild variant="secondary"><a href={topMatch.incident.authorityUrl} target="_blank" rel="noreferrer">Official source<ExternalLink aria-hidden /></a></Button>
+            <Button asChild variant="secondary"><a href={officialSource?.url} target="_blank" rel="noreferrer">{officialSource?.label}<ExternalLink aria-hidden /></a></Button>
             <Button asChild variant="outline"><Link href={`/incidents/${topMatch.incident.slug}`}>Full warning</Link></Button>
           </div>
+          {officialSource?.note ? <p className="mt-3 text-xs leading-5 text-muted-foreground">{officialSource?.note}</p> : null}
         </section>
       ) : null}
 

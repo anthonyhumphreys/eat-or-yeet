@@ -3,6 +3,9 @@
 import { ScanBarcode } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useLocation } from "@/components/location-provider";
+import { regionNames } from "@/lib/location";
+
 import { BarcodeCamera } from "@/components/scanner/barcode-camera";
 import { ObservationForm } from "@/components/scanner/observation-form";
 import { VerdictView } from "@/components/verdict/verdict-view";
@@ -14,7 +17,7 @@ type Step = "barcode" | "details" | "checking" | "result";
 
 export function ScanFlow() {
   const [step, setStep] = useState<Step>("barcode");
-  const [region, setRegion] = useState<"UK" | "US">("UK");
+  const { region } = useLocation();
   const [observation, setObservation] = useState<ProductObservation>(emptyObservation());
   const [result, setResult] = useState<VerdictResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,22 +67,7 @@ export function ScanFlow() {
   return (
     <div>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-5 border-b pb-5">
-        <fieldset>
-          <legend className="text-sm font-semibold text-muted-foreground">Check warnings from</legend>
-          <div className="mt-2 flex rounded-full bg-muted p-1">
-            {(["UK", "US"] as const).map((item) => (
-              <button
-                type="button"
-                key={item}
-                onClick={() => setRegion(item)}
-                className={`min-h-10 rounded-full px-5 text-sm font-bold transition-colors ${region === item ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                aria-pressed={region === item}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        <p className="text-sm leading-6 text-muted-foreground">Checking warnings from the <span className="font-semibold text-foreground">{regionNames[region]}</span>. Change location in the top bar.</p>
         <p className="max-w-sm text-sm leading-6 text-muted-foreground">We compare label details with published food-safety warnings in the selected region.</p>
       </div>
 

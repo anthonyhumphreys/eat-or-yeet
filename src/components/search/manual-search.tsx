@@ -4,6 +4,9 @@ import { PackageSearch, ScanBarcode } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { useLocation } from "@/components/location-provider";
+import { regionNames } from "@/lib/location";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +18,7 @@ import type { VerdictResult } from "@/lib/domain/types";
 type SearchMode = "barcode" | "details";
 
 export function ManualSearch({ initialMode = "barcode" }: { initialMode?: SearchMode }) {
-  const [region, setRegion] = useState<"UK" | "US">("UK");
+  const { region } = useLocation();
   const [mode, setMode] = useState<SearchMode>(initialMode);
   const [observation, setObservation] = useState<ProductObservation>(emptyObservation());
   const [pending, setPending] = useState(false);
@@ -68,14 +71,7 @@ export function ManualSearch({ initialMode = "barcode" }: { initialMode?: Search
       </div>
 
       <div className="mt-7 flex flex-wrap items-end justify-between gap-5 border-y py-5">
-        <fieldset>
-          <legend className="text-sm font-semibold text-muted-foreground">Check warnings from</legend>
-          <div className="mt-2 flex rounded-full bg-muted p-1">
-            {(["UK", "US"] as const).map((item) => (
-              <button key={item} type="button" onClick={() => setRegion(item)} className={`min-h-10 rounded-full px-5 text-sm font-bold transition-colors ${region === item ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`} aria-pressed={region === item}>{item}</button>
-            ))}
-          </div>
-        </fieldset>
+        <p className="text-sm leading-6 text-muted-foreground">Checking warnings from the <span className="font-semibold text-foreground">{regionNames[region]}</span>. Change location in the top bar.</p>
         <fieldset>
           <legend className="text-sm font-semibold text-muted-foreground">Search by</legend>
           <div className="mt-2 flex rounded-full border p-1">

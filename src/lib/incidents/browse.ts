@@ -16,6 +16,12 @@ export const foodCategories = [
 
 export type FoodCategory = (typeof foodCategories)[number];
 
+export const foodCategoryGroups: Array<{ label: string; categories: FoodCategory[] }> = [
+  { label: "Fresh & chilled", categories: ["Produce", "Meat & poultry", "Fish & seafood", "Dairy & eggs"] },
+  { label: "Cupboard & snacks", categories: ["Bakery & grains", "Pantry", "Snacks & sweets", "Drinks"] },
+  { label: "Meals & other products", categories: ["Prepared foods", "Supplements", "Other foods"] },
+];
+
 type BrowseSource = {
   title: string;
   targets: Array<{ type: string; value: string }>;
@@ -24,6 +30,7 @@ type BrowseSource = {
 
 const categoryRules: Array<[FoodCategory, RegExp]> = [
   ["Supplements", /\b(?:supplement|vitamin|herbal formula|moringa|supergrass)\b/i],
+  ["Prepared foods", /\b(?:ready meal|meal kit|sandwich|wrap|pizza|sushi|soup|curry|lasagne|pasta meal|prepared meal|(?:chicken|tuna|pasta|potato|egg) salad)\b/i],
   ["Drinks", /\b(?:drink|juice|soda|cola|water|beer|ale|lager|wine|cider|smoothie|coffee|tea|ipa)\b/i],
   ["Snacks & sweets", /\b(?:chocolate|sweet|candy|confection|truffle|marshmallow|popcorn|chips?|crisps?|snack|bars?|puffs?)\b/i],
   ["Fish & seafood", /\b(?:fish|salmon|tuna|cod|haddock|prawn|shrimp|crab|lobster|mussel|oyster|seafood|anchov)/i],
