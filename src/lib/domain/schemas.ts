@@ -1,11 +1,17 @@
 import { z } from "zod";
+import { isValidGtin } from "@/lib/domain/gtin";
 
 const nullableVisibleString = z.string().trim().max(300).nullable();
+
+const barcodeSchema = nullableVisibleString.refine(
+  (value) => value === null || value === "" || isValidGtin(value),
+  "Enter a valid 8, 12, 13, or 14 digit barcode.",
+);
 
 export const ProductObservationSchema = z.object({
   productName: nullableVisibleString,
   brand: nullableVisibleString,
-  barcode: nullableVisibleString,
+  barcode: barcodeSchema,
   batchCode: nullableVisibleString,
   lotCode: nullableVisibleString,
   producer: nullableVisibleString,
@@ -29,8 +35,6 @@ export const ProductObservationSchema = z.object({
       productionDate: nullableVisibleString.optional().default(null),
     })
     .nullable(),
-  rawVisibleText: z.array(z.string().trim().max(500)).max(120),
-  confidence: z.number().min(0).max(1),
 });
 
 export type ProductObservation = z.infer<typeof ProductObservationSchema>;
@@ -59,6 +63,7 @@ export const TargetTypeSchema = z.enum([
 export type TargetType = z.infer<typeof TargetTypeSchema>;
 
 export const RegionSchema = z.enum(["UK", "US"]);
+export type Region = z.infer<typeof RegionSchema>;
 
 export function emptyObservation(): ProductObservation {
   return {
@@ -76,7 +81,5 @@ export function emptyObservation(): ProductObservation {
     category: null,
     eggMark: null,
     dates: null,
-    rawVisibleText: [],
-    confidence: 1,
   };
 }

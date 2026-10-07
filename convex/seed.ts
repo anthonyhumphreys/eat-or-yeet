@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import type { TargetType } from "../src/lib/domain/schemas";
+import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
 import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
 import { mutation } from "./_generated/server";
 import { requireServerSecret } from "./security";
@@ -53,8 +54,37 @@ export const demo = mutation({
         targets: item.targets.map(([type, value, weight]) => ({ type, value, valueNormalized: normalise(type, value), matchType: "exact" as const, weight, confidence: 1 })),
       };
       const existing = await ctx.db.query("incidents").withIndex("by_authority_sourceId", (q) => q.eq("authority", record.authority).eq("sourceId", record.sourceId)).unique();
-      if (existing) await ctx.db.patch(existing._id, record);
-      else await ctx.db.insert("incidents", record);
+      const incidentId = existing
+        ? (await ctx.db.patch(existing._id, record), existing._id)
+        : await ctx.db.insert("incidents", record);
+      const browseSource = { title: record.title, targets: record.targets, originalSourceData: record.originalSourceData };
+      const matchRecord = {
+        incidentId,
+        title: record.title,
+        slug: record.slug,
+        region: record.region,
+        status: record.status,
+        startsAt: record.startsAt,
+        endsAt: record.endsAt,
+        isDemo: record.isDemo,
+        hazard: record.hazard,
+        pathogen: record.pathogen,
+        summary: record.summary,
+        consumerAdvice: record.consumerAdvice,
+        authority: record.authority,
+        authorityUrl: record.authorityUrl,
+        sourceId: record.sourceId,
+        publishedAt: record.publishedAt,
+        updatedAt: record.updatedAt,
+        severity: record.severity,
+        confidence: record.confidence,
+        targets: record.targets,
+        categories: browseCategories(browseSource),
+        stores: namedRetailers(browseSource),
+      };
+      const existingMatch = await ctx.db.query("incidentMatchData").withIndex("by_incidentId", (q) => q.eq("incidentId", incidentId)).unique();
+      if (existingMatch) await ctx.db.patch(existingMatch._id, matchRecord);
+      else await ctx.db.insert("incidentMatchData", matchRecord);
     }
     const gtin = normaliseGtin("5000000000006");
     const product = await ctx.db.query("products").withIndex("by_gtin", (q) => q.eq("gtin", gtin)).unique();

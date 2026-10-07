@@ -1,4 +1,4 @@
-import type { ProductObservation, TargetType } from "@/lib/domain/schemas";
+import type { ProductObservation, Region, TargetType } from "@/lib/domain/schemas";
 
 export type MatchLevel =
   | "confirmed"
@@ -22,6 +22,7 @@ export type MatchableTarget = {
   value: string;
   valueNormalized: string;
   matchType: "exact" | "pattern";
+  groupId?: string | null;
   dateFrom: Date | null;
   dateTo: Date | null;
   notes: string | null;
@@ -61,6 +62,22 @@ export type VerdictResult = {
   observation: ProductObservation;
   matches: IncidentMatch[];
   checkedAt: string;
-  datasetRegions: Array<"UK" | "US">;
+  datasetRegions: Region[];
+  datasetStatus?: DatasetStatus;
+  matchCount?: number;
   shareToken?: string;
+};
+
+export type DatasetStatus = {
+  healthy: boolean;
+  checkedAt: string | null;
+  regions: Region[];
+  sources: Array<{
+    id: string;
+    name: string;
+    region: Region;
+    lastSuccessfulAt: string | null;
+    status: "healthy" | "stale" | "failed" | "missing";
+    scope: string;
+  }>;
 };

@@ -3,6 +3,8 @@ import type { TargetType } from "@/lib/domain/schemas";
 export type NormalisedTarget = {
   type: TargetType;
   value: string;
+  /** Identifies one source-confirmed product/code/date association within an incident. */
+  groupId?: string | null;
   matchType?: "exact" | "pattern";
   dateFrom?: Date | null;
   dateTo?: Date | null;
@@ -37,5 +39,7 @@ export interface IncidentSource {
   id: string;
   name: string;
   url: string;
-  fetchIncidents(): Promise<NormalisedIncident[]>;
+  region: "UK" | "US";
+  scope: string;
+  fetchIncidents(existingSourceIds?: string[]): Promise<NormalisedIncident[]>;
 }

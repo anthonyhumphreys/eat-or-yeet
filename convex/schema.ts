@@ -3,6 +3,25 @@ import { v } from "convex/values";
 
 const region = v.union(v.literal("UK"), v.literal("US"));
 const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"));
+const foodCategory = v.union(
+  v.literal("Produce"),
+  v.literal("Meat & poultry"),
+  v.literal("Fish & seafood"),
+  v.literal("Dairy & eggs"),
+  v.literal("Bakery & grains"),
+  v.literal("Snacks & sweets"),
+  v.literal("Drinks"),
+  v.literal("Prepared foods"),
+  v.literal("Pantry"),
+  v.literal("Supplements"),
+  v.literal("Other foods"),
+);
+const ingestionStatus = v.union(
+  v.literal("running"),
+  v.literal("success"),
+  v.literal("partial"),
+  v.literal("failed"),
+);
 const severity = v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("critical"));
 const targetType = v.union(
   v.literal("gtin"),
@@ -28,6 +47,7 @@ const incidentTarget = v.object({
   dateFrom: v.optional(v.number()),
   dateTo: v.optional(v.number()),
   notes: v.optional(v.string()),
+  groupId: v.optional(v.string()),
   weight: v.number(),
   confidence: v.number(),
 });
@@ -45,6 +65,8 @@ export default defineSchema({
     authority: v.string(),
     authorityUrl: v.string(),
     sourceId: v.string(),
+    sourceKey: v.optional(v.string()),
+    sourceRunId: v.optional(v.id("ingestionRuns")),
     publishedAt: v.number(),
     updatedAt: v.number(),
     startsAt: v.number(),
@@ -57,8 +79,41 @@ export default defineSchema({
     targets: v.array(incidentTarget),
   })
     .index("by_authority_sourceId", ["authority", "sourceId"])
+    .index("by_sourceKey", ["sourceKey"])
     .index("by_slug", ["slug"])
     .index("by_status", ["status"])
+    .index("by_region_status", ["region", "status"]),
+
+  // Matcher reads this bounded, source-data-free projection rather than the
+  // full incident documents (which may contain multi-kilobyte source payloads).
+  incidentMatchData: defineTable({
+    incidentId: v.id("incidents"),
+    title: v.string(),
+    slug: v.string(),
+    region,
+    status,
+    startsAt: v.number(),
+    endsAt: v.optional(v.number()),
+    isDemo: v.boolean(),
+    hazard: v.optional(v.string()),
+    pathogen: v.optional(v.string()),
+    summary: v.string(),
+    consumerAdvice: v.string(),
+    authority: v.string(),
+    authorityUrl: v.string(),
+    sourceId: v.string(),
+    publishedAt: v.number(),
+    updatedAt: v.number(),
+    severity,
+    confidence: v.number(),
+    targets: v.array(incidentTarget),
+    sourceKey: v.optional(v.string()),
+    categories: v.array(foodCategory),
+    stores: v.array(v.string()),
+  })
+    .index("by_incidentId", ["incidentId"])
+    .index("by_slug", ["slug"])
+    .index("by_sourceKey_status", ["sourceKey", "status"])
     .index("by_region_status", ["region", "status"]),
 
   products: defineTable({
@@ -82,13 +137,20 @@ export default defineSchema({
 
   ingestionRuns: defineTable({
     source: v.string(),
+    sourceName: v.optional(v.string()),
+    region: v.optional(region),
+    scope: v.optional(v.string()),
+    status: v.optional(ingestionStatus),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
     incidentsFound: v.number(),
     created: v.number(),
     updated: v.number(),
     errors: v.array(v.string()),
-  }).index("by_startedAt", ["startedAt"]),
+  })
+    .index("by_startedAt", ["startedAt"])
+    .index("by_source_startedAt", ["source", "startedAt"])
+    .index("by_source_status_completedAt", ["source", "status", "completedAt"]),
 
   publicShares: defineTable({
     shareId: v.string(),
@@ -97,6 +159,9 @@ export default defineSchema({
     productName: v.optional(v.string()),
     reason: v.string(),
     incidentSlug: v.optional(v.string()),
+    checkedAt: v.optional(v.number()),
+    datasetRegions: v.optional(v.array(region)),
+    sourceScope: v.optional(v.string()),
     expiresAt: v.number(),
   })
     .index("by_shareId", ["shareId"])

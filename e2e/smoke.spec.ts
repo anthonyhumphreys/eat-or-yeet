@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-test("home explains the product and exposes both camera paths", async ({ page }) => {
+test("home explains the check and exposes barcode and manual paths", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Eat or Yeet?" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Scan my food/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Take a photo/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check food against published warnings." })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Scan a barcode/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enter details manually" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Take a photo/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Skip to main content" })).toBeAttached();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   expect(consoleErrors).toEqual([]);
 });
@@ -17,57 +19,104 @@ test("system dark mode hydrates without a framework error", async ({ page }) => 
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Eat or Yeet?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check food against published warnings." })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   expect(consoleErrors).toEqual([]);
 });
 
-test("manual fallback exposes recall identifiers", async ({ page }) => {
+test("manual entry exposes barcode and label detail fields", async ({ page }) => {
   await page.goto("/search");
-  await expect(page.getByRole("heading", { name: "Search food warnings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Enter food details" })).toBeVisible();
   await expect(page.getByLabel("Barcode number")).toBeVisible();
-  await page.getByRole("tab", { name: "Label details" }).click();
+  await page.getByRole("button", { name: "Label details" }).click();
   await expect(page.getByLabel("Batch code")).toBeVisible();
+  await page.getByText("More identifiers").click();
   await expect(page.getByLabel("Producer", { exact: true })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
 });
 
-test("manual evidence reaches the deterministic warning result", async ({ page }) => {
+test("manual barcode validation accepts only supported GTIN lengths with a check digit", async ({ page }) => {
   await page.goto("/search");
-  await page.getByRole("tab", { name: "Label details" }).click();
-  await page.getByLabel("Product").fill("Tesco Finest Mozzarella Pearls & Pesto Orzo Salad");
-  await page.getByRole("button", { name: "Check these details" }).click();
-  await expect(page.getByRole("heading", { name: "MAYBE YEET" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Food Standards Agency")).toBeVisible();
-  await expect(page.getByText(/Product name Tesco Finest/)).toBeVisible();
+  const barcode = page.getByLabel("Barcode number");
+  const check = page.getByRole("button", { name: "Check published warnings" });
+  await barcode.fill("123");
+  await expect(check).toBeDisabled();
+  await expect(page.getByText(/valid 8, 12, 13, or 14 digit barcode/)).toBeVisible();
+  await barcode.fill("4006381333931");
+  await expect(check).toBeEnabled();
 });
 
-test("photo analysis checks immediately and keeps editing available", async ({ page }) => {
-  const observation = {
-    productName: "Test label",
-    brand: null,
-    barcode: "12345670",
-    batchCode: null,
-    lotCode: null,
-    producer: null,
-    farmCode: null,
-    countryOfOrigin: null,
-    establishmentNumber: null,
-    approvalNumber: null,
-    retailer: null,
-    category: null,
-    eggMark: null,
-    dates: null,
-    rawVisibleText: ["Test label", "12345670"],
-    confidence: 1,
-  };
-  await page.route("**/api/analyse", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ observation }) }));
-  await page.route("**/api/check", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ verdict: "EAT", matchLevel: "none", observation, matches: [], checkedAt: new Date().toISOString(), datasetRegions: ["UK"] }) }));
+test("manual label details produce a qualified published-warning result", async ({ page }) => {
+  const checkedAt = "2026-10-07T10:00:00.000Z";
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => { throw new DOMException("Clipboard denied", "NotAllowedError"); } },
+    });
+  });
+  await page.route("**/api/check", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      verdict: "EAT",
+      matchLevel: "none",
+      observation: {
+        productName: "Sample product",
+        brand: null,
+        barcode: null,
+        batchCode: null,
+        lotCode: null,
+        producer: null,
+        farmCode: null,
+        countryOfOrigin: null,
+        establishmentNumber: null,
+        approvalNumber: null,
+        retailer: null,
+        category: null,
+        eggMark: null,
+        dates: null,
+      },
+      matches: [],
+      checkedAt,
+      datasetRegions: ["UK"],
+      shareToken: "mock-share-token",
+      datasetStatus: {
+        healthy: true,
+        checkedAt,
+        regions: ["UK"],
+        sources: [{ id: "fsa", name: "Food Standards Agency", region: "UK", lastSuccessfulAt: checkedAt, status: "healthy", scope: "Food alerts" }],
+      },
+    }),
+  }));
+  await page.route("**/api/share", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: "http://localhost:3000/s/shared-check" }) }));
 
-  await page.goto("/scan?mode=photo");
-  await page.locator('input[type="file"]').setInputFiles({ name: "label.png", mimeType: "image/png", buffer: Buffer.from("not-a-real-image") });
-  await expect(page.getByRole("heading", { name: "EAT" })).toBeVisible();
-  await page.getByRole("button", { name: "Edit details" }).click();
-  await expect(page.getByRole("heading", { name: "Edit checked details" })).toBeVisible();
-  await expect(page.getByLabel("Product")).toHaveValue("Test label");
+  await page.goto("/search?mode=details");
+  await page.getByLabel("Product name").fill("Sample product");
+  await page.getByRole("button", { name: "Check published warnings" }).click();
+  await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "EAT" })).toHaveCount(0);
+  await expect(page.getByText("This checks published warnings, not whether food is safe to eat.").first()).toBeVisible();
+  await expect(page.getByText("Food Standards Agency")).toBeVisible();
+  await expect(page.getByText("UK", { exact: true }).last()).toBeVisible();
+  await page.getByRole("button", { name: "Create public link" }).click();
+  await expect(page.getByLabel("Share link")).toHaveValue("http://localhost:3000/s/shared-check");
+  await expect(page.getByRole("link", { name: "Open link" })).toHaveAttribute("href", "http://localhost:3000/s/shared-check");
+});
+
+test("camera denial keeps manual barcode entry available", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () => new Promise((_, reject) => {
+          window.setTimeout(() => reject(new DOMException("Permission denied", "NotAllowedError")), 700);
+        }),
+      },
+    });
+  });
+  await page.goto("/scan");
+  await expect(page.getByRole("link", { name: "Type the barcode instead" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter details manually" })).toBeVisible();
+  await expect(page.getByText("Starting the camera…")).toBeVisible();
+  await expect(page.getByText(/Camera access is blocked/)).toBeVisible();
 });

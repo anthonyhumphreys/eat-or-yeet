@@ -1,9 +1,5 @@
 # Product
 
-## Register
-
-product
-
 ## Platform
 
 web
@@ -18,7 +14,7 @@ Eat or Yeet checks barcodes and visible packaging information against a structur
 
 ## Positioning
 
-A camera-first recall checker where AI reads the packaging, deterministic rules make the safety decision, and every warning links back to an official source.
+A barcode and manual recall checker. Deterministic rules compare label details with official warnings and explain possible matches. The app uses no AI or photo uploads.
 
 ## Brand personality
 
@@ -30,7 +26,9 @@ Avoid generic SaaS dashboards, medical alarmism, novelty meme sites, full-screen
 
 ## Design principles
 
-- Put the camera and manual fallback within immediate reach.
+- Put barcode scanning and manual entry within immediate reach.
+- Keep the first step short; ask for batch or date details when they matter.
+- Call an unmatched result "No matching warning found" and show its coverage and check time.
 - Make verdicts legible in a cropped screenshot without using a "safe" badge.
 - Explain every warning with the exact matched evidence and source.
 - Preserve uncertainty. Missing evidence produces NO CLUE, not reassurance.

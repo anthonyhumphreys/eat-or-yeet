@@ -1,40 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getActiveIncidents } from "@/db/queries";
+import { getCheckDataset } from "@/db/queries";
 import { CheckRequestSchema } from "@/lib/domain/schemas";
 import { runMatcher } from "@/lib/matching/matcher";
 import { enrichObservation } from "@/lib/products/enrich";
-import { anonymousSubject, attachAnonymousCookie } from "@/lib/security/anonymous";
+import { anonymousSubject, attachAnonymousCookie, trustedNetworkSubject } from "@/lib/security/anonymous";
+import { readBoundedJson } from "@/lib/security/request-body";
 import { takeRateLimit } from "@/lib/security/rate-limit";
 import { createShareToken } from "@/lib/security/share-token";
 
 export const runtime = "nodejs";
 
+const maxBodyBytes = 16 * 1024;
+
+function jsonResponse(
+  body: unknown,
+  status: number,
+  cookieValue?: string,
+  headers?: Record<string, string>,
+) {
+  const response = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
+  attachAnonymousCookie(response, cookieValue);
+  return response;
+}
+
 export async function POST(request: NextRequest) {
-  const subject = anonymousSubject(request);
-  const limit = await takeRateLimit(subject.id, "check");
-  if (!limit.allowed) {
-    const response = NextResponse.json({ error: "Check limit reached. Try again after the current hour." }, { status: 429 });
-    attachAnonymousCookie(response, subject.cookieValue);
-    return response;
-  }
-  const parsed = CheckRequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "The product details were not valid." }, { status: 400 });
+  let cookieValue: string | undefined;
   try {
-    const [observation, activeIncidents] = await Promise.all([
-      enrichObservation(parsed.data.observation),
-      getActiveIncidents(parsed.data.region),
+    const subject = anonymousSubject(request);
+    cookieValue = subject.cookieValue;
+    const networkSubject = trustedNetworkSubject(request);
+    const [anonymousLimit, networkLimit] = await Promise.all([
+      takeRateLimit(subject.id, "check", "anonymous"),
+      networkSubject ? takeRateLimit(networkSubject, "check", "network") : Promise.resolve(null),
     ]);
-    const result = runMatcher(observation, activeIncidents, [parsed.data.region]);
-    const response = NextResponse.json({ ...result, shareToken: createShareToken(result) ?? undefined });
-    response.headers.set("Cache-Control", "no-store");
-    response.headers.set("X-RateLimit-Remaining", String(limit.remaining));
-    attachAnonymousCookie(response, subject.cookieValue);
+
+    const limits = [anonymousLimit, networkLimit].filter((limit): limit is NonNullable<typeof limit> => limit !== null);
+    if (limits.some((limit) => !limit.allowed)) {
+      return jsonResponse(
+        { error: "Check limit reached. Try again after the current hour." },
+        429,
+        cookieValue,
+        { "X-RateLimit-Remaining": String(Math.min(...limits.map((limit) => limit.remaining))) },
+      );
+    }
+
+    const body = await readBoundedJson(request, maxBodyBytes);
+    if (!body.ok && body.reason === "too_large") {
+      return jsonResponse({ error: "The product details were too large to check." }, 413, cookieValue);
+    }
+    const parsed = CheckRequestSchema.safeParse(body.ok ? body.value : null);
+    if (!parsed.success) return jsonResponse({ error: "The product details were not valid." }, 400, cookieValue);
+
+    const [observation, dataset] = await Promise.all([
+      enrichObservation(parsed.data.observation),
+      getCheckDataset(parsed.data.region),
+    ]);
+    const result = runMatcher(observation, dataset.incidents, [parsed.data.region], dataset.status);
+    const response = jsonResponse({ ...result, shareToken: createShareToken(result) ?? undefined }, 200, cookieValue, {
+      "X-RateLimit-Remaining": String(Math.min(...limits.map((limit) => limit.remaining))),
+    });
     return response;
   } catch {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "We couldn't reach the warning database. No verdict was issued." },
-      { status: 503 },
+      503,
+      cookieValue,
     );
   }
 }

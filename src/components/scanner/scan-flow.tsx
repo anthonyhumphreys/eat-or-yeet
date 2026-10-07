@@ -1,36 +1,31 @@
 "use client";
 
-import { Camera, ScanBarcode } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ScanBarcode } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BarcodeCamera } from "@/components/scanner/barcode-camera";
 import { ObservationForm } from "@/components/scanner/observation-form";
-import { PhotoPicker } from "@/components/scanner/photo-picker";
+import { VerdictView } from "@/components/verdict/verdict-view";
 import { Button } from "@/components/ui/button";
 import { emptyObservation, type ProductObservation } from "@/lib/domain/schemas";
 import type { VerdictResult } from "@/lib/domain/types";
-import { VerdictView } from "@/components/verdict/verdict-view";
 
-type Step = "barcode" | "photo" | "verify" | "checking" | "result";
-const checkingMessages = ["Looking for recalled batches…", "Checking the food-safety receipts…", "Comparing official warning details…"];
+type Step = "barcode" | "details" | "checking" | "result";
 
-export function ScanFlow({ initialMode }: { initialMode: "barcode" | "photo" }) {
-  const [step, setStep] = useState<Step>(initialMode);
+export function ScanFlow() {
+  const [step, setStep] = useState<Step>("barcode");
   const [region, setRegion] = useState<"UK" | "US">("UK");
   const [observation, setObservation] = useState<ProductObservation>(emptyObservation());
   const [result, setResult] = useState<VerdictResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [checkingMessage, setCheckingMessage] = useState(0);
+  const detailsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    if (step !== "checking") return;
-    const interval = window.setInterval(() => setCheckingMessage((current) => (current + 1) % checkingMessages.length), 900);
-    return () => window.clearInterval(interval);
+    if (step === "details") detailsHeadingRef.current?.focus();
   }, [step]);
 
   const check = useCallback(async (nextObservation: ProductObservation) => {
     setObservation(nextObservation);
-    setCheckingMessage(0);
     setStep("checking");
     setError(null);
     try {
@@ -45,9 +40,15 @@ export function ScanFlow({ initialMode }: { initialMode: "barcode" | "photo" }) 
       setStep("result");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The check failed.");
-      setStep("verify");
+      setStep("details");
     }
   }, [region]);
+
+  const onDetected = useCallback((barcode: string) => {
+    setObservation({ ...emptyObservation(), barcode });
+    setError(null);
+    setStep("details");
+  }, []);
 
   function reset() {
     setObservation(emptyObservation());
@@ -56,25 +57,77 @@ export function ScanFlow({ initialMode }: { initialMode: "barcode" | "photo" }) 
     setStep("barcode");
   }
 
-  if (step === "result" && result) return <VerdictView result={result} onReset={reset} onAddPhoto={() => setStep("photo")} onEdit={() => setStep("verify")} />;
+  if (step === "result" && result) {
+    return <VerdictView result={result} onReset={reset} onEdit={() => setStep("details")} />;
+  }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div><p className="text-sm font-semibold text-muted-foreground">Warning region</p><div className="mt-1 flex rounded-full bg-muted p-1" aria-label="Warning region">
-          {(["UK", "US"] as const).map((item) => <button type="button" key={item} onClick={() => setRegion(item)} className={`rounded-full px-4 py-1.5 text-sm font-bold ${region === item ? "bg-background shadow-sm" : "text-muted-foreground"}`} aria-pressed={region === item}>{item}</button>)}
-        </div></div>
-        <div className="flex gap-1 rounded-full border p-1">
-          <Button type="button" size="sm" variant={step === "barcode" ? "secondary" : "ghost"} className="rounded-full" onClick={() => setStep("barcode")}><ScanBarcode aria-hidden />Scan</Button>
-          <Button type="button" size="sm" variant={step === "photo" ? "secondary" : "ghost"} className="rounded-full" onClick={() => setStep("photo")}><Camera aria-hidden />Photo</Button>
-        </div>
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-5 border-b pb-5">
+        <fieldset>
+          <legend className="text-sm font-semibold text-muted-foreground">Check warnings from</legend>
+          <div className="mt-2 flex rounded-full bg-muted p-1">
+            {(["UK", "US"] as const).map((item) => (
+              <button
+                type="button"
+                key={item}
+                onClick={() => setRegion(item)}
+                className={`min-h-10 rounded-full px-5 text-sm font-bold transition-colors ${region === item ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                aria-pressed={region === item}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <p className="max-w-sm text-sm leading-6 text-muted-foreground">We compare label details with published food-safety warnings in the selected region.</p>
       </div>
 
-      {step === "barcode" ? <BarcodeCamera onDetected={(barcode) => void check({ ...emptyObservation(), barcode })} /> : null}
-      {step === "photo" ? <PhotoPicker onObservation={(found) => void check(found)} /> : null}
-      {step === "verify" ? <ObservationForm observation={observation} onSubmit={(found) => void check(found)} heading="Edit checked details" description="Fix anything the camera misread, then run the check again." /> : null}
-      {step === "checking" ? <div className="grid min-h-96 place-items-center rounded-xl bg-card p-8 text-center"><div><p className="sr-only" role="status">Checking the product against current official {region} warnings.</p><div className="relative mx-auto grid size-20 place-items-center rounded-full bg-foreground text-background"><ScanBarcode className="size-10 text-primary" aria-hidden /><span className="absolute inset-0 rounded-full border border-primary/60 motion-safe:animate-ping" /></div><h2 className="mt-6 min-h-16 text-2xl font-black" aria-hidden>{checkingMessages[checkingMessage]}</h2><p className="mt-2 text-sm text-muted-foreground">Comparing the evidence with current official {region} warnings.</p></div></div> : null}
+      {step === "barcode" ? (
+        <section aria-labelledby="scan-heading">
+          <div className="mb-5 max-w-xl">
+            <h1 id="scan-heading" className="text-4xl font-black tracking-[-0.035em] sm:text-5xl">Scan a barcode</h1>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">Hold the barcode steady inside the frame. You can type it in or add label details if scanning does not work.</p>
+          </div>
+          <BarcodeCamera onDetected={onDetected} />
+          <div className="mt-6">
+            <Button type="button" variant="secondary" size="lg" className="min-h-12 rounded-full" onClick={() => { setError(null); setStep("details"); }}>
+              Enter details manually
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {step === "details" ? (
+        <section aria-labelledby="details-heading">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 id="details-heading" ref={detailsHeadingRef} tabIndex={-1} className="text-4xl font-black tracking-[-0.035em] focus-visible:outline-none sm:text-5xl">{observation.barcode ? "Review the barcode" : "Add label details"}</h1>
+              <p className="mt-3 max-w-xl text-base leading-7 text-muted-foreground">{observation.barcode ? "Add a batch code or date if you can read one, then check published warnings." : "A barcode, product name, brand, or batch code can help find a published warning."}</p>
+            </div>
+            <Button type="button" variant="ghost" onClick={() => { setError(null); setStep("barcode"); }}>Back to scanner</Button>
+          </div>
+          <ObservationForm
+            observation={observation}
+            onSubmit={(found) => void check(found)}
+            heading="Details from the pack"
+            description="Add the clearest information you can read. Leave anything unknown blank."
+            submitLabel="Check published warnings"
+          />
+        </section>
+      ) : null}
+
+      {step === "checking" ? (
+        <div className="grid min-h-72 place-items-center rounded-xl bg-card p-8 text-center" role="status" aria-live="polite">
+          <div>
+            <div className="mx-auto grid size-16 place-items-center rounded-full bg-foreground text-background"><ScanBarcode className="size-8 text-primary" aria-hidden /></div>
+            <h2 className="mt-5 text-2xl font-black">Checking published warnings</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Comparing the details with current {region} warnings.</p>
+          </div>
+        </div>
+      ) : null}
       {error ? <p role="alert" className="mt-4 rounded-lg bg-yeet-soft p-4 text-sm font-medium text-yeet">{error}</p> : null}
+      <p className="mt-6 text-sm leading-6 text-muted-foreground">This checks published warnings, not whether food is safe to eat.</p>
     </div>
   );
 }

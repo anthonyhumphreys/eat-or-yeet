@@ -8,7 +8,7 @@ export const take = mutation({
     secret: v.string(),
     key: v.string(),
     subjectHash: v.string(),
-    action: v.string(),
+    action: v.union(v.literal("check"), v.literal("share")),
     windowStartedAt: v.number(),
     expiresAt: v.number(),
   },

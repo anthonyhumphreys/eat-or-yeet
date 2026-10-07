@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     default: "Eat or Yeet?",
     template: "%s | Eat or Yeet",
   },
-  description: "Scan it. Check it. Eat it or yeet it. Check packaged food against current official UK and US food-safety warnings.",
+  description: "Check packaged food against published official UK and US food-safety warnings. A missing match does not tell you whether food is safe to eat.",
   applicationName: "Eat or Yeet",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Eat or Yeet" },
@@ -35,8 +35,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <a href="#main-content" className="sr-only z-50 rounded-full bg-background px-5 py-3 font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to main content</a>
           <SiteHeader />
-          <main className="flex flex-1 flex-col">{children}</main>
+          <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
           <SiteFooter />
         </ThemeProvider>
       </body>

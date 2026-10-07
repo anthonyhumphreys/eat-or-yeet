@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.join(root, "src"),
+      "@convex": path.join(root, "convex"),
       "server-only": path.join(root, "tests/server-only.ts"),
     },
   },

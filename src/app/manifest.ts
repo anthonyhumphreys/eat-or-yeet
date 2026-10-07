@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Eat or Yeet",
     short_name: "Eat or Yeet",
-    description: "Scan packaged food and check current official food-safety warnings.",
+    description: "Check packaged food against published UK and US warnings. A missing match does not tell you whether food is safe to eat.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

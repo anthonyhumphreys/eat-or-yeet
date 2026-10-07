@@ -1,122 +1,84 @@
 # Eat or Yeet
 
-**Scan it. Check it. Eat it or yeet it.**
+A mobile-first packaged-food recall checker. Scan a barcode or enter label details, then compare them with official UK and US warnings. The app uses deterministic matching, with no AI or photo uploads. See [ADR 0001](docs/adr/0001-remove-ai.md).
 
-Eat or Yeet is a mobile-first packaged-food recall checker. It scans barcodes, extracts visible label information from photographs, and compares that evidence with current official UK and US food-safety warnings.
+## Result language
 
-The AI model only reads packaging. Deterministic TypeScript rules issue the verdict and explain every match.
+- **YEET**: a confirmed or probable warning match. Follow the linked official advice.
+- **MAYBE YEET**: a possible or contextual match. Check the product and warning details.
+- **No matching warning found**: no warning matched the evidence in the displayed coverage. This does not establish that food is safe.
+- **NO CLUE**: insufficient evidence or missing, failed or stale source data.
 
-## Safety language
+The internal `EAT` enum remains for stored-result compatibility. It is not the public label. An unidentified barcode, an empty dataset or an incomplete refresh must not produce a reassuring negative result. Product, lot and date evidence must belong to the same product group.
 
-`EAT` means no current warning in the selected dataset matched the supplied evidence. It never means that the food is safe. Users should still follow storage instructions, use-by dates, and official food-safety advice.
+## Stack and setup
 
-Unclear evidence returns `NO CLUE`. Possible or contextual matches return `MAYBE YEET`. Confirmed and probable matches return `YEET`, with the match level shown separately.
+Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4, shadcn/ui components, Convex Cloud, native BarcodeDetector with a ZXing fallback, Zod, Vitest and Playwright.
 
-## Stack
+Requires Node.js 24+, pnpm 10+ and a Convex account.
 
-- Next.js 16 App Router, React 19, strict TypeScript
-- Tailwind CSS 4 and shadcn/ui
-- Convex Cloud for incident data, caching, shares, and rate limits
-- Vercel AI SDK through OpenRouter
-- `z-ai/glm-5.3-flash` for vision extraction
-- Native `BarcodeDetector` with ZXing fallback
-- Zod, Vitest, and Playwright
+```bash
+pnpm install
+cp .env.example .env.local
+pnpm exec convex dev --once
+```
 
-## Local setup
+Generate separate random secrets for `CONVEX_SERVER_SECRET`, `RATE_LIMIT_SALT` and `CRON_SECRET`, and put them in `.env.local`. Set the same server secret on the development Convex deployment:
 
-Requirements: Node.js 24+, pnpm 10+, a Convex account, and an OpenRouter API key for photo analysis.
+```bash
+pnpm exec convex env set CONVEX_SERVER_SECRET
+pnpm dev
+```
 
-1. Install dependencies.
+Next loads `.env.development.local` only in development. Values needed by both `pnpm dev` and `pnpm start` belong in `.env.local`, or must be supplied by the hosting environment. Keep development and production credentials separate.
 
-   ```bash
-   pnpm install
-   ```
+Fictional data is opt-in and does not establish source health. Set local `ALLOW_DEMO_DATA=true`, then:
 
-2. Copy the environment template.
+```bash
+pnpm exec convex env set ALLOW_DEMO_DATA true
+pnpm data:seed
+```
 
-   ```bash
-   cp .env.example .env.local
-   ```
+Never enable demo data in production.
 
-3. Link a Convex development deployment. The CLI writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` to `.env.local`.
+## Environment
 
-   ```bash
-   pnpm exec convex dev --once
-   ```
-
-4. Generate one value for `CONVEX_SERVER_SECRET`, add it to `.env.local`, then set the same value on the Convex development deployment. Generate `CRON_SECRET` and `RATE_LIMIT_SALT` separately.
-
-   ```bash
-   pnpm exec convex env set CONVEX_SERVER_SECRET
-   ```
-
-5. Optionally seed fictional development scenarios. Keep `ALLOW_DEMO_DATA=true` outside production and enable it on the Convex development deployment.
-
-   ```bash
-   pnpm exec convex env set ALLOW_DEMO_DATA true
-   pnpm data:seed
-   ```
-
-6. Start the app.
-
-   ```bash
-   pnpm dev
-   ```
-
-Demo records are marked and excluded unless `ALLOW_DEMO_DATA=true`.
-
-### Demo checks
-
-| Scenario | Input | Expected result |
-| --- | --- | --- |
-| Exact product and batch | Barcode `5000000000006`, batch `24182` | YEET, confirmed |
-| Affected producer | Producer `Demo Valley Foods` | YEET, probable |
-| Context only | US region, country `United States`, category `Leafy greens` | MAYBE YEET, contextual |
-| Unrelated product | Any unrelated valid product details | EAT |
-| Empty form | No identifying fields | NO CLUE |
-
-## Environment variables
-
-| Name | Purpose |
+| Variable | Purpose |
 | --- | --- |
-| `CONVEX_DEPLOYMENT` | Convex project deployment used by the CLI |
-| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL used by Next.js |
-| `CONVEX_SERVER_SECRET` | Authorises server-only Convex mutations and refresh actions |
-| `OPENROUTER_API_KEY` | Server-only OpenRouter credential |
-| `OPENROUTER_MODEL` | Defaults to `z-ai/glm-5.3-flash` |
-| `CRON_SECRET` | Protects `/api/cron/incidents` |
-| `RATE_LIMIT_SALT` | Hashes anonymous rate-limit identifiers |
-| `NEXT_PUBLIC_APP_URL` | Canonical deployed origin |
-| `ALLOW_DEMO_DATA` | Enables local fictional incidents only |
+| `CONVEX_DEPLOYMENT` | Convex CLI deployment selection |
+| `CONVEX_DEPLOY_KEY` | Vercel build credential, scoped separately to production/preview |
+| `NEXT_PUBLIC_CONVEX_URL` | Matching Convex deployment URL |
+| `CONVEX_SERVER_SECRET` | Server-only mutations/refreshes; must agree in Next and Convex |
+| `RATE_LIMIT_SALT` | Required signing/hash secret for identity, rate limits and shares |
+| `CRON_SECRET` | Protects manual incident refresh |
+| `NEXT_PUBLIC_APP_URL` | Canonical deployed HTTPS origin |
+| `ALLOW_DEMO_DATA` | Fictional development incidents only |
 
-## Official incident data
+There are no model credentials. Remove obsolete OpenRouter variables and revoke unused credentials in the provider dashboard during rollout.
 
-The scheduled importer reads only official sources:
+## Coverage and operations
 
-- UK: Food Standards Agency food-alert API
-- US: FDA recall announcements plus the FDA food enforcement API, filtered to ongoing recalls
+Imports use official FSA warnings for the UK, and FDA recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
-FDA company announcements can be published before a recall is classified into an enforcement report. The announcement importer reads the FDA's official food recall listing and follows each official notice so newly published UPCs, GTINs, and lot codes can be checked without relying on secondary reporting.
+Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 
-The FSA feed does not expose a universal resolved state, so imported FSA warnings expire 180 days after their latest update. The original source payload, external ID, retrieval time, publication time, update time, authority, and official URL are retained.
-
-Run an import locally:
+Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. Convex refreshes each source independently every day. Cleanup runs separately in bounded batches.
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/incidents
 ```
 
-The importer upserts records and embedded match targets. A failed source fetch is recorded in `ingestionRuns` and never deletes previously valid incidents. Convex runs the official-source refresh daily at 04:17 UTC.
+The route returns HTTP 202 when jobs are queued; this does not mean an import succeeded. Watch completed/failed runs in Convex and investigate before treating coverage as healthy. External alerts and billing caps require hosting-account configuration; local code does not enable them.
 
-## Privacy and rate limits
+## Privacy and limits
 
-Packaging images live only for the duration of the analysis request. The app does not write images or scan histories to the database.
+The app accepts no photos and stores no scan history. A barcode lookup may send the barcode to Open Food Facts. Lookup metadata supplies only name and brand, never inferred producer or country of origin. Unknown lookup responses are cached briefly.
 
-A signed anonymous cookie identifies a browser for rate limiting. The database stores a salted hash, action name, time bucket, and count. Defaults are 10 image analyses, 120 warning checks, and 20 public shares per browser per hour.
+Checks and share creation are limited by both a signed browser cookie and a salted network identifier. Stored records contain hashes, action, time bucket and counts. Production trusts the Vercel client-address path. Before moving hosts, implement a documented trusted-proxy integration; an arbitrary forwarded header is insufficient.
 
-Normal Web Share actions use generic copy. Public links require a separate explicit action, contain no barcode, batch code, raw OCR text, or image, and expire after 30 days.
+Public links require an explicit action. They contain generic result copy, official warning details where applicable, check time and coverage, exclude user-entered label details, and expire after 24 hours. They are historical checks and should be rerun. Legacy shares missing metadata do not display reassuring or input-derived copy.
 
-## Commands
+## Verification
 
 ```bash
 pnpm lint
@@ -124,24 +86,22 @@ pnpm typecheck
 pnpm test
 pnpm test:e2e
 pnpm build
-pnpm convex:dev
-pnpm convex:deploy
-pnpm data:seed
+pnpm audit --prod
 ```
 
-## Vercel deployment
+Browser tests use deterministic fixtures. Importer tests cover pagination and parsing separately. Passing tests does not verify live production imports, every physical phone or spend controls.
 
-Deploy the Convex functions first, then configure Vercel with the production deployment URL and the same server secret stored in Convex.
+## Rollout
+
+For Git-triggered Vercel builds, use `pnpm build:vercel` as the Vercel Build Command. This invokes Convex deployment and supplies the matching backend URL to Next. Dashboard credentials, preview isolation and the first import are covered in [Convex deployment automation](docs/convex-deployment.md). Local `pnpm build` remains a frontend-only build.
+
+Deploy the Convex schema/functions to a preview/development deployment first. Run a complete import to populate the compact matching table and source ledger; old incident rows alone do not satisfy the health gate. Verify both regions, a known warning, insufficient evidence, a failed refresh, camera denial and public sharing against the preview.
+
+Configure production secrets and canonical origin. Deploy Convex before Next, run and inspect the initial source refresh, and confirm rate limits/spend alerts in the dashboards. Do not promote while required source health is missing or failing.
 
 ```bash
-vercel link
+pnpm convex:dev
 pnpm convex:deploy
-pnpm exec convex env set --prod CONVEX_SERVER_SECRET
-vercel env add NEXT_PUBLIC_CONVEX_URL production
-vercel env add CONVEX_SERVER_SECRET production --sensitive
-vercel --prod
 ```
 
-Set all variables from `.env.example` in Development, Preview, and Production as appropriate. Never set `ALLOW_DEMO_DATA=true` in Production. Convex owns the daily import schedule. The protected Next.js cron route remains available for a manual refresh.
-
-Before promoting a deployment, run lint, type checks, unit tests, a production build, and the Playwright smoke tests against the preview URL.
+Deployment is separate from this local implementation. See the revised cost assessment for assumptions and remaining production checks.
