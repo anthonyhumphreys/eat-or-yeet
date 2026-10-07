@@ -11,7 +11,7 @@ Mode: Operate. Extend the existing Geist, olive, neutral, and red warning interf
 
 ## Direction contract
 
-THESIS: Help a visitor find a published warning before starting a product check. Search and a chronological warning list carry the page.
+THESIS: Fluid warning desk. Help a visitor find a published warning before starting a product check. Search and a chronological warning list carry the page. Data should be clear, compact, and easy to scan; visual refinement comes from typography, spacing, and quiet borders.
 
 OWN-WORLD: Preserve Geist typography, white and dark neutral surfaces, olive brand accents, pill actions, and red official warning treatments. Use existing tokens and components.
 
@@ -21,7 +21,9 @@ FIRST VIEWPORT: A compact purpose statement, warning search, and grouped categor
 
 FORM: Existing application layout extended within its current visual system. No new visual identity or concept roll.
 
-FINISH: Verify desktop and mobile rendering, cookie persistence, filter behaviour, and news failures. Document the missing deployed Convex query separately from interface validation.
+MOTION: A brief transition on the result heading, count, and source attribution connects country and filter changes. Individual warning rows stay still. Honour reduced motion and support browsers without View Transitions.
+
+FINISH: Verify light and dark rendering from 320px to desktop, country persistence, in-page filter submission, history navigation, news hydration, and news failures. Keep deployment status separate from local interface validation.
 
 ## Constraints
 

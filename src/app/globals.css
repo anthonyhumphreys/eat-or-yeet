@@ -97,6 +97,8 @@
   html { @apply scroll-smooth font-sans; }
   body { @apply bg-background text-foreground; }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  input, textarea { caret-color: var(--foreground); }
+  html { scrollbar-color: var(--muted-foreground) var(--background); scrollbar-width: thin; }
   h1, h2, h3 { text-wrap: balance; }
   p { text-wrap: pretty; }
   ::selection { background: oklch(0.82 0.11 110); color: oklch(0.14 0.02 110); }
@@ -126,6 +128,21 @@
   to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 }
 
+/* Animate the compact result context; the warning list updates immediately. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(.warning-context) { animation-duration: 180ms; }
+::view-transition-old(.warning-context) { animation: warning-context-out 120ms ease-out both; }
+::view-transition-new(.warning-context) { animation: warning-context-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes warning-context-out {
+  to { opacity: 0; filter: blur(1px); }
+}
+@keyframes warning-context-in {
+  from { opacity: 0; filter: blur(1px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }

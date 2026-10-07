@@ -1,14 +1,22 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, ExternalLink, Pause, Play } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { useLocation } from "@/components/location-provider";
 import { newsForRegion } from "@/lib/news/related";
 import type { NewsFeed } from "@/lib/news/types";
+import type { WarningRegion } from "@/lib/location";
 
-export function NewsTicker({ feed }: { feed: NewsFeed }) {
-  const { region } = useLocation();
+const subscribe = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
+
+export function NewsTicker({ feed, initialRegion }: { feed: NewsFeed; initialRegion: WarningRegion }) {
+  const { region: selectedRegion } = useLocation();
+  // A streamed ticker may hydrate after the visitor has already changed countries.
+  const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
+  const region = hydrated ? selectedRegion : initialRegion;
   // A region change remounts the controls so its newest article always comes first.
   return <Ticker key={region} feed={feed} region={region} />;
 }

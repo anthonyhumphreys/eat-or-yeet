@@ -38,13 +38,13 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const region = await getPreferredRegion();
   return (
-    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <a href="#main-content" className="sr-only z-50 rounded-full bg-background px-5 py-3 font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to main content</a>
           <LocationProvider initialRegion={region}>
             <SiteHeader />
-            <Suspense fallback={<div className="min-h-12 border-b bg-muted" aria-label="Loading food safety news" />}><SiteNews /></Suspense>
+            <Suspense fallback={<div className="min-h-12 border-b bg-muted" aria-label="Loading food safety news" />}><SiteNews region={region} /></Suspense>
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
             <SiteFooter />
           </LocationProvider>

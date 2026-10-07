@@ -85,20 +85,30 @@ test("changing country on manual entry does not reload server data", async ({ pa
 });
 
 test("warning search and grouped categories preserve the selected location", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto("/?region=US");
-  await page.getByLabel("Search warnings", { exact: true }).fill("chocolate");
+  const documentRequests: string[] = [];
+  page.on("request", (request) => { if (request.resourceType() === "document") documentRequests.push(request.url()); });
+  await page.getByRole("searchbox", { name: "Search warnings", exact: true }).fill("chocolate");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page).toHaveURL(/region=US.*q=chocolate/);
-  await expect(page.getByLabel("Search warnings", { exact: true })).toHaveValue("chocolate");
+  await expect(page.getByRole("searchbox", { name: "Search warnings", exact: true })).toHaveValue("chocolate");
   await page.getByLabel("Food category", { exact: true }).selectOption("Snacks & sweets");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page.getByRole("heading", { name: "Snacks & sweets", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("US");
+  expect(documentRequests).toEqual([]);
+  await page.goBack();
+  await expect(page.getByRole("searchbox", { name: "Search warnings", exact: true })).toHaveValue("chocolate");
+  await expect(page.getByLabel("Food category", { exact: true })).toHaveValue("");
   await page.getByRole("link", { name: "Clear filters" }).click();
   await expect(page.getByRole("heading", { name: "Current US warnings", exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Check my food", exact: true }).click();
   await expect(page.getByText("Checking warnings from the")).toContainText("United States");
   await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("US");
+  expect(errors).toEqual([]);
 });
 
 test("manual entry exposes barcode and label detail fields", async ({ page }) => {
@@ -196,4 +206,31 @@ test("camera denial keeps manual barcode entry available", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Enter details manually" })).toBeVisible();
   await expect(page.getByText("Starting the camera…")).toBeVisible();
   await expect(page.getByText(/Camera access is blocked/)).toBeVisible();
+});
+
+
+test("warning browsing works with reduced motion and without view transition support", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "startViewTransition", { configurable: true, value: undefined });
+  });
+  await page.goto("/?region=UK");
+  await page.getByRole("combobox", { name: "Warning location", exact: true }).selectOption("US");
+  await expect(page.getByRole("heading", { name: "Current US warnings", exact: true })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search warnings", exact: true }).fill("no such food warning");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText('Results for "no such food warning".')).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("auto");
+  expect(errors).toEqual([]);
+});
+
+test("small screens keep the navigation and warnings inside the viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/?region=UK");
+  await expect(page.getByRole("heading", { name: "Current UK warnings", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
