@@ -81,6 +81,8 @@ Importers check pagination and reject incomplete responses. Warnings are not ass
 
 Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. Convex refreshes each source independently every day. Cleanup runs separately in bounded batches.
 
+Public browsing shows 50 warnings per page and reads only the selected country. Its separate cache revalidates every minute. Publisher news loads independently and caches partial feed failures for a minute, so an unavailable publisher does not hold up the warning list. These caches do not change the source-health checks used for food-check results.
+
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/incidents
 ```

@@ -50,6 +50,40 @@ test("location persists across reloads, warning browsing, and manual checks", as
   expect(checkedRegion).toBe("US");
 });
 
+test("country selection responds while the new warnings are still loading", async ({ page }) => {
+  await page.goto("/?region=UK");
+  await expect(page.getByRole("heading", { name: "Current UK warnings", exact: true })).toBeVisible();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (request.headers().rsc === "1" && new URL(request.url()).searchParams.get("region") === "US") await pending;
+    await route.continue();
+  });
+  const location = page.getByRole("combobox", { name: "Warning location", exact: true });
+  try {
+    await location.selectOption("US");
+    await expect(location).toHaveValue("US");
+    await expect(location).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByRole("status").filter({ hasText: "Loading United States warnings" })).toBeAttached();
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("heading", { name: "Current US warnings", exact: true })).toBeVisible();
+  await expect(location).toHaveAttribute("aria-busy", "false");
+});
+
+test("changing country on manual entry does not reload server data", async ({ page }) => {
+  await page.goto("/search?mode=details");
+  const serverRequests: string[] = [];
+  page.on("request", (request) => { if (request.headers().rsc === "1") serverRequests.push(request.url()); });
+  await page.getByRole("combobox", { name: "Warning location", exact: true }).selectOption("US");
+  await expect(page.getByText("Checking warnings from the")).toContainText("United States");
+  await page.getByRole("combobox", { name: "Warning location", exact: true }).selectOption("UK");
+  await expect(page.getByText("Checking warnings from the")).toContainText("United Kingdom");
+  expect(serverRequests).toEqual([]);
+});
+
 test("warning search and grouped categories preserve the selected location", async ({ page }) => {
   await page.goto("/?region=US");
   await page.getByLabel("Search warnings", { exact: true }).fill("chocolate");

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchQuery } from "convex/nextjs";
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import { api } from "@convex/_generated/api";
@@ -114,28 +115,36 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   return row ? mapIncident(row) : null;
 });
 
-export async function listActivePublicIncidents() {
-  async function listRegion(region: Region) {
+const listPublicRegion = unstable_cache(
+  async (region: Region, url: string) => {
     const rows: Array<Awaited<ReturnType<typeof publicListPage>>["page"][number]> = [];
     let cursor: string | null = null;
     let isDone = false;
     while (!isDone) {
-      const page = await publicListPage(region, cursor);
+      const page = await publicListPage(region, cursor, url);
       rows.push(...page.page);
       cursor = page.continueCursor;
       isDone = page.isDone;
     }
     return rows;
-  }
+  },
+  ["public-warning-list-v1"],
+  { revalidate: 60 },
+);
 
-  const rows = (await Promise.all([listRegion("UK"), listRegion("US")])).flat();
+// Only public browsing is cached here. Check requests still read source health every time.
+export async function listActivePublicIncidents(region?: Region) {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is required to load warnings.");
+  const rows = region ? await listPublicRegion(region, url)
+    : (await Promise.all([listPublicRegion("UK", url), listPublicRegion("US", url)])).flat();
   return rows
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map((row) => ({ ...row, updatedAt: new Date(row.updatedAt) }));
 }
 
-async function publicListPage(region: Region, cursor: string | null) {
-  return fetchQuery(api.incidents.listActivePage, { region, cursor });
+async function publicListPage(region: Region, cursor: string | null, url: string) {
+  return fetchQuery(api.incidents.listActivePage, { region, cursor }, { url });
 }
 
 export async function getPublicShare(id: string) {

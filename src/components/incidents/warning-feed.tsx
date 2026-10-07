@@ -1,23 +1,24 @@
 import { ArrowRight, Search } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
-import { NewsList } from "@/components/news/news-list";
+import { RegionalNews } from "@/components/news/regional-news";
 import { listActivePublicIncidents } from "@/db/queries";
 import { foodCategoryGroups, foodCategories, type FoodCategory } from "@/lib/incidents/browse";
 import { normaliseText } from "@/lib/matching/normalise";
 import { type WarningRegion } from "@/lib/location";
-import { getFoodSafetyNews } from "@/lib/news/feed";
-import { newsForRegion } from "@/lib/news/related";
 
 export type WarningParams = Record<string, string | string[] | undefined>;
 type PublicIncident = Awaited<ReturnType<typeof listActivePublicIncidents>>[number];
-type Filters = { region: WarningRegion; category?: FoodCategory; store?: string; q?: string };
+type Filters = { region: WarningRegion; category?: FoodCategory; store?: string; q?: string; page?: number };
+const PAGE_SIZE = 50;
 
-function filterUrl(path: string, { region, category, store, q }: Filters) {
+function filterUrl(path: string, { region, category, store, q, page }: Filters) {
   const params = new URLSearchParams({ region });
   if (category) params.set("category", category);
   if (store) params.set("store", store);
   if (q) params.set("q", q);
+  if (page && page > 1) params.set("page", String(page));
   return `${path}?${params}#warnings`;
 }
 
@@ -39,7 +40,7 @@ function WarningRow({ incident }: { incident: PublicIncident }) {
 }
 
 export async function WarningFeed({ params, region, path }: { params: WarningParams; region: WarningRegion; path: "/" | "/incidents" }) {
-  const [warnings, news] = await Promise.allSettled([listActivePublicIncidents(), getFoodSafetyNews()]);
+  const [warnings] = await Promise.allSettled([listActivePublicIncidents(region)]);
   const regionalRows = warnings.status === "fulfilled" ? warnings.value.filter((row) => row.region === region) : [];
   const query = typeof params.q === "string" ? params.q.trim().slice(0, 120) : "";
   const terms = query.split(/\s+/).map(normaliseText).filter(Boolean);
@@ -50,13 +51,17 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
   const category = typeof params.category === "string" && foodCategories.includes(params.category as FoodCategory) ? params.category as FoodCategory : undefined;
   const store = typeof params.store === "string" && params.store ? params.store.slice(0, 120) : undefined;
   const rows = searchedRows.filter((row) => (!category || row.categories.includes(category)) && (!store || row.stores.includes(store)));
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const requestedPage = typeof params.page === "string" && /^\d{1,6}$/.test(params.page) ? Number(params.page) : 1;
+  const page = Math.min(pageCount, Math.max(1, requestedPage));
+  const offset = (page - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(offset, offset + PAGE_SIZE);
   const categoryCounts = new Map<FoodCategory, number>();
   const stores = new Set<string>();
   for (const row of searchedRows) {
     if (!store || row.stores.includes(store)) for (const item of row.categories) categoryCounts.set(item, (categoryCounts.get(item) ?? 0) + 1);
     if (!category || row.categories.includes(category)) for (const item of row.stores) stores.add(item);
   }
-  const feed = news.status === "fulfilled" ? news.value : { articles: [], unavailable: true };
 
   return <div id="warnings" className="scroll-mt-6">
     <form action={path} role="search" className="max-w-3xl">
@@ -101,7 +106,14 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
           <p className="text-sm text-muted-foreground">{warnings.status === "fulfilled" ? `${rows.length} ${rows.length === 1 ? "warning" : "warnings"}` : "Data unavailable"}</p>
         </div>
         {query || category || store ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{query ? `Results for "${query}". ` : ""}{store ? `Retailer: ${store}. ` : ""}<Link href={filterUrl(path, { region })} className="inline-flex min-h-9 items-center font-semibold underline underline-offset-4">Clear filters</Link></p> : null}
-        {warnings.status === "rejected" ? <div role="status" className="py-8"><p className="font-bold">Warnings are temporarily unavailable.</p><p className="mt-2 text-sm leading-6 text-muted-foreground">Please try again shortly, or check the <a className="underline underline-offset-4" href={region === "UK" ? "https://alerts.food.gov.uk/" : "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts"}>official recall notices</a>.</p></div> : rows.length ? rows.map((incident) => <WarningRow key={incident.id} incident={incident} />) : <div className="py-8"><p className="font-bold">No current warnings match this selection.</p><p className="mt-2 text-sm leading-6 text-muted-foreground">Try a different search or clear the filters. A missing warning does not mean food is safe to eat.</p></div>}
+        {warnings.status === "rejected" ? <div role="status" className="py-8"><p className="font-bold">Warnings are temporarily unavailable.</p><p className="mt-2 text-sm leading-6 text-muted-foreground">Please try again shortly, or check the <a className="underline underline-offset-4" href={region === "UK" ? "https://alerts.food.gov.uk/" : "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts"}>official recall notices</a>.</p></div> : rows.length ? pageRows.map((incident) => <WarningRow key={incident.id} incident={incident} />) : <div className="py-8"><p className="font-bold">No current warnings match this selection.</p><p className="mt-2 text-sm leading-6 text-muted-foreground">Try a different search or clear the filters. A missing warning does not mean food is safe to eat.</p></div>}
+        {pageCount > 1 ? <nav aria-label="Warning pages" className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
+          <p>Showing {offset + 1}–{offset + pageRows.length} of {rows.length} warnings</p>
+          <div className="flex gap-4">
+            {page > 1 ? <Link href={filterUrl(path, { region, category, store, q: query, page: page - 1 })} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Previous warnings</Link> : null}
+            {page < pageCount ? <Link href={filterUrl(path, { region, category, store, q: query, page: page + 1 })} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Next warnings</Link> : null}
+          </div>
+        </nav> : null}
       </div>
 
       <aside className="space-y-8 lg:border-l lg:pl-6">
@@ -111,7 +123,9 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
           <Link href="/scan" className="mt-4 flex min-h-11 items-center justify-between rounded-full bg-foreground px-4 text-sm font-bold text-background focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Check my food<ArrowRight className="size-4" aria-hidden /></Link>
           <Link href="/search?mode=details" className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold underline underline-offset-4">Enter label details instead</Link>
         </section>
-        <NewsList articles={newsForRegion(feed.articles, region).slice(0, 5)} unavailable={feed.unavailable} />
+        <Suspense key={region} fallback={<p role="status" className="min-h-24 text-sm text-muted-foreground">Loading food safety news…</p>}>
+          <RegionalNews region={region} />
+        </Suspense>
       </aside>
     </div>
   </div>;

@@ -7,6 +7,7 @@ vi.mock("@/db/queries", () => ({ listActivePublicIncidents: listWarnings }));
 vi.mock("@/lib/news/feed", () => ({ getFoodSafetyNews: getNews }));
 
 import { WarningFeed } from "@/components/incidents/warning-feed";
+import { RegionalNews } from "@/components/news/regional-news";
 
 const rows = [
   { id: "1", slug: "chocolate", title: "Waitrose recalls milk chocolate", summary: "An affected batch", region: "UK", authority: "Food Standards Agency", categories: ["Snacks & sweets", "Dairy & eggs"], stores: ["Waitrose"], updatedAt: new Date("2026-10-07T12:00:00Z") },
@@ -52,6 +53,31 @@ describe("warnings landing feed", () => {
   it("keeps official warnings visible when news fails", async () => {
     getNews.mockRejectedValue(new Error("Feed unavailable"));
     expect(await render()).toContain("Waitrose recalls milk chocolate");
-    expect(await render()).toContain("News is temporarily unavailable");
+    const news = await RegionalNews({ region: "UK" });
+    expect(renderToStaticMarkup(news)).toContain("News is temporarily unavailable");
+  });
+
+  it("renders warnings without waiting for a stalled publisher", async () => {
+    getNews.mockImplementation(() => new Promise(() => {}));
+    expect(await render()).toContain("Waitrose recalls milk chocolate");
+    expect(listWarnings).toHaveBeenCalledWith("UK");
+  });
+
+  it("paginates after filtering and preserves the filters in page links", async () => {
+    listWarnings.mockResolvedValue(Array.from({ length: 125 }, (_, index) => ({
+      ...rows[0], id: String(index), slug: `recall-${index}`, title: `Waitrose chocolate recall ${index}`,
+    })));
+    const html = await render({ q: "chocolate", category: "Snacks & sweets", store: "Waitrose", page: "2" });
+    expect(html.match(/<article/g)).toHaveLength(50);
+    expect(html).toContain("Showing 51–100 of 125 warnings");
+    expect(html).toContain("recall-50");
+    expect(html).not.toContain('href="/incidents/recall-0"');
+    expect(html).toContain("region=UK&amp;category=Snacks+%26+sweets&amp;store=Waitrose&amp;q=chocolate&amp;page=3#warnings");
+  });
+
+  it("clamps invalid and out-of-range page numbers without losing warnings", async () => {
+    listWarnings.mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...rows[0], id: String(index), slug: `recall-${index}` })));
+    expect((await render({ page: "-2" })).match(/<article/g)).toHaveLength(50);
+    expect((await render({ page: "999999" })).match(/<article/g)).toHaveLength(10);
   });
 });

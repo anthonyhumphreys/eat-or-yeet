@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn }));
+
 import { getFoodSafetyNews } from "@/lib/news/feed";
 import { newsForRegion, relatedNews } from "@/lib/news/related";
 import { newsSources, parseNewsRss } from "@/lib/news/rss";

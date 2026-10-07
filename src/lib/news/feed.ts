@@ -1,12 +1,13 @@
 import "server-only";
 
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 
 import { readResponseText } from "@/lib/http/bounded-response";
 import { newsSources, parseNewsRss } from "./rss";
 import type { NewsFeed } from "./types";
 
-export const getFoodSafetyNews = cache(async (): Promise<NewsFeed> => {
+const loadFoodSafetyNews = unstable_cache(async (): Promise<NewsFeed> => {
   const results = await Promise.allSettled(newsSources.map(async (source) => {
     const response = await fetch(source.url, {
       next: { revalidate: 1800 },
@@ -24,4 +25,7 @@ export const getFoodSafetyNews = cache(async (): Promise<NewsFeed> => {
     articles: [...unique.values()].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)),
     unavailable: results.some((result) => result.status === "rejected"),
   };
-});
+}, ["food-safety-news-v1"], { revalidate: 60 });
+
+// Cache partial failures too, so an unavailable publisher cannot stall every navigation.
+export const getFoodSafetyNews = cache(loadFoodSafetyNews);
