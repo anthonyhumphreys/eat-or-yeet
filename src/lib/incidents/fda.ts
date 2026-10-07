@@ -111,9 +111,20 @@ function incidentStatus(sourceStatus: string): "active" | "resolved" {
   }
 }
 
-function legacySourceId(record: z.infer<typeof recordSchema>): string {
-  const productName = record.product_description.trim().slice(0, 300);
+function syntheticSourceId(record: z.infer<typeof recordSchema>, productName: string): string {
   return `unclassified-${record.report_date}-${slugify(`${record.recalling_firm}-${productName}`)}`;
+}
+
+function legacySourceIds(record: z.infer<typeof recordSchema>): string[] {
+  const productNames = new Set([
+    record.product_description.trim().slice(0, 300),
+    record.product_description.split(/[;,]/)[0].trim().slice(0, 300),
+  ]);
+  return [...new Set([...productNames].map((productName) => syntheticSourceId(record, productName)))];
+}
+
+function legacySourceId(record: z.infer<typeof recordSchema>): string {
+  return legacySourceIds(record)[0];
 }
 
 function sourceIdForRecord(record: z.infer<typeof recordSchema>): string {
@@ -226,7 +237,7 @@ async function resolvePreviouslyActive(existingSourceIds: string[], current: Nor
   const currentIds = new Set(current.map((incident) => incident.sourceId));
   const missingIds = [...new Set(existingSourceIds)].filter((sourceId) => !currentIds.has(sourceId));
   const needsLegacyAliases = missingIds.some((sourceId) => sourceId.startsWith("unclassified-"));
-  const legacyAliases = new Map<string, NormalisedIncident[]>();
+  const legacyAliases = new Map<string, Set<NormalisedIncident>>();
 
   if (needsLegacyAliases) {
     for (const incident of current) {
@@ -234,18 +245,18 @@ async function resolvePreviouslyActive(existingSourceIds: string[], current: Nor
       if (!parsedRecord.success) {
         throw new Error(`FDA could not verify the legacy source ID for current recall ${incident.sourceId}`);
       }
-      const legacyId = legacySourceId(parsedRecord.data);
-      if (legacyId === incident.sourceId) continue;
-      const aliases = legacyAliases.get(legacyId) ?? [];
-      aliases.push(incident);
-      legacyAliases.set(legacyId, aliases);
+      for (const legacyId of legacySourceIds(parsedRecord.data)) {
+        const aliases = legacyAliases.get(legacyId) ?? new Set<NormalisedIncident>();
+        aliases.add(incident);
+        legacyAliases.set(legacyId, aliases);
+      }
     }
   }
 
   const lookupIds: string[] = [];
   for (const sourceId of missingIds) {
     if (sourceId.startsWith("unclassified-")) {
-      const matches = legacyAliases.get(sourceId) ?? [];
+      const matches = [...(legacyAliases.get(sourceId) ?? [])];
       if (matches.length === 1 && matches[0].status === "active") continue;
       if (matches.length > 1) {
         throw new Error(`FDA legacy source ID ${sourceId} ambiguously matches multiple ongoing recalls`);

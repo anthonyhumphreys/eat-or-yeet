@@ -18,4 +18,6 @@ Code deployment does not import recalls. Run `incidents:refreshAllInternal` in t
 
 Afterward, Convex automatically refreshes sources daily at 04:17 UTC and runs cleanup at 05:17 UTC. No additional scheduled GitHub or Vercel job is needed.
 
-Dashboard credentials and hosted deployment success have not been verified.
+Production and isolated Preview code deployments were verified on 2026-10-07. A subsequent Git push also deployed both Next and Convex automatically.
+
+The preview backend `aware-aardvark-941` has no `CONVEX_SERVER_SECRET` yet. Set it to match Vercel’s Preview value and configure the project’s preview environment defaults for future deployments. Production UK source health is verified; complete US coverage remains blocked by FSIS returning HTTP 403 from Convex. Backend deployment success does not imply successful source ingestion.

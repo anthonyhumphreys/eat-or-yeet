@@ -228,11 +228,11 @@ describe("FDA enforcement report imports", () => {
       recall_number: "",
       event_id: "99453",
       recalling_firm: "Taylor Farms",
-      product_description: "MARKON BLEND LETT/ROM 80/20 WITH SEP BAGGIES",
+      product_description: "Iceberg, Romaine Lettuce Mix 80/20 with Separate Baggies",
       report_date: "20260819",
       code_info: "Lot code 12345",
     });
-    const legacyId = parseFdaRecord(legacyRecord).sourceId;
+    const legacyId = "unclassified-20260819-taylor-farms-iceberg";
     const currentRecord = { ...legacyRecord, recall_number: "H-1298-2026" };
     const calls: URL[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -250,6 +250,36 @@ describe("FDA enforcement report imports", () => {
     expect(incidents.map((incident) => incident.sourceId)).toEqual(["H-1298-2026"]);
     expect(calls).toHaveLength(1);
     expect(calls[0].searchParams.get("search")).toContain('status:"Ongoing"');
+  });
+
+  it("matches a historical split-key alias to a unique ongoing record without an official number", async () => {
+    const currentRecord = fdaRecord({
+      recall_number: "",
+      event_id: "99454",
+      recalling_firm: "Unilever",
+      product_description: "ALMOND JOY ICE CREAM BAR; 6 COUNT CARTON",
+      report_date: "20260819",
+    });
+    const calls: URL[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      const limit = Number(url.searchParams.get("limit"));
+      return jsonResponse({
+        meta: { results: { skip: 0, limit, total: 1 } },
+        results: [currentRecord],
+      });
+    }));
+
+    const incidents = await fdaSource.fetchIncidents([
+      "unclassified-20260819-unilever-almond-joy-ice-cream-bar",
+    ]);
+
+    expect(incidents.map((incident) => incident.sourceId)).toEqual([
+      "unclassified-20260819-unilever-almond-joy-ice-cream-bar-6-count-carton",
+    ]);
+    expect(incidents[0].status).toBe("active");
+    expect(calls).toHaveLength(1);
   });
 
   it("fails closed when a legacy synthetic key matches multiple current recalls", async () => {
