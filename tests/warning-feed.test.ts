@@ -28,6 +28,17 @@ async function render(params = {}, region: "UK" | "US" = "UK") {
 }
 
 describe("warnings landing feed", () => {
+  it("renders stable September abbreviations and keeps London date boundaries", async () => {
+    listWarnings.mockResolvedValue([
+      { ...rows[0], updatedAt: new Date("2026-09-30T12:00:00Z") },
+      { ...rows[1], updatedAt: new Date("2026-09-30T23:30:00Z") },
+    ]);
+    const html = await render();
+    expect(html).toContain("30 Sep");
+    expect(html).not.toContain("30 Sept");
+    expect(html).toContain("1 Oct");
+  });
+
   it("scopes warnings by region and lists a multi-category notice once", async () => {
     const html = await render();
     expect(html).not.toContain("US eggs recalled");

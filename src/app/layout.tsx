@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { LocationProvider } from "@/components/location-provider";
+import { RegionPrompt } from "@/components/region-prompt";
 import { SiteNews } from "@/components/news/site-news";
-import { getPreferredRegion } from "@/lib/location-server";
+import { getSavedRegion, getSuggestedRegion } from "@/lib/location-server";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { MobileCheckBar } from "@/components/mobile-check-bar";
@@ -37,14 +38,16 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const region = await getPreferredRegion();
+  const [savedRegion, suggestedRegion] = await Promise.all([getSavedRegion(), getSuggestedRegion()]);
+  const region = savedRegion ?? "UK";
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <a href="#main-content" className="sr-only z-50 rounded-full bg-background px-5 py-3 font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to main content</a>
-          <LocationProvider initialRegion={region}>
+          <LocationProvider initialRegion={region} hasSavedRegion={Boolean(savedRegion)} suggestedRegion={suggestedRegion}>
             <SiteHeader />
+            <RegionPrompt />
             <Suspense fallback={null}><SiteNews region={region} /></Suspense>
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
             <SiteFooter />

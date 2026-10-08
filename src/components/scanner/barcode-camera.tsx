@@ -9,6 +9,10 @@ type CameraState = "starting" | "scanning" | "unavailable" | "detected";
 
 const nativeFormats = ["ean_13", "ean_8", "upc_a", "upc_e"];
 const gtinLengths: Record<string, number> = { ean_13: 13, ean_8: 8, upc_a: 12 };
+const cameraConstraints: MediaStreamConstraints = {
+  video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  audio: false,
+};
 
 function expandUpcE(value: string): string | null {
   if (!/^0[0-9]{7}$|^1[0-9]{7}$/.test(value)) return null;
@@ -104,10 +108,7 @@ export function BarcodeCamera({ onDetected }: { onDetected: (value: string) => v
         const wanted = nativeFormats.filter((format) => supportedFormats.includes(format));
         if ("BarcodeDetector" in window && wanted.length > 0) {
           const detector = new BarcodeDetector({ formats: wanted });
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false,
-          });
+          stream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
           if (cancelled) { stopStream(); return; }
           video.srcObject = stream;
           await video.play();
@@ -131,11 +132,12 @@ export function BarcodeCamera({ onDetected }: { onDetected: (value: string) => v
           return;
         }
 
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const { BarcodeFormat, BrowserMultiFormatReader } = await import("@zxing/browser");
         if (cancelled) return;
         const reader = new BrowserMultiFormatReader();
-        const controls = await reader.decodeFromVideoDevice(undefined, video, (result) => {
-          if (result) handleCode(result.getText(), result.getBarcodeFormat().toString().toLowerCase());
+        reader.possibleFormats = [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E];
+        const controls = await reader.decodeFromConstraints(cameraConstraints, video, (result) => {
+          if (result) handleCode(result.getText(), BarcodeFormat[result.getBarcodeFormat()].toLowerCase());
         });
         if (cancelled) controls.stop();
         else {

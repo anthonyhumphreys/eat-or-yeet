@@ -12,6 +12,22 @@ beforeEach(() => {
 });
 
 describe("product lookup evidence", () => {
+  it.each(["044000061494", "00044000061494"])("looks up Oreo barcode %s using the printed UPC", async (barcode) => {
+    mocks.query.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    mocks.mutation.mockResolvedValue(null);
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: 1,
+      product: { product_name: "Golden Oreo Mini", brands: "Nabisco" },
+    })));
+    vi.stubGlobal("fetch", fetcher);
+
+    const result = await enrichObservation({ ...emptyObservation(), barcode });
+
+    expect(fetcher.mock.calls[0][0]).toContain("/044000061494.json");
+    expect(result).toMatchObject({ barcode: "00044000061494", productName: "Golden Oreo Mini", brand: "Nabisco" });
+    expect(mocks.mutation.mock.calls[0][1].gtin).toBe("00044000061494");
+  });
+
   it("does not infer a producer or country of origin from sale metadata", async () => {
     mocks.query.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     mocks.mutation.mockResolvedValue(null);

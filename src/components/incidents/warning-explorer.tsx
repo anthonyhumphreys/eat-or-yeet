@@ -56,17 +56,22 @@ function Highlight({ text, query }: { text: string; query: string }) {
     : part);
 }
 
-const dayFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+const dayFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "numeric", timeZone: "Europe/London" });
 const yearFormat = new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: "Europe/London" });
+// Fixed month names avoid different abbreviations in server and browser ICU versions.
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function WarningRow({ row, query, thisYear }: { row: ExplorerRow; query: string; thisYear: string }) {
   const date = new Date(row.updatedAt);
   const year = yearFormat.format(date);
+  const parts = dayFormat.formatToParts(date);
+  const day = parts.find((part) => part.type === "day")?.value;
+  const month = Number(parts.find((part) => part.type === "month")?.value);
   return (
     <li className="border-b last:border-b-0">
       <Link href={`/incidents/${row.slug}`} className="group -mx-3 grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto] sm:gap-x-4">
         <time dateTime={date.toISOString()} className="pt-0.5 text-[13px] leading-5 tabular-nums text-muted-foreground">
-          {dayFormat.format(date)}{year !== thisYear ? <span className="block">{year}</span> : null}
+          {`${day} ${monthNames[month - 1]}`}{year !== thisYear ? <span className="block">{year}</span> : null}
         </time>
         <span className="min-w-0">
           <span className="block text-[0.9375rem] font-semibold leading-snug sm:text-base"><Highlight text={row.title} query={query} /></span>

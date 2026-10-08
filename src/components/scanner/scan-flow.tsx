@@ -4,6 +4,7 @@ import { ChevronLeft, ScanBarcode } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocation } from "@/components/location-provider";
+import { CheckRegion } from "@/components/check-region";
 import { regionNames } from "@/lib/location";
 
 import { BarcodeCamera } from "@/components/scanner/barcode-camera";
@@ -74,6 +75,7 @@ export function ScanFlow() {
         <section aria-labelledby="scan-heading">
           <h1 id="scan-heading" className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] sm:text-5xl">Scan a barcode</h1>
           <p className="mb-5 mt-3 max-w-xl text-base leading-7 text-muted-foreground">Checking against current <span className="font-semibold text-foreground">{regionNames[region]}</span> warnings.</p>
+          <CheckRegion />
           <BarcodeCamera onDetected={onDetected} />
           <form className="mt-8 border-t pt-6" onSubmit={(event) => { event.preventDefault(); if (typedValid) onDetected(barcodeStatus(typed).digits); }}>
             <BarcodeField id="typed-barcode" label="Or type the number" value={typed} onChange={setTyped} />
@@ -94,6 +96,7 @@ export function ScanFlow() {
             <h1 id="details-heading" ref={detailsHeadingRef} tabIndex={-1} className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] focus-visible:outline-none sm:text-5xl">{observation.barcode ? "Got it. Anything else?" : "Add label details"}</h1>
             <p className="mt-3 max-w-xl text-base leading-7 text-muted-foreground">{observation.barcode ? "A batch code or date helps tell your pack apart from affected ones. Skip anything you can’t read." : "A product name, brand or batch code can find a published warning."}</p>
           </div>
+          <CheckRegion />
           <ObservationForm
             observation={observation}
             onSubmit={(found) => void check(found)}

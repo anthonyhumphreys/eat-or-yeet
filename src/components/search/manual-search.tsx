@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useLocation } from "@/components/location-provider";
+import { CheckRegion } from "@/components/check-region";
 import { regionNames } from "@/lib/location";
 
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ export function ManualSearch({ initialMode = "barcode" }: { initialMode?: Search
     <form onSubmit={(event) => { event.preventDefault(); void check(); }}>
       <h1 className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] sm:text-5xl">Type it in</h1>
       <p className="mt-3 max-w-xl text-base leading-7 text-muted-foreground">Checking against current <span className="font-semibold text-foreground">{regionNames[region]}</span> warnings. <Link href="/scan" className="font-semibold text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Scan with your camera</Link> instead.</p>
+      <CheckRegion />
 
       <fieldset className="mt-6">
         <legend className="sr-only">Check by</legend>
