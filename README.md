@@ -70,6 +70,7 @@ Never enable demo data in production. Use `pnpm dev:web` to start only Next.js w
 | `CRON_SECRET` | Protects manual incident refresh |
 | `NEXT_PUBLIC_APP_URL` | Canonical deployed HTTPS origin |
 | `ALLOW_DEMO_DATA` | Fictional development incidents only |
+| `FSIS_FETCH_MODE` | Convex only: `snapshot` uses an external USDA fetcher; unset uses direct fetching |
 
 There are no model credentials. Remove obsolete OpenRouter variables and revoke unused credentials in the provider dashboard during rollout.
 
@@ -80,6 +81,8 @@ Imports use official FSA warnings for the UK, and FDA recall announcements, FDA 
 Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 
 Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. Convex refreshes each source independently every day. Cleanup runs separately in bounded batches.
+
+USDA currently blocks requests from our hosted runtimes. `pnpm data:sync:fsis --prod` fetches the complete official archive from a working connection and imports it through an admin-only snapshot action. Only active notices and tracked closures create rows. External sync mode keeps the failed direct fetch out of the daily cron; source freshness still expires after 48 hours. See [USDA snapshot sync](docs/usda-sync.md) for setup and limitations.
 
 Public browsing shows 50 warnings per page and reads only the selected country. Its separate cache revalidates every minute. Publisher news loads independently and caches partial feed failures for a minute, so an unavailable publisher does not hold up the warning list. These caches do not change the source-health checks used for food-check results.
 

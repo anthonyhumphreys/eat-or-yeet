@@ -17,7 +17,8 @@
     "test:e2e": "playwright test",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
-    "data:seed": "tsx --env-file=.env.local --env-file-if-exists=.env.development.local scripts/seed.ts"
+    "data:seed": "tsx --env-file=.env.local --env-file-if-exists=.env.development.local scripts/seed.ts",
+    "data:sync:fsis": "tsx scripts/sync-fsis.ts"
   },
   "dependencies": {
     "@zxing/browser": "^0.2.1",

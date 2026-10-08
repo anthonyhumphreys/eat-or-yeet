@@ -2,7 +2,8 @@ import { v } from "convex/values";
 
 import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
 import { fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
-import { fsisSource } from "../src/lib/incidents/fsis";
+import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
+import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
 import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "../src/lib/incidents/types";
 import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
@@ -454,8 +455,8 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
 
   try {
     const existingSourceIds: string[] = [];
-    if (source.id === "fda") {
-      await ctx.runAction(internal.incidents.repairLegacyFdaSourceIdsInternal, {});
+    if (source.id === "fda" || source.id === "fsis") {
+      if (source.id === "fda") await ctx.runAction(internal.incidents.repairLegacyFdaSourceIdsInternal, {});
       let cursor: string | null = null;
       let isDone = false;
       while (!isDone) {
@@ -502,9 +503,40 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
 export const refreshSourceInternal = internalAction({
   args: { sourceId: v.string() },
   handler: async (ctx, { sourceId }) => {
+    // An external fetch keeps USDA's hosted-IP block out of the daily cron.
+    // Missing external updates still expire through the normal health gate.
+    if (sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") return { source: sourceId, status: "external" };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) throw new Error(`Unknown incident source: ${sourceId}`);
     return await ingestSource(ctx, source);
+  },
+});
+
+// Admin-only upload/import functions. No public caller can supply recall data.
+export const createFsisSnapshotUpload = internalMutation({
+  args: {},
+  handler: (ctx) => ctx.storage.generateUploadUrl(),
+});
+
+export const deleteFsisSnapshot = internalMutation({
+  args: { storageId: v.id("_storage") },
+  handler: (ctx, { storageId }) => ctx.storage.delete(storageId),
+});
+
+export const importFsisSnapshotInternal = internalAction({
+  args: { storageId: v.id("_storage"), fetchedAt: v.number() },
+  handler: async (ctx, { storageId, fetchedAt }) => {
+    try {
+      return await ingestSource(ctx, {
+        ...fsisSource,
+        fetchIncidents: async (existingSourceIds) => fsisIncidentsForSync(
+          await readFsisSnapshot(await ctx.storage.get(storageId), fetchedAt),
+          existingSourceIds,
+        ),
+      });
+    } finally {
+      await ctx.storage.delete(storageId);
+    }
   },
 });
 
@@ -512,20 +544,25 @@ export const refreshAllInternal = internalAction({
   args: {},
   handler: async (ctx) => {
     await ctx.runAction(internal.incidents.backfillMatchDataInternal, {});
-    await Promise.all(sources.map((source, index) => ctx.scheduler.runAfter(
+    const scheduled = scheduledSources();
+    await Promise.all(scheduled.map((source, index) => ctx.scheduler.runAfter(
       index * 30_000,
       internal.incidents.refreshSourceInternal,
       { sourceId: source.id },
     )));
-    return { queued: sources.map((source) => source.id) };
+    return { queued: scheduled.map((source) => source.id) };
   },
 });
+
+function scheduledSources() {
+  return sources.filter((source) => source.id !== "fsis" || process.env.FSIS_FETCH_MODE !== "snapshot");
+}
 
 export const refreshAll = action({
   args: { secret: v.string() },
   handler: async (ctx, args): Promise<{ queued: string[] }> => {
     requireServerSecret(args.secret);
     await ctx.scheduler.runAfter(0, internal.incidents.refreshAllInternal, {});
-    return { queued: sources.map((source) => source.id) };
+    return { queued: scheduledSources().map((source) => source.id) };
   },
 });

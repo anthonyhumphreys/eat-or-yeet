@@ -6,7 +6,7 @@ import { sourceHtmlParagraphs, sourceHtmlToText } from "@/lib/incidents/source-t
 import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "@/lib/incidents/types";
 import { isValidGtin, slugify } from "@/lib/matching/normalise";
 
-const FSIS_API = "https://www.fsis.usda.gov/fsis/api/recall/v/1";
+export const FSIS_API = "https://www.fsis.usda.gov/fsis/api/recall/v/1";
 
 const recordSchema = z.object({
   field_title: z.string().trim().min(1),
@@ -249,13 +249,24 @@ export const fsisSource: IncidentSource = {
   url: FSIS_API,
   region: "US",
   scope: "English-language records in the full USDA FSIS Recall API archive, covering FSIS-regulated meat, poultry, and egg recalls and public health alerts.",
-  async fetchIncidents() {
+  async fetchIncidents(existingSourceIds = []) {
     const payload = await fetchOfficialJson(FSIS_API, {
       sourceName: "FSIS Recall API",
       headers: { Accept: "application/json" },
       timeoutMs: 30_000,
       cache: "no-store",
     });
-    return parseFsisRecords(payload);
+    return fsisIncidentsForSync(payload, existingSourceIds);
   },
 };
+
+/** Store current warnings and explicit closures of warnings already tracked. */
+export function fsisIncidentsForSync(payload: unknown, existingSourceIds: string[] = []): NormalisedIncident[] {
+  const incidents = parseFsisRecords(payload);
+  const incomingIds = new Set(incidents.map((incident) => incident.sourceId));
+  const trackedIds = new Set(existingSourceIds);
+  if (existingSourceIds.some((id) => !incomingIds.has(id))) {
+    throw new Error("FSIS archive is missing a previously active notice; refusing an incomplete refresh");
+  }
+  return incidents.filter((incident) => incident.status === "active" || trackedIds.has(incident.sourceId));
+}

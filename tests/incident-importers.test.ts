@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fdaAnnouncementsSource, parseFdaAnnouncementDetail, parseFdaAnnouncementRows } from "@/lib/incidents/fda-announcements";
 import { fdaSource, parseFdaRecord } from "@/lib/incidents/fda";
 import { fsaSource, parseFsaDetail } from "@/lib/incidents/fsa";
-import { parseFsisRecords } from "@/lib/incidents/fsis";
+import { fsisIncidentsForSync, parseFsisRecords } from "@/lib/incidents/fsis";
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -428,6 +428,25 @@ describe("FDA announcement imports", () => {
 });
 
 describe("FSIS Recall API imports", () => {
+  it("stores active notices and tracked closures without importing unused resolved history", () => {
+    const active = fsisRecord();
+    const closed = fsisRecord({ field_active_notice: "False", field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/closed-recall" });
+    const historical = fsisRecord({ field_active_notice: "False", field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/historical-recall" });
+    const incidents = fsisIncidentsForSync([active, closed, historical], ["/recalls-alerts/closed-recall"]);
+
+    expect(incidents).toHaveLength(2);
+    expect(incidents.map((item) => item.status)).toEqual(["active", "resolved"]);
+    expect(incidents.some((item) => item.sourceId.endsWith("historical-recall"))).toBe(false);
+  });
+
+  it("rejects a snapshot missing a previously active notice before applying changes", () => {
+    expect(() => fsisIncidentsForSync([fsisRecord()], ["/recalls-alerts/missing-recall"])).toThrow("incomplete refresh");
+  });
+
+  it("validates resolved history as well as current notices", () => {
+    expect(() => fsisIncidentsForSync([fsisRecord(), fsisRecord({ field_active_notice: "False", field_recall_date: "invalid" })])).toThrow("recall date");
+  });
+
   it("keeps only English notices, retains status, and groups exact product-line lots with dates", () => {
     const english = fsisRecord();
     const spanish = fsisRecord({
