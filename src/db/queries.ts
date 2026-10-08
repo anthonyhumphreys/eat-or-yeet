@@ -128,7 +128,7 @@ const listPublicRegion = unstable_cache(
     }
     return rows;
   },
-  ["public-warning-list-v1"],
+  ["public-warning-list-v2"],
   { revalidate: 60 },
 );
 

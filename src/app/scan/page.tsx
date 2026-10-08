@@ -6,8 +6,8 @@ export const metadata: Metadata = { title: "Scan food", robots: { index: false, 
 
 export default function ScanPage() {
   return (
-    <div className="page-shell max-w-3xl py-6 sm:py-10">
-      <ScanFlow />
+    <div className="page-shell py-6 sm:py-10">
+      <div className="max-w-2xl"><ScanFlow /></div>
     </div>
   );
 }

@@ -17,11 +17,11 @@ OWN-WORLD: Preserve Geist typography, white and dark neutral surfaces, olive bra
 
 STORY: Choose UK or US once. Find a product, brand, category, or named retailer. Open the official advice or check the pack through the scanner.
 
-FIRST VIEWPORT: A compact purpose statement, warning search, and grouped category selector above the list. Desktop has a scanner block and publisher headlines on the right. Mobile puts them after warnings. Location and the scanner action stay in the top navigation.
+FIRST VIEWPORT: A compact purpose statement, instant warning search, hazard chips, and food/shop selects above the list. Desktop has a sticky scanner block and publisher headlines on the right. Mobile drops the scanner block for a fixed bottom check bar and puts news after warnings. The UK/US switch stays in the single-row header.
 
 FORM: Existing application layout extended within its current visual system. No new visual identity or concept roll.
 
-MOTION: A brief transition on the result heading, count, and source attribution connects country and filter changes. Individual warning rows stay still. Honour reduced motion and support browsers without View Transitions.
+MOTION: Hazard, category, shop and "show more" changes animate rows into place with View Transitions; typing filters instantly with no animation. The result heading crossfades. Honour reduced motion and support browsers without View Transitions.
 
 FINISH: Verify light and dark rendering from 320px to desktop, country persistence, in-page filter submission, history navigation, news hydration, and news failures. Keep deployment status separate from local interface validation.
 

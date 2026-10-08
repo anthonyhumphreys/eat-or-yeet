@@ -210,6 +210,8 @@ export const listActivePage = query({
         slug: row.slug,
         region: row.region,
         summary: row.summary,
+        hazard: row.hazard?.slice(0, 400) ?? null,
+        pathogen: row.pathogen ?? null,
         authority: row.authority,
         updatedAt: row.updatedAt,
         categories: row.categories,

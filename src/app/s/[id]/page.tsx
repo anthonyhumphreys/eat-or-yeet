@@ -81,7 +81,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
         </section>
 
         {hasCoverage && share.incidentSlug ? <Link href={`/incidents/${share.incidentSlug}`} className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Read the official warning</Link> : null}
-        <Button asChild size="lg" className="tactile mt-7 w-full rounded-full"><Link href="/scan">Check a barcode</Link></Button>
+        <Button asChild size="lg" className="mt-7 w-full rounded-full"><Link href="/scan">Check a barcode</Link></Button>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { SiteNews } from "@/components/news/site-news";
 import { getPreferredRegion } from "@/lib/location-server";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { MobileCheckBar } from "@/components/mobile-check-bar";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -44,9 +45,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <a href="#main-content" className="sr-only z-50 rounded-full bg-background px-5 py-3 font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to main content</a>
           <LocationProvider initialRegion={region}>
             <SiteHeader />
-            <Suspense fallback={<div className="min-h-12 border-b bg-muted" aria-label="Loading food safety news" />}><SiteNews region={region} /></Suspense>
+            <Suspense fallback={null}><SiteNews region={region} /></Suspense>
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
             <SiteFooter />
+            <MobileCheckBar />
           </LocationProvider>
         </ThemeProvider>
       </body>

@@ -49,6 +49,14 @@ const presentation: Record<VerdictResult["verdict"], PresentedVerdict> = {
   },
 };
 
+const matchLevelNames: Record<VerdictResult["matchLevel"], string> = {
+  confirmed: "Exact match",
+  probable: "Strong match",
+  possible: "Partial match",
+  contextual: "Related details only",
+  none: "No match",
+};
+
 function formatDate(value: string | null | undefined): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -145,14 +153,12 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
     <div className="space-y-5">
       <section className={`verdict-reveal overflow-hidden rounded-xl ${view.className}`} aria-labelledby="verdict-heading" aria-live="polite">
         <div className="p-6 sm:p-9">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-bold">Published warning check</p>
-            <Icon className="size-7 shrink-0" aria-hidden />
-          </div>
-          <h1 id="verdict-heading" ref={headingRef} tabIndex={-1} className="mt-8 max-w-3xl text-4xl font-black leading-[.98] tracking-[-0.035em] focus-visible:outline-none sm:text-6xl">{view.headline}</h1>
+          <Icon className="size-8 shrink-0" aria-hidden />
+          <h1 id="verdict-heading" ref={headingRef} tabIndex={-1} className="mt-6 max-w-3xl text-4xl font-black leading-[.98] tracking-[-0.035em] focus-visible:outline-none sm:text-6xl">{view.headline}</h1>
           <p className="mt-5 text-lg font-bold">{view.subheading}</p>
           <p className="mt-2 max-w-xl leading-7 text-foreground/75 dark:text-foreground/80">{view.summary}</p>
-          {result.verdict !== "EAT" ? <Badge variant="outline" className="mt-5 border-current/30 bg-transparent">{result.matchLevel.replaceAll("_", " ")}</Badge> : null}
+          {result.verdict !== "EAT" && result.matchLevel !== "none" ? <Badge variant="outline" className="mt-5 border-current/30 bg-transparent">{matchLevelNames[result.matchLevel]}</Badge> : null}
+          <p className="mt-5 text-sm font-medium">{`Checked against published ${regions.length ? `${regions.join(" + ")} ` : ""}warnings${checkedAt ? ` · ${checkedAt}` : ""}`}</p>
           {onEdit ? <div className="mt-6 border-t border-current/20 pt-4"><Button type="button" size="sm" variant="outline" className="rounded-full border-current/30 bg-transparent hover:bg-background/40" onClick={onEdit}><Pencil aria-hidden />{extraDetails ? "Edit details" : "Add label details"}</Button></div> : null}
         </div>
       </section>
@@ -204,7 +210,7 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Button onClick={() => void shareVerdict()} size="lg" className="rounded-full"><Share2 aria-hidden />Share result</Button>
+        <Button onClick={() => void shareVerdict()} variant="solid" size="lg" className="h-11 rounded-full font-bold"><Share2 aria-hidden />Share result</Button>
         {result.shareToken && result.verdict !== "NO_CLUE" ? <Button onClick={() => void createPublicLink()} size="lg" variant="outline" className="rounded-full"><Link2 aria-hidden />Create public link</Button> : null}
         <Button onClick={onReset} variant="ghost" className="sm:col-span-2"><RotateCcw aria-hidden />Check something else</Button>
       </div>

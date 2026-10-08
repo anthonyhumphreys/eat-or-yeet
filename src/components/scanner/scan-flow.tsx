@@ -1,12 +1,13 @@
 "use client";
 
-import { ScanBarcode } from "lucide-react";
+import { ChevronLeft, ScanBarcode } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocation } from "@/components/location-provider";
 import { regionNames } from "@/lib/location";
 
 import { BarcodeCamera } from "@/components/scanner/barcode-camera";
+import { BarcodeField, barcodeStatus } from "@/components/scanner/barcode-field";
 import { ObservationForm } from "@/components/scanner/observation-form";
 import { VerdictView } from "@/components/verdict/verdict-view";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function ScanFlow() {
   const [observation, setObservation] = useState<ProductObservation>(emptyObservation());
   const [result, setResult] = useState<VerdictResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
   const detailsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -64,42 +66,37 @@ export function ScanFlow() {
     return <VerdictView result={result} onReset={reset} onEdit={() => setStep("details")} />;
   }
 
+  const typedValid = barcodeStatus(typed).state === "valid";
+
   return (
     <div>
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-5 border-b pb-5">
-        <p className="text-sm leading-6 text-muted-foreground">Checking warnings from the <span className="font-semibold text-foreground">{regionNames[region]}</span>. Change location in the top bar.</p>
-        <p className="max-w-sm text-sm leading-6 text-muted-foreground">We compare label details with published food-safety warnings in the selected region.</p>
-      </div>
-
       {step === "barcode" ? (
         <section aria-labelledby="scan-heading">
-          <div className="mb-5 max-w-xl">
-            <h1 id="scan-heading" className="text-4xl font-black tracking-[-0.035em] sm:text-5xl">Scan a barcode</h1>
-            <p className="mt-3 text-base leading-7 text-muted-foreground">Hold the barcode steady inside the frame. You can type it in or add label details if scanning does not work.</p>
-          </div>
+          <h1 id="scan-heading" className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] sm:text-5xl">Scan a barcode</h1>
+          <p className="mb-5 mt-3 max-w-xl text-base leading-7 text-muted-foreground">Checking against current <span className="font-semibold text-foreground">{regionNames[region]}</span> warnings.</p>
           <BarcodeCamera onDetected={onDetected} />
-          <div className="mt-6">
-            <Button type="button" variant="secondary" size="lg" className="min-h-12 rounded-full" onClick={() => { setError(null); setStep("details"); }}>
-              Enter details manually
-            </Button>
-          </div>
+          <form className="mt-8 border-t pt-6" onSubmit={(event) => { event.preventDefault(); if (typedValid) onDetected(barcodeStatus(typed).digits); }}>
+            <BarcodeField id="typed-barcode" label="Or type the number" value={typed} onChange={setTyped} />
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+              <Button type="submit" variant="solid" size="lg" disabled={!typedValid} className="min-h-12 rounded-full px-6 font-bold">Continue</Button>
+              <button type="button" className="inline-flex min-h-11 items-center rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" onClick={() => { setError(null); setObservation(emptyObservation()); setStep("details"); }}>
+                No barcode? Use label details
+              </button>
+            </div>
+          </form>
         </section>
       ) : null}
 
       {step === "details" ? (
         <section aria-labelledby="details-heading">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 id="details-heading" ref={detailsHeadingRef} tabIndex={-1} className="text-4xl font-black tracking-[-0.035em] focus-visible:outline-none sm:text-5xl">{observation.barcode ? "Review the barcode" : "Add label details"}</h1>
-              <p className="mt-3 max-w-xl text-base leading-7 text-muted-foreground">{observation.barcode ? "Add a batch code or date if you can read one, then check published warnings." : "A barcode, product name, brand, or batch code can help find a published warning."}</p>
-            </div>
-            <Button type="button" variant="ghost" onClick={() => { setError(null); setStep("barcode"); }}>Back to scanner</Button>
+          <button type="button" className="-ml-2 mb-3 inline-flex min-h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" onClick={() => { setError(null); setStep("barcode"); }}><ChevronLeft className="size-4" aria-hidden />Back to scanner</button>
+          <div className="mb-5">
+            <h1 id="details-heading" ref={detailsHeadingRef} tabIndex={-1} className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] focus-visible:outline-none sm:text-5xl">{observation.barcode ? "Got it. Anything else?" : "Add label details"}</h1>
+            <p className="mt-3 max-w-xl text-base leading-7 text-muted-foreground">{observation.barcode ? "A batch code or date helps tell your pack apart from affected ones. Skip anything you can’t read." : "A product name, brand or batch code can find a published warning."}</p>
           </div>
           <ObservationForm
             observation={observation}
             onSubmit={(found) => void check(found)}
-            heading="Details from the pack"
-            description="Add the clearest information you can read. Leave anything unknown blank."
             submitLabel="Check published warnings"
           />
         </section>

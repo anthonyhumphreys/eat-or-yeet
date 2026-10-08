@@ -72,6 +72,16 @@ typography:
     fontFamily: "Geist, sans-serif"
     fontSize: "1rem"
     lineHeight: 1.75
+  row-title:
+    fontFamily: "Geist, sans-serif"
+    fontSize: "0.9375rem"
+    fontWeight: 600
+    lineHeight: 1.375
+  meta:
+    fontFamily: "Geist, sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+    lineHeight: "1.25rem"
   label:
     fontFamily: "Geist, sans-serif"
     fontSize: "0.875rem"
@@ -196,7 +206,7 @@ The pale olive-neutral `secondary` supports quiet grouped panels and secondary a
 
 Geist supplies headings, labels, and prose. Geist Mono is reserved for identifiers and codes. Font loading and CSS variables live in `src/app/layout.tsx`.
 
-The homepage headline uses the `headline` role and changes to `headline-wide` at the small breakpoint. Warning titles use `title`; section headings use 1.5rem at weight 900. Supporting text commonly uses 0.875rem with 1.5rem line height. Headings balance wrapping; paragraphs use pretty wrapping.
+Page headlines use 2rem at weight 900 on phones and 3rem from the small breakpoint, with -0.035em tracking. Warning rows use `row-title` (1rem from the small breakpoint) so 40 rows stay scannable; dates and the UK/US switch use `meta` with tabular numerals. Codes and barcodes use Geist Mono with slight positive tracking. Warning titles use `title`; section headings use 1.5rem at weight 900. Supporting text commonly uses 0.875rem with 1.5rem line height. Headings balance wrapping; paragraphs use pretty wrapping.
 
 ## Layout
 
@@ -206,19 +216,21 @@ The header wraps navigation into a second row below 640px. Warning pages use a s
 
 ## Elevation & Depth
 
-The warning interface uses tonal grouping and borders without ambient card shadows. Existing tactile scanner actions have a hard olive shadow and move on hover or press. Their exact shadow and motion values are in the sidecar. Scanner beam and verdict-reveal animations already exist; reduced-motion preferences suppress animations, transitions, and smooth scrolling.
+The warning interface uses tonal grouping and borders without ambient card shadows. Selected segments in the UK/US switch and the check-mode switch lift on a soft 1px-offset shadow; the search field carries a hairline shadow. Hard offset shadows are retired. The mobile check bar uses a translucent background with backdrop blur because content scrolls beneath it. Filter changes on the warning list animate rows through View Transitions (`warning-row`, `warning-enter`, `warning-exit`); typing filters instantly without animation. Scanner beam and verdict-reveal animations already exist; reduced-motion preferences suppress animations, transitions, and smooth scrolling.
 
 ## Shapes
 
-The base radius is 0.75rem. Small, medium, large, and extra-large radii derive from that base as recorded in the frontmatter. Fields use the medium radius; grouped panels use the extra-large radius. Scanner actions and the location selector use fully rounded pills. Badges use the existing 2rem radius.
+The base radius is 0.75rem. Small, medium, large, and extra-large radii derive from that base as recorded in the frontmatter. Fields use the medium radius; grouped panels use the extra-large radius. Scanner actions, filter chips, facet selects, and the UK/US switch use fully rounded pills. Badges use the existing 2rem radius.
 
 ## Components
 
-Library buttons expose primary, outline, secondary, ghost, destructive, and link variants. Their default height is 2rem; prominent application actions override that size. Scanner links use foreground backgrounds, background text, bold labels, pill corners, and a minimum 2.75rem height. The warning-search submit control uses the same colour assignment with medium corners and a 3rem minimum height.
+Library buttons expose primary, solid, outline, secondary, ghost, destructive, and link variants. `solid` (foreground fill, muted when disabled) is the primary action for every check and official-source button, matching the scanner links. Their default height is 2rem; prominent application actions override that size. Scanner links use foreground backgrounds, background text, bold labels, pill corners, and a minimum 2.75rem height. The warning-search submit control uses the same colour assignment with medium corners and a 3rem minimum height.
 
 Search fields have a visible border, background surface, medium corners, 1rem horizontal padding, and 3rem height. Selects have a minimum 2.75rem height. Labels remain visible above fields. Focusable controls use a 3px ring at half the ring colour's opacity; library controls also change their border colour.
 
-Navigation uses compact text links with muted hover backgrounds. The location selector is a native country dropdown inside a bordered pill. It shows country names, uses the shared country registry for options, and keeps the browser's keyboard and mobile selection behaviour. Cards use flat neutral fills and extra-large corners. Warning badges and official-advice containers use the warning palette; warning and news rows use separators and underline links on hover.
+The header is one 4rem row: logo, desktop navigation (Warnings, Type a barcode, Scan food), the UK/US segmented switch, and the theme toggle. Below the medium breakpoint navigation moves to a fixed bottom check bar (Scan food plus a keyboard shortcut to manual entry), hidden on the check routes. The news ticker renders only when it has headlines.
+
+The warning explorer is a client island fed by the server: a 3.5rem search field (press `/` to focus, Esc to clear), hazard chips with live counts (Food poisoning, Allergens, Foreign objects, Spoilage & hygiene, Other hazards), and auto-applying food and shop selects. Filters sync to the URL without a server round trip. Rows show a tabular date column, the title with matched terms marked in olive, a hazard tag (red tint for pathogens, amber for allergens, neutral otherwise; the label always names the hazard), categories and shop. Empty results offer one-tap removal of each active filter. The barcode field confirms the check digit as you type and explains length or check-digit problems before submission. Cards use flat neutral fills and extra-large corners. Warning badges and official-advice containers use the warning palette; warning and news rows use separators and underline links on hover.
 
 The sidecar records representative component snippets from the current implementation. Library defaults and prominent application overrides are distinct sizes, not competing token definitions.
 

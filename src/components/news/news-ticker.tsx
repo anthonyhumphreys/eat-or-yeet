@@ -44,14 +44,16 @@ function Ticker({ feed, region }: { feed: NewsFeed; region: "UK" | "US" }) {
   }, [paused, interacting, reducedMotion, articles.length]);
 
   const controlClass = "grid size-11 place-items-center rounded-full hover:bg-secondary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  // A ticker that only reports its own absence is chrome without content.
+  if (!article) return null;
   return (
     <section aria-label="Latest food safety news" className="border-b bg-muted" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInteracting(false); }}>
       <div className="page-shell flex min-h-12 items-center gap-3 py-2">
         <span className="hidden shrink-0 text-xs font-bold sm:block">Latest news</span>
-        {article ? <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <a className="relative flex min-w-0 items-center gap-2 rounded-sm text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href={article.url} target="_blank" rel="noreferrer"><span className="truncate">{article.title}</span><ExternalLink className="hidden size-3 shrink-0 sm:block" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
           <p className="truncate text-xs text-muted-foreground">{article.publisher} · <time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" })}</time></p>
-        </div> : <p className="text-xs leading-5 text-muted-foreground">{feed.unavailable ? "News temporarily unavailable" : "No recent food safety headlines"}</p>}
+        </div>
         {articles.length > 1 ? <div className="flex shrink-0 items-center">
           <button type="button" className={controlClass} aria-label="Previous headline" onClick={() => setIndex((current) => (current - 1 + articles.length) % articles.length)}><ChevronLeft className="size-4" aria-hidden /></button>
           <button type="button" className={controlClass} aria-label={paused ? "Play headlines" : "Pause headlines"} onClick={() => setPaused((current) => !current)}>{paused ? <Play className="size-3.5" aria-hidden /> : <Pause className="size-3.5" aria-hidden />}</button>

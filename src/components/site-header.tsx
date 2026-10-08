@@ -1,28 +1,26 @@
-import { ScanBarcode, ScanLine, Search } from "lucide-react";
+import { ScanBarcode, ScanLine } from "lucide-react";
 import Link from "next/link";
 
 import { LocationToggle } from "@/components/location-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+const navLink = "inline-flex min-h-10 items-center rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+
 export function SiteHeader() {
   return (
     <header className="border-b bg-background">
-      <div className="page-shell flex flex-wrap items-center justify-between gap-x-2 gap-y-2 py-3 sm:gap-x-4">
-        <Link href="/" className="flex min-h-11 items-center gap-2 font-black tracking-tight" aria-label="Eat or Yeet home">
-          <span className="hidden size-8 place-items-center rounded-full bg-primary text-primary-foreground min-[360px]:grid sm:size-9"><ScanLine className="size-5" aria-hidden /></span>
-          <span>Eat or Yeet</span>
+      <div className="page-shell flex h-16 items-center gap-2 sm:gap-4">
+        <Link href="/" className="mr-auto flex min-h-11 items-center gap-2 rounded-full pr-1 font-black tracking-tight focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eat or Yeet home">
+          <span className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"><ScanLine className="size-[1.125rem]" aria-hidden /></span>
+          <span className="hidden min-[360px]:inline">Eat or Yeet</span>
         </Link>
-        <div className="flex items-center gap-1 sm:gap-2 lg:order-last">
-          <LocationToggle />
-          <ThemeToggle />
-        </div>
-        <nav className="flex w-full items-center justify-between gap-1 border-t pt-2 lg:w-auto lg:border-0 lg:pt-0" aria-label="Main navigation">
-          <div className="flex items-center gap-1">
-            <Link className="inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-3" href="/incidents">Warnings</Link>
-            <Link aria-label="Search warnings" className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-3" href="/#warnings"><Search className="size-4" aria-hidden />Search<span className="hidden sm:inline">warnings</span></Link>
-          </div>
-          <Link className="inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-foreground px-3 text-sm font-bold text-background focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-4" href="/scan"><ScanBarcode className="hidden size-4 sm:block" aria-hidden />Check my food</Link>
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
+          <Link className={navLink} href="/">Warnings</Link>
+          <Link className={navLink} href="/search">Type a barcode</Link>
+          <Link className="ml-1 inline-flex min-h-10 items-center gap-2 rounded-full bg-foreground px-4 text-sm font-bold text-background transition-colors hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/scan"><ScanBarcode className="size-4" aria-hidden />Scan food</Link>
         </nav>
+        <LocationToggle />
+        <ThemeToggle />
       </div>
     </header>
   );

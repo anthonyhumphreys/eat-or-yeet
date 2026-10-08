@@ -1,7 +1,6 @@
 "use client";
 
-import { AlertCircle, CameraOff, Keyboard } from "lucide-react";
-import Link from "next/link";
+import { CameraOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { isValidGtin } from "@/lib/matching/normalise";
@@ -73,8 +72,8 @@ export function BarcodeCamera({ onDetected }: { onDetected: (value: string) => v
       if (cancelled) return;
       const denied = cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "SecurityError");
       setError(denied
-        ? "Camera access is blocked. You can still type the barcode or add label details below."
-        : "Camera scanning is unavailable here. You can still type the barcode or add label details below.");
+        ? "Camera access is blocked. Allow it in your browser settings, or type the number below."
+        : "Camera scanning isn’t available in this browser. Type the number below instead.");
       setCameraState("unavailable");
       stopStream();
     }
@@ -157,27 +156,34 @@ export function BarcodeCamera({ onDetected }: { onDetected: (value: string) => v
     };
   }, []);
 
+  const unavailable = cameraState === "unavailable";
   return (
-    <div>
-      <div className="camera-corners relative aspect-[3/4] overflow-hidden rounded-xl bg-black sm:aspect-video">
-        <video ref={videoRef} muted playsInline className="size-full object-cover" aria-label="Live barcode scanner" />
-        <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/75 px-3 py-1.5 text-xs font-bold text-white">
-          <span className={`size-2 rounded-full ${cameraState === "scanning" ? "bg-primary motion-safe:animate-pulse" : "bg-white/65"}`} />
-          {cameraState === "starting" ? "STARTING CAMERA" : cameraState === "scanning" ? "SCANNING" : cameraState === "detected" ? "BARCODE FOUND" : "CAMERA OFF"}
-        </div>
-        {cameraState === "scanning" ? <div className="scan-beam absolute inset-x-[12%] top-1/2 h-px bg-primary shadow-[0_0_12px_oklch(0.7_0.13_110)]" /> : null}
-        {cameraState === "starting" || cameraState === "unavailable" ? (
-          <div className="absolute inset-0 grid place-items-center p-6 text-center text-white/75">
-            <div>{cameraState === "unavailable" ? <CameraOff className="mx-auto size-10" aria-hidden /> : <div className="mx-auto size-10 animate-pulse rounded-full border-2 border-white/30 border-t-primary" aria-hidden />}
-              <p className="mt-3 text-sm font-medium">{cameraState === "starting" ? "Starting the camera…" : error}</p>
-            </div>
+    <div
+      className={unavailable
+        ? "flex items-start gap-3 rounded-xl border border-dashed bg-muted/50 p-4"
+        : "camera-corners relative mx-auto aspect-[4/5] max-h-[min(62svh,26rem)] w-full overflow-hidden rounded-xl bg-black sm:aspect-[16/10]"}
+    >
+      <video ref={videoRef} muted playsInline className={unavailable ? "hidden" : "size-full object-cover"} aria-label="Live barcode scanner" />
+      {unavailable ? (
+        <>
+          <CameraOff className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <p role="status" className="text-sm leading-6">{error}</p>
+        </>
+      ) : (
+        <>
+          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold tracking-wide text-white">
+            <span className={`size-2 rounded-full ${cameraState === "scanning" ? "bg-primary motion-safe:animate-pulse" : "bg-white/65"}`} />
+            {cameraState === "starting" ? "Starting camera" : cameraState === "scanning" ? "Scanning" : "Barcode found"}
           </div>
-        ) : null}
-      </div>
-      <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-muted-foreground"><AlertCircle className="mt-1 size-4 shrink-0" aria-hidden />Point the camera at the printed barcode. We only check recognised GTIN barcodes.</p>
-      <Link href="/search" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-bold underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-        <Keyboard className="size-4" aria-hidden />Type the barcode instead
-      </Link>
+          {cameraState === "scanning" ? <div className="scan-beam absolute inset-x-[12%] top-1/2 h-px bg-primary shadow-[0_0_12px_oklch(0.7_0.13_110)]" /> : null}
+          {cameraState === "starting" ? (
+            <div className="absolute inset-0 grid place-items-center p-6 text-center text-white/75">
+              <div><div className="mx-auto size-9 rounded-full border-2 border-white/30 border-t-primary motion-safe:animate-spin" aria-hidden /><p className="mt-3 text-sm font-medium">Starting the camera…</p></div>
+            </div>
+          ) : null}
+          {cameraState === "scanning" ? <p className="absolute inset-x-0 bottom-4 text-center text-sm font-medium text-white/85">Line up the bars inside the frame</p> : null}
+        </>
+      )}
     </div>
   );
 }
