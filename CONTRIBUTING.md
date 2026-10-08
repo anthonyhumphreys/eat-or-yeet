@@ -78,6 +78,21 @@ Playwright uses `pnpm dev:web` to start only Next.js unless an existing server i
 - Preserve privacy boundaries: no photo uploads or scan history, and no user-entered label details in public shares.
 - Commit relevant regenerated files in `convex/_generated/` when backend changes require them. Do not edit generated files by hand.
 
+## Adding a country
+
+Adding a country changes coverage, so open an issue first. Name the official food-safety authorities, their public feeds or APIs, terms of use, and what each source covers and leaves out. Only use official sources. A country is added only once every source it needs imports successfully. Until then, the source-health gate returns `NO CLUE` rather than a negative result.
+
+Country codes, such as `UK` and `US`, are currently hard-coded in several places. Search for `"UK" | "US"`, `v.literal("US")` and `z.enum(["UK", "US"])` to find them all. A new country needs:
+
+1. **Region type and validators.** Add the code to `src/lib/location.ts` (`regionNames` drives the location select, URL `region` parameter and cookie), `src/lib/domain/schemas.ts` (`RegionSchema` and the check request schema), `src/lib/domain/types.ts`, `src/lib/incidents/types.ts`, `src/db/queries.ts`, and the Convex validators in `convex/schema.ts`, `convex/shares.ts` and `convex/incidents.ts`. Changing the schema validator affects existing deployments, so call it out in the PR.
+2. **Importers.** Add one `IncidentSource` per official source in `src/lib/incidents/<source>.ts`, following `fsa.ts` or `fsis.ts`. Fetch through `fetchOfficialJson`/`fetchOfficialText`. Validate payloads with Zod, check pagination and reject incomplete responses. Keep `originalSourceData`, set a stable `sourceId`, and resolve warnings only when the source explicitly says so. Write an accurate `scope`, because the app shows it as coverage. Then register the source in the `sources` array in `convex/incidents.ts` and add an authority match to `inferSourceKey`. The daily cron and `refreshAllInternal` pick it up automatically.
+3. **Matching targets.** Split products, barcodes, lot codes and dates into same-group targets so evidence stays within a single product. Add parser tests with sample payloads in `tests/incident-importers.test.ts` and matcher regression cases in `tests/matcher.test.ts`.
+4. **Public links and copy.** Add the authority's official URL handling to `src/lib/incidents/public-source.ts`, then update `officialUrls` and the source label ("Newest first · …") in `src/components/incidents/warning-explorer.tsx`. Also update `listActivePublicIncidents` in `src/db/queries.ts`, which fetches each region by name.
+5. **Locale-specific helpers (optional).** Review the shop names in `src/lib/incidents/browse.ts`, the hazard terms in `src/lib/incidents/hazard.ts`, and the news feeds and region detection in `src/lib/news/rss.ts`. Add local publishers or terms where they help. Dates are currently formatted as `en-GB`.
+6. **Docs and tests.** Update the coverage paragraph in [README.md](README.md). Extend the `e2e/smoke.spec.ts` region helpers, and add `convex/seed.ts` demo rows if they help. Commit the regenerated `convex/_generated/` files.
+
+Check it locally with `pnpm exec convex run incidents:refreshAllInternal`. Confirm that every new source finishes a successful ingestion run in the dashboard and that a check for the new country reports healthy coverage.
+
 ## Pull requests and deployments
 
 Keep PRs focused. Explain the problem, resulting behaviour and checks run. Include screenshots for visual changes and sample source payloads for parsing changes. State anything unverified and call out schema changes or required environment variables.
