@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { emptyObservation, type ProductObservation } from "@/lib/domain/schemas";
 import type { VerdictResult } from "@/lib/domain/types";
+import oreoMetadata from "../tests/fixtures/open-food-facts-oreo.json" with { type: "json" };
 
 const oreoBarcode = "044000061494";
 const oreoGtin = "00044000061494";
@@ -12,7 +13,7 @@ function checkResult(region: "UK" | "US", identified = true): VerdictResult {
   return {
     verdict: identified ? "EAT" : "NO_CLUE",
     matchLevel: "none",
-    observation: { ...emptyObservation(), barcode: oreoGtin, productName: identified ? "Golden Oreo Mini" : null, brand: identified ? "Nabisco" : null },
+    observation: { ...emptyObservation(), barcode: oreoGtin, productName: identified ? oreoMetadata.product.product_name : null, brand: identified ? oreoMetadata.product.brands : null },
     matches: [],
     checkedAt,
     datasetRegions: [region],
@@ -82,13 +83,13 @@ test("Oreo scan checks immediately, releases the rear camera, and offers optiona
   await page.getByRole("button", { name: "Edit details" }).click();
   await expect(page.getByRole("heading", { name: "Add label details" })).toBeFocused();
   await expect(page.getByLabel("Barcode number")).toHaveValue(oreoGtin);
-  await expect(page.getByLabel("Product name")).toHaveValue("Golden Oreo Mini");
-  await expect(page.getByLabel("Brand", { exact: true })).toHaveValue("Nabisco");
+  await expect(page.getByLabel("Product name")).toHaveValue("Oreo");
+  await expect(page.getByLabel("Brand", { exact: true })).toHaveValue("Mondelez International");
   await page.getByLabel("Batch code").fill("TEST-BATCH");
   await page.getByRole("button", { name: "Check published warnings" }).click();
   await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeVisible();
   expect(checks).toHaveLength(2);
-  expect(checks[1]).toMatchObject({ region: "US", observation: { barcode: oreoGtin, productName: "Golden Oreo Mini", batchCode: "TEST-BATCH" } });
+  expect(checks[1]).toMatchObject({ region: "US", observation: { barcode: oreoGtin, productName: "Oreo", batchCode: "TEST-BATCH" } });
 });
 
 test("an unidentified typed barcode offers label entry after the first check", async ({ page, context, baseURL }) => {
@@ -108,10 +109,47 @@ test("an unidentified typed barcode offers label entry after the first check", a
   await expect(page.getByLabel("Product name")).toHaveCount(0);
   await page.getByRole("button", { name: "Add label details" }).click();
   await expect(page.getByLabel("Barcode number")).toHaveValue(oreoGtin);
-  await page.getByLabel("Product name").fill("Golden Oreo Mini");
+  await page.getByLabel("Product name").fill("Oreo");
   await page.getByRole("button", { name: "Check published warnings" }).click();
   await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeVisible();
-  expect(checks[1]).toMatchObject({ region: "US", observation: { barcode: oreoGtin, productName: "Golden Oreo Mini" } });
+  expect(checks[1]).toMatchObject({ region: "US", observation: { barcode: oreoGtin, productName: "Oreo" } });
+});
+
+test("an identified Oreo explains incomplete warning data and retries without a form", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "eat-or-yeet-region", value: "US", url: baseURL! }]);
+  await installOreoCamera(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText: async (value: string) => { (window as typeof window & { testShareText: string }).testShareText = value; },
+    } });
+  });
+  const checks: CheckPayload[] = [];
+  await page.route("**/api/check", async (route) => {
+    checks.push(route.request().postDataJSON() as CheckPayload);
+    const result = checkResult("US");
+    if (checks.length === 1) {
+      result.verdict = "NO_CLUE";
+      result.inconclusiveReason = "incomplete_data";
+      result.datasetStatus = {
+        healthy: false, checkedAt: result.checkedAt, regions: [],
+        sources: [{ id: "fsis", name: "USDA FSIS", region: "US", lastSuccessfulAt: null, status: "failed", scope: "Meat, poultry and egg recalls" }],
+      };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
+  });
+  await page.goto("/scan");
+  await expect(page.getByRole("heading", { name: "Warning data incomplete" })).toBeFocused();
+  await expect(page.getByText("Product: Oreo")).toBeVisible();
+  await expect(page.getByText("Current data from USDA FSIS is unavailable. Try again later.")).toBeVisible();
+  await expect(page.getByText(/Add a barcode, product name/)).toHaveCount(0);
+  await expect(page.getByLabel("Product name")).toHaveCount(0);
+  await page.getByRole("button", { name: "Share result" }).click();
+  expect(await page.evaluate(() => (window as typeof window & { testShareText: string }).testShareText)).toContain("official data was unavailable");
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeVisible();
+  expect(checks).toHaveLength(2);
+  expect(checks[1]).toMatchObject({ region: "US", observation: { barcode: oreoGtin, productName: "Oreo", brand: "Mondelez International" } });
 });
 
 test("a failed automatic check retries the same barcode without opening a form", async ({ page, context, baseURL }) => {

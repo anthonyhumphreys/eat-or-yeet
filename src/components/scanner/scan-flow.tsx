@@ -62,7 +62,7 @@ export function ScanFlow() {
   }
 
   if (step === "result" && result) {
-    return <VerdictView result={result} onReset={reset} onEdit={() => { setObservation(result.observation); setStep("details"); }} />;
+    return <VerdictView result={result} onReset={reset} onEdit={() => { setObservation(result.observation); setStep("details"); }} onRetry={() => void check(result.observation)} />;
   }
 
   const typedValid = barcodeStatus(typed).state === "valid";

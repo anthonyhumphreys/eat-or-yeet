@@ -5,6 +5,14 @@ import type { DatasetStatus, MatchableIncident, MatchableTarget } from "@/lib/do
 import { isValidGtin } from "@/lib/domain/gtin";
 import { normaliseCode, normaliseGtin, normaliseText } from "@/lib/matching/normalise";
 import { matchIncident, runMatcher } from "@/lib/matching/matcher";
+import oreoMetadata from "./fixtures/open-food-facts-oreo.json";
+
+const oreoObservation = {
+  ...emptyObservation(),
+  barcode: "00044000061494",
+  productName: oreoMetadata.product.product_name,
+  brand: oreoMetadata.product.brands,
+};
 
 function target(
   type: MatchableTarget["type"],
@@ -410,6 +418,61 @@ describe("deterministic matcher", () => {
     expect(result.verdict).toBe("EAT");
     expect(result.matchLevel).toBe("none");
     expect(result.datasetStatus).toEqual(healthyStatus);
+  });
+
+  it("accepts the real one-word Oreo lookup name with a barcode and brand", () => {
+    const result = runMatcher(oreoObservation, [incident([target("product", "Unrelated beans", 35)])], ["US"], { ...healthyStatus, regions: ["US"] });
+    expect(result.verdict).toBe("EAT");
+    expect(result.inconclusiveReason).toBeUndefined();
+  });
+
+  it("finds a possible warning from a short lookup name inside a longer product description", () => {
+    const result = runMatcher(oreoObservation, [incident([target("product", "Nabisco Oreo Cookies 6 oz", 35)])], ["US"]);
+    expect(result.verdict).toBe("MAYBE_YEET");
+    expect(result.matchLevel).toBe("possible");
+    expect(result.matches[0].reasons[0].evidence).toBe("Oreo");
+  });
+
+  it("does not confirm a pack from a short lookup name and an associated batch", () => {
+    const result = runMatcher({ ...oreoObservation, batchCode: "OREO7" }, [incident([
+      target("product", "Oreo", 35, { groupId: "pack-a" }),
+      target("batch", "OREO7", 60, { groupId: "pack-a" }),
+    ])], ["US"]);
+    expect(result.verdict).toBe("MAYBE_YEET");
+    expect(result.matchLevel).toBe("possible");
+  });
+
+  it("does not match a short name inside a different word", () => {
+    const result = runMatcher(oreoObservation, [incident([target("product", "Korean noodles", 35)])], ["US"]);
+    expect(result.matches).toHaveLength(0);
+  });
+
+  it.each([
+    { ...oreoObservation, brand: null },
+    { ...oreoObservation, barcode: null },
+    { ...oreoObservation, barcode: "123" },
+  ])("keeps a short name inconclusive without valid barcode and brand evidence", (observation) => {
+    const result = runMatcher(observation, [incident([target("product", "Unrelated beans", 35)])], ["US"]);
+    expect(result.verdict).toBe("NO_CLUE");
+    expect(result.inconclusiveReason).toBe("insufficient_evidence");
+  });
+
+  it("reports incomplete data rather than missing details for identified Oreo when USDA data fails", () => {
+    const result = runMatcher(oreoObservation, [incident([target("product", "Unrelated beans", 35)])], ["US"], {
+      ...healthyStatus,
+      healthy: false,
+      regions: [],
+      sources: [{ id: "fsis", name: "USDA FSIS", region: "US", lastSuccessfulAt: null, status: "failed", scope: "Meat, poultry and egg recalls" }],
+    });
+    expect(result.verdict).toBe("NO_CLUE");
+    expect(result.inconclusiveReason).toBe("incomplete_data");
+    expect(result.observation.productName).toBe("Oreo");
+  });
+
+  it("reports incomplete data for an empty warning dataset even with an identified product", () => {
+    const result = runMatcher(oreoObservation, [], ["US"], { ...healthyStatus, regions: ["US"] });
+    expect(result.verdict).toBe("NO_CLUE");
+    expect(result.inconclusiveReason).toBe("incomplete_data");
   });
 
   it("returns EAT for an unrelated product name instead of a token-overlap false positive", () => {

@@ -64,6 +64,7 @@ export type VerdictResult = {
   checkedAt: string;
   datasetRegions: Region[];
   datasetStatus?: DatasetStatus;
+  inconclusiveReason?: "insufficient_evidence" | "incomplete_data";
   matchCount?: number;
   shareToken?: string;
 };

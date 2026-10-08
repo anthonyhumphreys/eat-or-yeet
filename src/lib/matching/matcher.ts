@@ -142,10 +142,16 @@ function isInformativeProductName(value: string): boolean {
   return productWords.length >= 2 && letters.length >= 8;
 }
 
-function containsProductPhrase(targetValue: string, candidate: string): boolean {
+function hasIdentifiedBarcode(observation: ProductObservation): boolean {
+  return isValidGtin(observation.barcode ?? "") &&
+    words(observation.productName ?? "").join("").replace(/[^a-z]/g, "").length >= 3 &&
+    normaliseText(observation.brand ?? "").length >= 2;
+}
+
+function containsProductPhrase(targetValue: string, candidate: string, identifiedBarcode: boolean): boolean {
   const targetWords = words(targetValue);
   const candidateWords = words(candidate);
-  if (candidateWords.length < 2 || candidateWords.join("").replace(/[^a-z]/g, "").length < 8) return false;
+  if (!identifiedBarcode && !isInformativeProductName(candidate)) return false;
   if (candidateWords.length >= targetWords.length) return false;
 
   return targetWords.some((_, start) =>
@@ -219,28 +225,32 @@ function targetMatchKind(
   target: MatchableTarget,
   candidate: string,
   normalised: string,
+  identifiedBarcode: boolean,
 ): TargetMatchKind | null {
   if (target.matchType === "pattern") return safePatternMatches(target.value, candidate) ? "pattern" : null;
   if (normalised === target.valueNormalized) return "exact";
   if (target.type !== "product") return null;
   if (matchesRetailerPrefixedProduct(target.value, candidate)) return "retailerSuffix";
-  return containsProductPhrase(target.value, candidate) ? "partialProduct" : null;
+  return containsProductPhrase(target.value, candidate, identifiedBarcode) ? "partialProduct" : null;
 }
 
 function targetMatch(target: MatchableTarget, observation: ProductObservation) {
   const candidates = valuesFor(observation, target.type);
+  const identifiedBarcode = hasIdentifiedBarcode(observation);
   for (const candidate of candidates) {
     if (target.type === "gtin" && !isValidGtin(candidate)) continue;
-    if (target.type === "product" && !isInformativeProductName(candidate)) continue;
+    if (target.type === "product" && !isInformativeProductName(candidate) && !identifiedBarcode) continue;
 
     const normalised = normaliseForType(target.type, candidate);
     if (!normalised) continue;
-    const matchKind = targetMatchKind(target, candidate, normalised);
+    const matchKind = targetMatchKind(target, candidate, normalised, identifiedBarcode);
     if (!matchKind) continue;
 
     const dateMatch = dateFits(target, observation);
     if (dateMatch === false) continue;
-    return { candidate, dateMatch, partial: matchKind === "partialProduct" || matchKind === "pattern" };
+    // A short lookup name can describe a range of packs. It must not confirm a batch by itself.
+    const shortProductName = target.type === "product" && !isInformativeProductName(candidate);
+    return { candidate, dateMatch, partial: shortProductName || matchKind === "partialProduct" || matchKind === "pattern" };
   }
   return null;
 }
@@ -416,7 +426,7 @@ export function matchIncident(
 }
 
 export function hasUsefulEvidence(observation: ProductObservation): boolean {
-  return isInformativeProductName(observation.productName ?? "");
+  return isInformativeProductName(observation.productName ?? "") || hasIdentifiedBarcode(observation);
 }
 
 export function verdictFor(level: MatchLevel, usefulEvidence: boolean): Verdict {
@@ -463,18 +473,17 @@ export function runMatcher(
   const canConclude = hasDatasetCoverage(incidents, regions, datasetStatus);
   const usefulEvidence = hasUsefulEvidence(observation) || rankedMatches.length > 0;
   const matches = rankedMatches.slice(0, MAX_RETURNED_MATCHES);
+  const verdict = canConclude ? verdictFor(matchLevel, usefulEvidence) : "NO_CLUE";
 
   return {
-    verdict:
-      !canConclude || datasetStatus?.healthy === false
-        ? "NO_CLUE"
-        : verdictFor(matchLevel, usefulEvidence),
+    verdict,
     matchLevel,
     observation,
     matches,
     checkedAt: new Date().toISOString(),
     datasetRegions: regions,
     ...(datasetStatus ? { datasetStatus } : {}),
+    ...(verdict === "NO_CLUE" ? { inconclusiveReason: canConclude ? "insufficient_evidence" : "incomplete_data" } : {}),
     ...(rankedMatches.length > MAX_RETURNED_MATCHES ? { matchCount: rankedMatches.length } : {}),
   };
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emptyObservation } from "@/lib/domain/schemas";
 import { enrichObservation } from "@/lib/products/enrich";
+import oreoMetadata from "./fixtures/open-food-facts-oreo.json";
 
 const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn() }));
 vi.mock("convex/nextjs", () => ({ fetchQuery: mocks.query, fetchMutation: mocks.mutation }));
@@ -12,19 +13,16 @@ beforeEach(() => {
 });
 
 describe("product lookup evidence", () => {
-  it.each(["044000061494", "00044000061494"])("looks up Oreo barcode %s using the printed UPC", async (barcode) => {
+  it.each(["044000061494", "0044000061494", "00044000061494"])("identifies Oreo barcode %s from its real lookup metadata", async (barcode) => {
     mocks.query.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     mocks.mutation.mockResolvedValue(null);
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      status: 1,
-      product: { product_name: "Golden Oreo Mini", brands: "Nabisco" },
-    })));
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(oreoMetadata)));
     vi.stubGlobal("fetch", fetcher);
 
     const result = await enrichObservation({ ...emptyObservation(), barcode });
 
-    expect(fetcher.mock.calls[0][0]).toContain("/044000061494.json");
-    expect(result).toMatchObject({ barcode: "00044000061494", productName: "Golden Oreo Mini", brand: "Nabisco" });
+    expect(fetcher.mock.calls[0][0]).toContain(`/${barcode === "0044000061494" ? barcode : "044000061494"}.json`);
+    expect(result).toMatchObject({ barcode: "00044000061494", productName: "Oreo", brand: "Mondelez International" });
     expect(mocks.mutation.mock.calls[0][1].gtin).toBe("00044000061494");
   });
 

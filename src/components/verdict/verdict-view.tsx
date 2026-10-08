@@ -72,8 +72,17 @@ function sourceStatusCopy(status: DatasetStatus["sources"][number]["status"]): s
   }
 }
 
-export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult; onReset: () => void; onEdit?: () => void }) {
-  const view = presentation[result.verdict];
+export function VerdictView({ result, onReset, onEdit, onRetry }: { result: VerdictResult; onReset: () => void; onEdit?: () => void; onRetry?: () => void }) {
+  const dataIncomplete = result.verdict === "NO_CLUE" && (result.inconclusiveReason === "incomplete_data" || result.datasetStatus?.healthy === false);
+  const unavailableSources = result.datasetStatus?.sources.filter((source) => source.status !== "healthy").map((source) => source.name) ?? [];
+  const view: PresentedVerdict = dataIncomplete ? {
+    ...presentation.NO_CLUE,
+    headline: "Warning data incomplete",
+    subheading: "We couldn't complete this warning check.",
+    summary: unavailableSources.length
+      ? `Current data from ${unavailableSources.join(", ")} is unavailable. Try again later.`
+      : "Current warning data is unavailable. Try again later.",
+  } : presentation[result.verdict];
   const Icon = view.Icon;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const topMatch = result.matches[0];
@@ -95,7 +104,9 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
       ? "A published warning matched these details."
       : result.verdict === "MAYBE_YEET"
         ? "Some details matched a published warning."
-        : "There were not enough details for a useful comparison.";
+        : dataIncomplete
+          ? "The warning check could not be completed because official data was unavailable."
+          : "There were not enough details for a useful comparison.";
 
   async function copyUrl(url: string, success: string) {
     try {
@@ -157,9 +168,13 @@ export function VerdictView({ result, onReset, onEdit }: { result: VerdictResult
           <h1 id="verdict-heading" ref={headingRef} tabIndex={-1} className="mt-6 max-w-3xl text-4xl font-black leading-[.98] tracking-[-0.035em] focus-visible:outline-none sm:text-6xl">{view.headline}</h1>
           <p className="mt-5 text-lg font-bold">{view.subheading}</p>
           <p className="mt-2 max-w-xl leading-7 text-foreground/75 dark:text-foreground/80">{view.summary}</p>
+          {result.observation.productName ? <p className="mt-5 text-sm leading-6"><span className="font-semibold">Product: {result.observation.productName}</span>{result.observation.brand ? ` · ${result.observation.brand}` : ""}</p> : null}
           {result.verdict !== "EAT" && result.matchLevel !== "none" ? <Badge variant="outline" className="mt-5 border-current/30 bg-transparent">{matchLevelNames[result.matchLevel]}</Badge> : null}
-          <p className="mt-5 text-sm font-medium">{`Checked against published ${regions.length ? `${regions.join(" + ")} ` : ""}warnings${checkedAt ? ` · ${checkedAt}` : ""}`}</p>
-          {onEdit ? <div className="mt-6 border-t border-current/20 pt-4"><Button type="button" size="sm" variant="outline" className="rounded-full border-current/30 bg-transparent hover:bg-background/40" onClick={onEdit}><Pencil aria-hidden />{extraDetails ? "Edit details" : "Add label details"}</Button></div> : null}
+          <p className="mt-5 text-sm font-medium">{`${dataIncomplete ? "Check attempted for" : "Checked against"} published ${regions.length ? `${regions.join(" + ")} ` : ""}warnings${checkedAt ? ` · ${checkedAt}` : ""}`}</p>
+          {onEdit || (dataIncomplete && onRetry) ? <div className="mt-6 flex flex-wrap gap-3 border-t border-current/20 pt-4">
+            {dataIncomplete && onRetry ? <Button type="button" size="sm" variant="solid" className="rounded-full" onClick={onRetry}><RotateCcw aria-hidden />Check again</Button> : null}
+            {onEdit ? <Button type="button" size="sm" variant="outline" className="rounded-full border-current/30 bg-transparent hover:bg-background/40" onClick={onEdit}><Pencil aria-hidden />{extraDetails ? "Edit details" : "Add label details"}</Button> : null}
+          </div> : null}
         </div>
       </section>
 

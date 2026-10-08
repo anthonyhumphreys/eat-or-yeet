@@ -87,6 +87,8 @@ On a first visit, a region prompt suggests UK or US from Vercel's request countr
 
 Once a region is chosen, scanning a barcode runs the check immediately. Product lookup supplies a name and brand when available. Label details are optional from the result, including when the barcode could not be identified or a batch needs checking. A failed request offers a retry without requiring label entry.
 
+A barcode with a product name and brand from lookup can identify a one-word name such as Oreo. Short names can flag possible warnings but cannot confirm a specific pack from a batch alone. An inconclusive check distinguishes missing product evidence from incomplete warning data. Failed, missing or stale source data still blocks a negative result; the result explains the unavailable source and offers another check without asking for label details.
+
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/incidents
 ```
