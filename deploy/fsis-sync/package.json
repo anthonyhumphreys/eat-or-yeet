@@ -1,0 +1,10 @@
+{
+  "name": "eat-or-yeet-fsis-sync",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "convex": "1.46.0",
+    "tsx": "4.23.15",
+    "zod": "4.6.5"
+  }
+}

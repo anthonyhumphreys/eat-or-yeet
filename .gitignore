@@ -40,6 +40,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# NAS sync credentials
+/deploy/fsis-sync/secrets/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

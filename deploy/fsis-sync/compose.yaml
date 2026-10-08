@@ -1,0 +1,42 @@
+services:
+  fsis-sync:
+    build:
+      context: ../..
+      dockerfile: deploy/fsis-sync/Dockerfile
+    image: eat-or-yeet-fsis-sync:local
+    restart: unless-stopped
+    init: true
+    environment:
+      FSIS_DEPLOYMENT: prod:silent-raven-365
+    secrets:
+      - convex_deploy_key
+    volumes:
+      - sync-state:/var/lib/fsis-sync
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    stop_grace_period: 7m
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "scripts/fsis-sync-worker.ts", "--healthcheck"]
+      interval: 5m
+      timeout: 15s
+      start_period: 10m
+      retries: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+secrets:
+  convex_deploy_key:
+    file: ./secrets/convex-deploy.key
+
+volumes:
+  sync-state:

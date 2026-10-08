@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+**/node_modules
+.env*
+**/.env*
+.vercel
+coverage
+playwright-report
+test-results
+deploy/fsis-sync/secrets
+*.pem
+**/*.key
