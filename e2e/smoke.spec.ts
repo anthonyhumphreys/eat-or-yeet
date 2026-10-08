@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const listHeading = (page: Page, region: "UK" | "US") => page.getByRole("heading", { name: new RegExp(`warnings in the ${region}$`) });
-const location = (page: Page) => page.getByRole("group", { name: "Warning location", exact: true });
-const chooseRegion = (page: Page, name: "United Kingdom" | "United States") => location(page).getByRole("button", { name, exact: true }).click();
+const location = (page: Page) => page.getByRole("combobox", { name: "Warning location", exact: true });
+const chooseRegion = (page: Page, label: "United Kingdom" | "United States") => location(page).selectOption({ label });
 const searchBox = (page: Page) => page.getByRole("searchbox", { name: /^Search (UK|US) warnings$/ });
 
 test("home leads with warnings and exposes barcode and manual paths", async ({ page }) => {
@@ -41,7 +41,7 @@ test("location persists across reloads, warning browsing, and manual checks", as
   await page.goto("/incidents");
   await expect(listHeading(page, "US")).toBeVisible();
   await page.reload();
-  await expect(location(page).getByRole("button", { name: "United States" })).toHaveAttribute("aria-pressed", "true");
+  await expect(location(page)).toHaveValue("US");
   await page.goto("/search?mode=details");
   await expect(page.getByText("Checking against current")).toContainText("United States");
   let checkedRegion: string | undefined;
@@ -67,7 +67,7 @@ test("country selection responds while the new warnings are still loading", asyn
   });
   try {
     await chooseRegion(page, "United States");
-    await expect(location(page).getByRole("button", { name: "United States" })).toHaveAttribute("aria-pressed", "true");
+    await expect(location(page)).toHaveValue("US");
     await expect(location(page)).toHaveAttribute("aria-busy", "true");
     await expect(page.getByRole("status").filter({ hasText: "Loading United States warnings" })).toBeAttached();
   } finally {
@@ -103,7 +103,7 @@ test("warning search filters instantly, keeps a shareable URL and preserves the 
   await expect(page).toHaveURL(/region=US.*q=chocolate/);
   await page.getByLabel("Food category", { exact: true }).selectOption("Snacks & sweets");
   await expect(page).toHaveURL(/category=Snacks/);
-  await expect(location(page).getByRole("button", { name: "United States" })).toHaveAttribute("aria-pressed", "true");
+  await expect(location(page)).toHaveValue("US");
   expect(serverRequests).toEqual([]);
   await page.reload();
   await expect(searchBox(page)).toHaveValue("chocolate");

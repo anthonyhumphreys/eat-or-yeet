@@ -1,7 +1,7 @@
 import { ScanBarcode, ScanLine } from "lucide-react";
 import Link from "next/link";
 
-import { LocationToggle } from "@/components/location-toggle";
+import { LocationSelect } from "@/components/location-select";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLink = "inline-flex min-h-10 items-center rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -19,7 +19,7 @@ export function SiteHeader() {
           <Link className={navLink} href="/search">Type a barcode</Link>
           <Link className="ml-1 inline-flex min-h-10 items-center gap-2 rounded-full bg-foreground px-4 text-sm font-bold text-background transition-colors hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/scan"><ScanBarcode className="size-4" aria-hidden />Scan food</Link>
         </nav>
-        <LocationToggle />
+        <LocationSelect />
         <ThemeToggle />
       </div>
     </header>
