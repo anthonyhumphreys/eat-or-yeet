@@ -210,6 +210,7 @@ test("camera denial keeps manual barcode entry available", async ({ page }) => {
     });
   });
   await page.goto("/scan");
+  await page.getByRole("button", { name: "Use UK warnings" }).click();
   await expect(page.getByLabel("Or type the number")).toBeVisible();
   await expect(page.getByRole("button", { name: "No barcode? Use label details" })).toBeVisible();
   await expect(page.getByText("Starting the camera…")).toBeVisible();

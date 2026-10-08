@@ -19,10 +19,11 @@ test("first visit suggests a browser region and remembers the accepted choice", 
   await expect(page.getByRole("heading", { name: /warnings in the US$/ })).toBeVisible();
   expect((await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-region")?.value).toBe("US");
   await page.goto("/scan");
-  await expect(page.getByLabel("Where did you buy this food?")).toHaveValue("US");
+  await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("US");
+  await expect(page.getByLabel("Where did you buy this food?")).toHaveCount(0);
   await page.reload();
   await expect(prompt).toHaveCount(0);
-  await expect(page.getByLabel("Where did you buy this food?")).toHaveValue("US");
+  await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("US");
   expect(errors).toEqual([]);
 });
 
@@ -34,17 +35,21 @@ test("confirming the default UK choice persists even when the browser suggests U
   expect((await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-region")?.value).toBe("UK");
   await page.reload();
   await expect(prompt).toHaveCount(0);
-  await expect(page.getByLabel("Where did you buy this food?")).toHaveValue("UK");
+  await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("UK");
+  await expect(page.getByLabel("Where did you buy this food?")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Use US warnings" })).toHaveCount(0);
 });
 
-test("saved and explicit URL regions are respected and suggestions can change a check", async ({ page, context, baseURL }) => {
+test("saved regions hide repeated questions and the header can change a check", async ({ page, context, baseURL }) => {
   await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
   await page.goto("/search?mode=details&region=UK");
   await expect(page.getByRole("complementary", { name: "Choose your warning region" })).toHaveCount(0);
-  await expect(page.getByLabel("Where did you buy this food?")).toHaveValue("UK");
+  const location = page.getByRole("combobox", { name: "Warning location", exact: true });
+  await expect(location).toHaveValue("UK");
+  await expect(page.getByLabel("Where did you buy this food?")).toHaveCount(0);
   await page.getByLabel("Product name").fill("Golden Oreo Mini");
-  await page.getByRole("button", { name: "Use US warnings" }).click();
-  await expect(page.getByLabel("Where did you buy this food?")).toHaveValue("US");
+  await location.selectOption("US");
+  await expect(location).toHaveValue("US");
   await expect(page.getByLabel("Product name")).toHaveValue("Golden Oreo Mini");
   await expect(page).toHaveURL(/region=US/);
   let checkedRegion: string | undefined;

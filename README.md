@@ -83,7 +83,9 @@ Each source has an ingestion ledger. A missing source, a latest failed/incomplet
 
 Public browsing shows 50 warnings per page and reads only the selected country. Its separate cache revalidates every minute. Publisher news loads independently and caches partial feed failures for a minute, so an unavailable publisher does not hold up the warning list. These caches do not change the source-health checks used for food-check results.
 
-On a first visit, a region prompt suggests UK or US from Vercel's request country hint, or the browser's timezone and regional language setting when that hint is unavailable. The user confirms where they buy food, and the existing region cookie remembers that choice. Suggestions do not change coverage automatically. Scan and manual checks also show a country selector so imported food or travel can use the appropriate warnings.
+On a first visit, a region prompt suggests UK or US from Vercel's request country hint, or the browser's timezone and regional language setting when that hint is unavailable. The user confirms their warning region, and the existing region cookie remembers that choice. Suggestions do not change coverage automatically. The header selector remains available to change the region; check flows do not repeat the question after a choice.
+
+Once a region is chosen, scanning a barcode runs the check immediately. Product lookup supplies a name and brand when available. Label details are optional from the result, including when the barcode could not be identified or a batch needs checking. A failed request offers a retry without requiring label entry.
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/incidents
