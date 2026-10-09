@@ -46,11 +46,15 @@ export type ShoppingWorkerConfig = {
   statusLabels: { found: string; none: string; unable: string };
 };
 
-export type ReviewNotice = { title: string; url?: string; date?: string; reason?: string; relationshipCount?: number; relationshipsShown?: number; relationshipsComplete?: boolean };
+export type ReviewRelationshipEvidence = { association: "source_group" | "ungrouped"; reasons: string[] };
+export type ReviewNotice = { title: string; url?: string; date?: string; reason?: string; relationshipGroups?: ReviewRelationshipEvidence[]; relationshipCount?: number; relationshipsShown?: number; relationshipsComplete?: boolean };
 export type ReviewResponse = {
   status: "related_warnings" | "no_related_warnings" | "unable_to_review" | "skipped";
   notices: ReviewNotice[];
   warnings?: string[];
+  qualification?: string;
+  coverageSummary?: string;
+  noticeTotal?: number;
 };
 export type ShoppingItem = { id: string; name: string; brand?: string; barcode?: string; bought: boolean };
 export interface ReviewClient {
@@ -280,7 +284,7 @@ export class McpReviewClient implements ReviewClient {
     }
     if (!isRecord(payload) || !Array.isArray(payload.items)) throw new WorkerError("Review MCP response schema was not recognized");
     const itemResult = payload.items.find((entry) => isRecord(entry) && entry.id === item.id);
-    return parseReviewResponse(itemResult);
+    return parseReviewResponse(itemResult, { qualification: payload.qualification, coverage: payload.coverage });
   }
   async close(): Promise<void> { await this.#client.close(); }
 }
@@ -572,11 +576,43 @@ function parseRow(page: NotionPage, config: ShoppingWorkerConfig): { item: Shopp
 function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewResponse, fingerprint: string, reviewedAt: number): Record<string, unknown> {
   const labels = config.statusLabels;
   const status = review.status === "related_warnings" ? labels.found : review.status === "no_related_warnings" ? labels.none : labels.unable;
-  const sourceQualifications = review.warnings ?? [];
-  const qualification = sourceQualifications[0]?.slice(0, 500) ?? "";
-  let omitted = sourceQualifications.length > 1 || (sourceQualifications[0]?.length ?? 0) > 500 || review.notices.length > 5;
+  const sourceQualifications = [review.qualification, ...(review.warnings ?? [])].filter((value): value is string => Boolean(value));
+  const qualifications = sourceQualifications.slice(0, 2).map((value) => value.slice(0, 500));
+  const noticeCount = review.noticeTotal;
+  const countQualification = noticeCount !== undefined && noticeCount > review.notices.length
+    ? `Showing ${review.notices.length} of ${noticeCount} warning notices; ${noticeCount - review.notices.length} more omitted.`
+    : "";
+  const prefixes = [...qualifications, review.coverageSummary, countQualification].filter((value): value is string => Boolean(value));
+  const omissionNote = WARNING_OMISSION_NOTE;
+  const compactNoticeLine = (notice: ReviewNotice): string => {
+    const shortenedTitle = notice.title.length > 180;
+    const title = notice.title.slice(0, 180) + (shortenedTitle ? "…" : "");
+    const url = safeHttpsUrl(notice.url);
+    const link = url ? ` ${url}` : notice.url ? " [official notice link omitted]" : " [official notice link unavailable]";
+    return `${title}${link} [notice evidence omitted]`;
+  };
+  const compactFirstNotice = review.notices[0] ? compactNoticeLine(review.notices[0]) : "";
+  const reservedSpace = compactFirstNotice ? compactFirstNotice.length + 1 : 0;
+  const prefixBudget = Math.max(0, MAX_WARNING_OUTPUT_CHARS - reservedSpace - omissionNote.length - 2);
+  const fittedPrefixes: string[] = [];
+  let prefixLength = 0;
+  let omitted = sourceQualifications.length > 2 || sourceQualifications.some((value) => value.length > 500) || review.notices.length > 5 || (noticeCount !== undefined && noticeCount > review.notices.length);
+  for (const part of prefixes) {
+    const separator = fittedPrefixes.length ? 1 : 0;
+    const available = prefixBudget - prefixLength - separator;
+    if (part.length <= available) {
+      fittedPrefixes.push(part);
+      prefixLength += separator + part.length;
+      continue;
+    }
+    omitted = true;
+    const marker = "… [qualification shortened]";
+    if (available > marker.length + 1) fittedPrefixes.push(`${part.slice(0, available - marker.length)}${marker}`);
+    break;
+  }
+  const prefix = fittedPrefixes.join("\n");
   const lines: string[] = [];
-  let remaining = MAX_WARNING_OUTPUT_CHARS - qualification.length - (qualification ? 1 : 0) - WARNING_OMISSION_NOTE.length - 1;
+  let remaining = MAX_WARNING_OUTPUT_CHARS - prefix.length - (prefix ? 1 : 0) - omissionNote.length - 1;
   for (const notice of review.notices.slice(0, 5)) {
     const titleWasShortened = notice.title.length > 180;
     const title = notice.title.slice(0, 180) + (titleWasShortened ? "…" : "");
@@ -584,8 +620,10 @@ function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewRespon
     const date = notice.date ? ` (${notice.date.slice(0, 100)}${dateWasShortened ? "…" : ""})` : "";
     const incomplete = notice.relationshipsComplete === false || (notice.relationshipCount !== undefined && notice.relationshipsShown !== undefined && notice.relationshipCount > notice.relationshipsShown);
     const incompleteText = incomplete ? "Some affected product groups are omitted; inspect the official notice." : "";
-    const evidence = notice.reason ?? "";
-    const detailsOmittedText = "… [earlier notice details omitted]";
+    const evidence = notice.relationshipGroups?.length
+      ? notice.relationshipGroups.map((group, index) => `Group ${index + 1}: ${group.reasons.join(", ")}`).join("; ")
+      : notice.reason ?? "";
+    const detailsOmittedText = "… [additional grouped evidence omitted]";
     const reasonWasShortened = evidence.length > 800;
     const reasonText = `${evidence.slice(0, 800)}${reasonWasShortened ? detailsOmittedText : ""}${incompleteText ? ` ${incompleteText}` : ""}`;
     const reason = reasonText ? ` — ${reasonText}` : "";
@@ -594,7 +632,7 @@ function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewRespon
     const shorteningNote = titleWasShortened || dateWasShortened ? " [notice details shortened]" : "";
     const baseLine = `${title}${date}${reason}${urlNote}${shorteningNote}`;
     const line = `${baseLine}${url ? ` ${url}` : ""}`;
-    const separator = qualification || lines.length ? 1 : 0;
+    const separator = prefix || lines.length ? 1 : 0;
     if (line.length + separator <= remaining) {
       lines.push(line);
       remaining -= line.length + separator;
@@ -602,16 +640,14 @@ function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewRespon
       continue;
     }
     omitted = true;
-    if (url) {
-      const withoutUrl = `${baseLine} [official notice link omitted to preserve notice details]`;
-      if (withoutUrl.length + separator <= remaining) {
-        lines.push(withoutUrl);
-        remaining -= withoutUrl.length + separator;
-      }
+    const compact = compactNoticeLine(notice);
+    if (compact.length + separator <= remaining) {
+      lines.push(compact);
+      remaining -= compact.length + separator;
     }
   }
-  const parts = [...(qualification ? [qualification] : []), ...lines];
-  if (omitted) parts.push(WARNING_OMISSION_NOTE);
+  const parts = [...(prefix ? [prefix] : []), ...lines];
+  if (omitted) parts.push(omissionNote);
   const text = parts.join("\n");
   const p = config.notionProperties;
   return {
@@ -621,19 +657,41 @@ function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewRespon
     [decodePropertyId(p.inputFingerprint.id)]: { rich_text: [{ type: "text", text: { content: fingerprint } }] },
   };
 }
-function parseReviewResponse(value: unknown): ReviewResponse {
-  if (!isRecord(value) || !["related_warnings", "no_related_warnings", "unable_to_review", "skipped"].includes(String(value.status)) || typeof value.qualification !== "string" || !Array.isArray(value.relatedWarnings)) throw new WorkerError("Review MCP response schema was not recognized");
+export function parseReviewResponse(value: unknown, context: { qualification: unknown; coverage: unknown }): ReviewResponse {
+  if (!isRecord(value) || !["related_warnings", "no_related_warnings", "unable_to_review", "skipped"].includes(String(value.status)) || typeof value.qualification !== "string" || typeof context.qualification !== "string" || !Array.isArray(value.relatedWarnings)) throw new WorkerError("Review MCP response schema was not recognized");
+  const coverage = summarizeCoverage(context.coverage);
+  const noticeTotal = typeof value.total === "number" && Number.isSafeInteger(value.total) && value.total >= 0 ? value.total : undefined;
+  if (noticeTotal === undefined) throw new WorkerError("Review MCP response schema was not recognized");
   const status = value.status === "related_warnings" ? "related_warnings" : value.status === "no_related_warnings" ? "no_related_warnings" : value.status === "skipped" ? "skipped" : "unable_to_review";
   const notices = value.relatedWarnings.filter(isRecord).slice(0, 5).flatMap((entry) => {
     if (!isRecord(entry.warning)) return [];
     const warning = entry.warning;
     const relationships = Array.isArray(entry.relationships) ? entry.relationships : [];
-    const reason = relationships.filter(isRecord).flatMap((relationship) => Array.isArray(relationship.reasons) ? relationship.reasons.filter(isRecord).map((part) => typeof part.evidence === "string" ? part.evidence : "") : []).filter(Boolean).slice(0, 4).join(", ");
+    const relationshipGroups = relationships.filter(isRecord).map((relationship) => ({
+      association: relationship.association === "source_group" ? "source_group" as const : "ungrouped" as const,
+      reasons: Array.isArray(relationship.reasons) ? relationship.reasons.filter(isRecord).map((part) => typeof part.evidence === "string" ? part.evidence.slice(0, 200) : "").filter(Boolean) : [],
+    })).filter((relationship) => relationship.reasons.length > 0);
     const relationshipCount = typeof entry.relationshipCount === "number" && Number.isSafeInteger(entry.relationshipCount) ? entry.relationshipCount : undefined;
     const relationshipsComplete = typeof entry.relationshipsComplete === "boolean" ? entry.relationshipsComplete : undefined;
-    return [{ title: typeof warning.title === "string" ? warning.title : "Related published warning", ...(typeof warning.websiteUrl === "string" ? { url: warning.websiteUrl } : {}), ...(typeof warning.publishedAt === "string" ? { date: warning.publishedAt } : {}), ...(reason ? { reason } : {}), ...(relationshipCount !== undefined ? { relationshipCount } : {}), relationshipsShown: relationships.length, ...(relationshipsComplete !== undefined ? { relationshipsComplete } : {}) }];
+    const officialSource = isRecord(warning.officialSource) ? warning.officialSource : undefined;
+    return [{ title: typeof warning.title === "string" ? warning.title : "Related published warning", ...(typeof officialSource?.url === "string" ? { url: officialSource.url } : {}), ...(typeof warning.publishedAt === "string" ? { date: warning.publishedAt } : {}), relationshipGroups, ...(relationshipCount !== undefined ? { relationshipCount } : {}), relationshipsShown: relationshipGroups.length, ...(relationshipsComplete !== undefined ? { relationshipsComplete } : {}) }];
   });
-  return { status, notices, warnings: [value.qualification] };
+  return { status, notices, warnings: [value.qualification], qualification: context.qualification, coverageSummary: coverage, noticeTotal };
+}
+
+function summarizeCoverage(value: unknown): string {
+  if (!isRecord(value) || (value.region !== "UK" && value.region !== "US") || typeof value.healthy !== "boolean" || !Array.isArray(value.sources) || (value.checkedAt !== null && typeof value.checkedAt !== "string")) {
+    throw new WorkerError("Review MCP response schema was not recognized");
+  }
+  const sources = value.sources.filter(isRecord).map((source) => {
+    const name = typeof source.name === "string" ? source.name.replace(/[\r\n]/g, " ").slice(0, 32) : "Source";
+    const state = ["healthy", "stale", "failed", "missing"].includes(String(source.status)) ? String(source.status) : "unknown";
+    return `${name}: ${state}`;
+  });
+  const shownSources = sources.slice(0, 2);
+  const checkedAt = typeof value.checkedAt === "string" && Number.isFinite(Date.parse(value.checkedAt)) ? `; checked ${value.checkedAt.slice(0, 10)}` : "; check time unavailable";
+  const additionalSources = sources.length > shownSources.length ? `; ${sources.length - shownSources.length} more source statuses omitted` : "";
+  return `Source coverage (${value.region}): ${value.healthy ? "current" : "incomplete"}${checkedAt}${shownSources.length ? `; ${shownSources.join(", ")}` : ""}${additionalSources}.`;
 }
 function parseWebhook(value: unknown): { id: string; type: string; pageId: string; updatedProperties: string[] } | undefined {
   if (!isRecord(value) || typeof value.id !== "string" || value.id.length > 80 || !isRecord(value.entity) || value.entity.type !== "page" || typeof value.entity.id !== "string" || value.entity.id.length > 80 || typeof value.type !== "string" || typeof value.timestamp !== "string" || value.timestamp.length > 64 || !Number.isFinite(Date.parse(value.timestamp))) return undefined;

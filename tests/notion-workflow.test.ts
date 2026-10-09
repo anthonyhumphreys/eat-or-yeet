@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { classifyMcpToolResultError, createShoppingWebhookWorker, inputFingerprint, NotionRestClient, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
+import { classifyMcpToolResultError, createShoppingWebhookWorker, inputFingerprint, NotionRestClient, parseReviewResponse, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
 
 const secret = "test-verification-token";
 const databaseId = "database-1";
@@ -344,6 +344,112 @@ describe("Notion shopping webhook worker", () => {
     expect(text).toContain("official notice link omitted");
     expect(text).toContain("Additional notice details omitted");
     expect(text).not.toContain("https://example.gov/notice/");
+    expect(text.length).toBeLessThanOrEqual(1_900);
+  });
+
+  it("maps MCP official links, coverage, total count, and all grouped evidence into Notion output", async () => {
+    const relatedWarnings = Array.from({ length: 5 }, (_, warningIndex) => ({
+      warning: {
+        slug: `milk-recall-${warningIndex + 1}`,
+        title: `Milk recall ${warningIndex + 1}`,
+        websiteUrl: `https://eatoryeet.app/incidents/milk-recall-${warningIndex + 1}`,
+        officialSource: { url: `https://www.gov.uk/food-recall/${warningIndex + 1}`, label: "Food authority" },
+        publishedAt: "2026-10-09T10:00:00.000Z",
+      },
+      relationships: Array.from({ length: warningIndex === 0 ? 6 : 1 }, (_, groupIndex) => ({
+        association: "source_group",
+        reasons: warningIndex === 0 && groupIndex === 0
+          ? Array.from({ length: 10 }, (_, reasonIndex) => ({ type: "product", evidence: `Affected milk detail ${reasonIndex + 1}` }))
+          : [{ type: "product", evidence: `Affected milk group ${groupIndex + 1}` }],
+        packetReviewRequired: false,
+      })),
+      relationshipCount: warningIndex === 0 ? 6 : 1,
+      relationshipsComplete: true,
+    }));
+    const parsed = parseReviewResponse({
+      id: "page-1",
+      status: "related_warnings",
+      qualification: "Related published warnings were found; compare the packet.",
+      relatedWarnings,
+      total: 7,
+      nextAction: { tool: "get_warning", slug: "milk-recall-1" },
+    }, {
+      qualification: "This is a discovery review of published regional warnings; no match does not establish safety.",
+      coverage: {
+        region: "UK",
+        healthy: true,
+        checkedAt: "2026-10-09T10:00:00.000Z",
+        sources: [{ id: "fsa", name: "Food Standards Agency", region: "UK", lastSuccessfulAt: "2026-10-09T09:50:00.000Z", status: "healthy", scope: "food" }],
+      },
+    });
+    const review = new FakeReview();
+    review.result = parsed;
+    const { url, notion } = await setup({ review });
+    await send(url, payload("evt-mcp-output-mapping"));
+    await eventually(() => notion.patches.length === 1);
+
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text.startsWith("This is a discovery review")).toBe(true);
+    expect(text).toContain("Source coverage (UK): current; checked 2026-10-09; Food Standards Agency: healthy.");
+    expect(text).toContain("Showing 5 of 7 warning notices; 2 more omitted.");
+    expect(text).toContain("https://www.gov.uk/food-recall/1");
+    expect(text).not.toContain("https://eatoryeet.app/incidents/");
+    expect(text).toContain("Affected milk group 6");
+    expect(text).toContain("Affected milk detail 10");
+    expect(text.length).toBeLessThanOrEqual(1_900);
+  });
+
+  it("keeps the first notice title and whole official URL when long qualifications leave room only for a compact nudge", async () => {
+    const url = `https://www.gov.uk/food-recall/${"x".repeat(250)}`;
+    const parsed = parseReviewResponse({
+      id: "page-1",
+      status: "related_warnings",
+      qualification: "I".repeat(500),
+      relatedWarnings: [{
+        warning: {
+          slug: "long-evidence-recall",
+          title: "Urgent milk recall: check the package",
+          websiteUrl: "https://eatoryeet.app/incidents/long-evidence-recall",
+          officialSource: { url, label: "Food authority" },
+          publishedAt: "2026-10-09T10:00:00.000Z",
+        },
+        relationships: Array.from({ length: 6 }, (_, groupIndex) => ({
+          association: "source_group",
+          reasons: [{ type: "product", evidence: `Group ${groupIndex + 1}: ${"batch and date evidence ".repeat(9)}` }],
+          packetReviewRequired: true,
+        })),
+        relationshipCount: 6,
+        relationshipsComplete: true,
+      }],
+      total: 1,
+      nextAction: { tool: "get_warning", slug: "long-evidence-recall" },
+    }, {
+      qualification: "G".repeat(500),
+      coverage: {
+        region: "UK",
+        healthy: true,
+        checkedAt: "2026-10-09T10:00:00.000Z",
+        sources: Array.from({ length: 4 }, (_, index) => ({ id: `source-${index}`, name: `Official food safety source ${index} ${"N".repeat(35)}`, region: "UK", lastSuccessfulAt: null, status: "healthy", scope: "food" })),
+      },
+    });
+    const review = new FakeReview();
+    review.result = parsed;
+    const notion = new FakeNotion();
+    const { url: webhook } = await setup({ review, notion });
+    await send(webhook, payload("evt-compact-official-notice"));
+    await eventually(() => notion.patches.length === 1);
+
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text.startsWith("G".repeat(500))).toBe(true);
+    expect(text).toContain("I".repeat(500));
+    expect(text).toContain("Source coverage (UK): current");
+    expect(text).toContain("Urgent milk recall: check the package");
+    expect(text).toContain(url);
+    expect(text).toContain("[notice evidence omitted]");
+    expect(text).toContain("Additional notice details omitted");
+    expect(text).not.toContain("https://eatoryeet.app/incidents/");
     expect(text.length).toBeLessThanOrEqual(1_900);
   });
 
