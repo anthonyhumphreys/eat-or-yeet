@@ -121,6 +121,18 @@ async function eventually(predicate: () => boolean) {
 }
 
 describe("Notion shopping webhook worker", () => {
+  it("does not acknowledge a failed durable enqueue and accepts its redelivery", async () => {
+    const { store, review, url } = await setup();
+    const accept = store.acceptEvent.bind(store);
+    store.acceptEvent = () => { throw new Error("private datastore failure"); };
+    const failed = await send(url, payload("retry-enqueue"));
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain("private datastore");
+    expect(review.items).toHaveLength(0);
+    store.acceptEvent = accept;
+    expect((await send(url, payload("retry-enqueue"))).status).toBe(202);
+    await eventually(() => review.items.length === 1);
+  });
   it("durably deduplicates webhook IDs, claims due pages once, and expires IDs after the retry window", () => {
     const store = new SqliteWorkerStore(":memory:");
     try {

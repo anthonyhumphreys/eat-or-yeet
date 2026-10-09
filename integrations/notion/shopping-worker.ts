@@ -334,8 +334,14 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       respond(response, 200, { accepted: false }); return;
     }
     if (paused) { respond(response, 503, { error: "worker_paused" }); return; }
-    store.cleanup(now() - DEDUPE_MS);
-    const acceptance = store.acceptEvent(event.id, event.pageId, now() + debounceMs, now());
+    let acceptance: ReturnType<WorkerStore["acceptEvent"]>;
+    try {
+      store.cleanup(now() - DEDUPE_MS);
+      acceptance = store.acceptEvent(event.id, event.pageId, now() + debounceMs, now());
+    } catch {
+      respond(response, 503, { error: "queue_unavailable" });
+      return;
+    }
     if (acceptance === "full") { respond(response, 503, { error: "queue_full" }); return; }
     respond(response, 202, { accepted: acceptance === "accepted" });
     if (acceptance === "accepted") kick(debounceMs);
