@@ -22,6 +22,11 @@ describe("recall dates", () => {
     expect(timeAgo(now + day, now)).toBe("Today");
   });
 
+  it("counts London calendar days across midnight and the daylight-saving change", () => {
+    expect(timeAgo(Date.parse("2026-10-08T22:50:00Z"), Date.parse("2026-10-08T23:10:00Z"))).toBe("Yesterday");
+    expect(timeAgo(Date.parse("2026-10-24T22:50:00Z"), Date.parse("2026-10-25T01:10:00Z"))).toBe("Yesterday");
+  });
+
   it("formats dates on the London calendar with stable month names", () => {
     expect(formatRecallDate(Date.parse("2026-09-30T12:00:00Z"))).toBe("30 Sep 2026");
     expect(formatRecallDate(new Date("2026-09-30T23:30:00Z"))).toBe("1 Oct 2026");

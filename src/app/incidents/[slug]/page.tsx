@@ -82,7 +82,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
                 <p className="mt-3 max-w-[65ch] whitespace-pre-line text-sm leading-6 text-muted-foreground">{hazardText}</p>
               </section>
             ) : null}
-            <NewsList heading="In the news" articles={related} unavailable={news.unavailable && !related.length} empty="No news stories about this recall yet." />
+            <NewsList heading="In the news" articles={related} unavailable={news.unavailable} empty="No news stories about this recall yet." />
             <Link href={`/?region=${incident.region}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all active {incident.region} recalls<ArrowRight className="size-4" aria-hidden /></Link>
           </div>
         </div>

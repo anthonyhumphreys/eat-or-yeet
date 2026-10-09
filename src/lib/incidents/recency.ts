@@ -15,9 +15,15 @@ export function formatRecallDate(value: number | Date): string {
   return `${Number(part("day"))} ${monthNames[Number(part("month")) - 1]} ${part("year")}`;
 }
 
+function londonCalendarDay(value: number): number {
+  const parts = dayFormat.formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value;
+  return Date.UTC(Number(part("year")), Number(part("month")) - 1, Number(part("day")));
+}
+
 /** How long ago a recall was last updated, so old recalls read as old at a glance: "6 days ago", "1 yr 8 mo ago". */
 export function timeAgo(then: number, now = Date.now()): string {
-  const days = Math.max(0, Math.floor((now - then) / DAY));
+  const days = Math.max(0, Math.floor((londonCalendarDay(now) - londonCalendarDay(then)) / DAY));
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;

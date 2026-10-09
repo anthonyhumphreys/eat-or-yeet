@@ -51,6 +51,15 @@ test("closing the country question keeps the pre-selected country", async ({ pag
   expect((await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-region")?.value).toBe("US");
 });
 
+test("closing the country question returns focus to the page", async ({ page }) => {
+  await page.goto("/");
+  const prompt = countryDialog(page);
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Show US recalls" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(page.locator("#main-content")).toBeFocused();
+});
+
 test("saved regions hide repeated questions and the header can change a check", async ({ page, context, baseURL }) => {
   await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
   await page.goto("/search?mode=details&region=UK");

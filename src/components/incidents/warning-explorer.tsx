@@ -202,7 +202,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
             const count = view.categoryCounts.get(item) ?? 0;
             return (
               <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
-                {item} <span className="tabular-nums opacity-60">{count.toLocaleString("en-GB")}</span>
+                {item} <span className="tabular-nums">{count.toLocaleString("en-GB")}</span>
               </Chip>
             );
           })}

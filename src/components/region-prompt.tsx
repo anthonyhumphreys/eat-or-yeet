@@ -25,6 +25,10 @@ export function RegionPrompt() {
     <Dialog open={needsRegionChoice} onOpenChange={(open) => { if (!open) setRegion(selected); }}>
       <DialogContent
         showCloseButton={false}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
         className="top-auto bottom-0 max-w-full translate-y-0 gap-5 rounded-b-none p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:top-1/2 sm:bottom-auto sm:max-w-md sm:-translate-y-1/2 sm:rounded-b-xl sm:p-6"
       >
         <DialogHeader>
