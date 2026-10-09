@@ -38,6 +38,48 @@ test("the embedded checker waits for explicit input and sends only a deliberate 
   expect(browserErrors.filter((error) => error.includes("Content Security Policy"))).toEqual([]);
 });
 
+test("request actions stay disabled until the official app bridge handshake completes", async ({ page }) => {
+  const host = await mountMcpApp(page, "light", "delayed");
+  const app = frame(page);
+  const checkButton = app.locator("form.check-form").getByRole("button", { name: "Check product" });
+
+  await expect.poll(() => host.hasPendingInitializeResponse()).toBe(true);
+  await expect(checkButton).toBeDisabled();
+  await app.getByLabel("Product name").fill("Sample milk");
+  await app.getByLabel("Warning region").selectOption("UK");
+  const navigation = app.getByRole("navigation", { name: "Checker views" });
+  await navigation.getByRole("button", { name: "Search warnings" }).click();
+  await expect(app.locator("form.search-form").getByRole("button", { name: "Search warnings" })).toBeDisabled();
+  await navigation.getByRole("button", { name: "Coverage" }).click();
+  await expect(app.getByRole("button", { name: "Check source coverage" })).toBeDisabled();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(0);
+
+  await host.releaseInitialize();
+  await host.waitUntilConnected();
+  await navigation.getByRole("button", { name: "Check product" }).click();
+  await expect(checkButton).toBeEnabled();
+  await checkButton.click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(1);
+  expect((await host.readCalls())[0]).toMatchObject({
+    name: "check_product",
+    arguments: { region: "UK", observation: { productName: "Sample milk" } },
+  });
+});
+
+test("a rejected official app bridge handshake keeps request actions unavailable", async ({ page }) => {
+  const host = await mountMcpApp(page, "light", "failed");
+  const app = frame(page);
+  await expect(app.getByRole("status")).toContainText("Connected checker tools are unavailable");
+  await expect(app.locator("form.check-form").getByRole("button", { name: "Check product" })).toBeDisabled();
+
+  const navigation = app.getByRole("navigation", { name: "Checker views" });
+  await navigation.getByRole("button", { name: "Search warnings" }).click();
+  await expect(app.locator("form.search-form").getByRole("button", { name: "Search warnings" })).toBeDisabled();
+  await navigation.getByRole("button", { name: "Coverage" }).click();
+  await expect(app.getByRole("button", { name: "Check source coverage" })).toBeDisabled();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(0);
+});
+
 test("submitted facts remain separate from enrichment and a failed UK recheck keeps the committed US result", async ({ page }) => {
   const host = await submitHostCheck(page, "US");
   const app = frame(page);
@@ -186,6 +228,23 @@ test("warning search and paged detail return to the committed search without ano
   await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
   await expect(app.getByRole("button", { name: "Load more warnings" })).toBeVisible();
   await expect.poll(async () => (await host.readCalls()).length).toBe(2);
+});
+
+test("direct warning details show the warning region without search context", async ({ page }) => {
+  const host = await mountMcpApp(page);
+  const app = frame(page);
+
+  for (const region of ["UK", "US"] as const) {
+    await host.setTool("get_warning");
+    await host.sendInput({ slug: `${region.toLowerCase()}-sample-recall`, pageSize: 10 });
+    await expect(app.getByRole("status")).toContainText("Checking the official warning records");
+    await host.sendResult(toolResult(warningDetails(region)));
+
+    await expect(app.getByRole("heading", { name: `${region} sample milk recall` })).toBeVisible();
+    await expect(app.locator(".result-meta").filter({ hasText: region === "US" ? "FDA" : "Food Standards Agency" })).toContainText(region);
+    await expect(app.getByText("Showing 1 group on this page · 3 total affected groups.")).toBeVisible();
+  }
+  await expect.poll(async () => (await host.readCalls()).length).toBe(0);
 });
 
 test("a failed detail request restores focus to the selected second warning row", async ({ page }) => {

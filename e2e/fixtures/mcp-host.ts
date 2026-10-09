@@ -10,7 +10,7 @@ async function getBridgeBundle(): Promise<string> {
     stdin: {
       contents: `
         import { AppBridge, PostMessageTransport } from "@modelcontextprotocol/ext-apps/app-bridge";
-        window.mountMcpHost = async (frame, html, theme) => {
+        window.mountMcpHost = async (frame, html, theme, initialization) => {
           const calls = [];
           const modelContexts = [];
           const pendingCalls = [];
@@ -27,20 +27,52 @@ async function getBridgeBundle(): Promise<string> {
             return {};
           };
           const transport = new PostMessageTransport(frame.contentWindow, frame.contentWindow);
+          const send = transport.send.bind(transport);
+          let heldInitializeResponse;
+          transport.send = async (message, options) => {
+            const isInitializeResponse = message?.jsonrpc === "2.0"
+              && message.result?.protocolVersion
+              && message.result?.hostCapabilities;
+            if (isInitializeResponse && initialization === "delayed") {
+              heldInitializeResponse = { message, options };
+              return;
+            }
+            if (isInitializeResponse && initialization === "failed") {
+              return send({
+                jsonrpc: "2.0",
+                id: message.id,
+                error: { code: -32603, message: "The test host rejected initialization." },
+              }, options);
+            }
+            return send(message, options);
+          };
           const connected = bridge.connect(transport);
+          // Keep a rejection handler attached even when a test deliberately
+          // fails initialization and does not await the host-side handshake.
+          connected.catch(() => {});
           // Install the parent listener before loading the view, then finish
           // initialization after the view can answer ui/initialize.
           frame.srcdoc = html;
-          await connected;
           return {
             bridge,
             calls,
             modelContexts,
+            async waitUntilConnected() { await connected; },
+            hasPendingInitializeResponse() { return Boolean(heldInitializeResponse); },
+            async releaseInitialize() {
+              if (!heldInitializeResponse) throw new Error("No initialize response is being held");
+              const held = heldInitializeResponse;
+              heldInitializeResponse = undefined;
+              await send(held.message, held.options);
+            },
             resolveCall(index, result) { pendingCalls[index].resolve(result); },
             sendInput(argumentsValue) { return bridge.sendToolInput({ arguments: argumentsValue }); },
             sendResult(result) { return bridge.sendToolResult(result); },
             sendCancelled(reason = "Test cancellation") { return bridge.sendToolCancelled({ reason }); },
             setTheme(themeValue) { bridge.setHostContext({ theme: themeValue }); },
+            setTool(toolName) {
+              bridge.setHostContext({ toolInfo: { tool: { name: toolName, inputSchema: { type: "object" } } } });
+            },
           };
         };
       `,
@@ -65,6 +97,10 @@ export type McpBrowserHost = {
   sendResult: (result: unknown) => Promise<void>;
   sendCancelled: (reason?: string) => Promise<void>;
   setTheme: (theme: "light" | "dark") => Promise<void>;
+  setTool: (toolName: "check_product" | "search_warnings" | "get_warning" | "get_coverage") => Promise<void>;
+  waitUntilConnected: () => Promise<void>;
+  hasPendingInitializeResponse: () => Promise<boolean>;
+  releaseInitialize: () => Promise<void>;
 };
 
 type BrowserHostObject = {
@@ -75,6 +111,10 @@ type BrowserHostObject = {
   sendResult: (result: unknown) => Promise<void>;
   sendCancelled: (reason?: string) => Promise<void>;
   setTheme: (theme: "light" | "dark") => void;
+  setTool: (toolName: "check_product" | "search_warnings" | "get_warning" | "get_coverage") => void;
+  waitUntilConnected: () => Promise<void>;
+  hasPendingInitializeResponse: () => boolean;
+  releaseInitialize: () => Promise<void>;
 };
 
 class BrowserMcpHost implements McpBrowserHost {
@@ -101,25 +141,43 @@ class BrowserMcpHost implements McpBrowserHost {
   async setTheme(theme: "light" | "dark"): Promise<void> {
     await this.handle.evaluate((host, value) => host.setTheme(value), theme);
   }
+  async setTool(toolName: "check_product" | "search_warnings" | "get_warning" | "get_coverage"): Promise<void> {
+    await this.handle.evaluate((host, value) => host.setTool(value), toolName);
+  }
+  async waitUntilConnected(): Promise<void> {
+    await this.handle.evaluate((host) => host.waitUntilConnected());
+  }
+  async hasPendingInitializeResponse(): Promise<boolean> {
+    return this.handle.evaluate((host) => host.hasPendingInitializeResponse());
+  }
+  async releaseInitialize(): Promise<void> {
+    await this.handle.evaluate((host) => host.releaseInitialize());
+  }
 }
 
-export async function mountMcpApp(page: Page, theme: "light" | "dark" = "light"): Promise<McpBrowserHost> {
+export async function mountMcpApp(
+  page: Page,
+  theme: "light" | "dark" = "light",
+  initialization: "immediate" | "delayed" | "failed" = "immediate",
+): Promise<McpBrowserHost> {
   const [html, script] = await Promise.all([appHtml, getBridgeBundle()]);
   await page.setContent('<iframe title="MCP app test frame" style="display:block;width:100%;height:760px;border:0"></iframe>');
   await page.addScriptTag({ content: script });
-  await page.evaluate(async ({ htmlContent, initialTheme }) => {
+  await page.evaluate(async ({ htmlContent, initialTheme, initialization }) => {
     const frame = document.querySelector("iframe");
     if (!frame) throw new Error("MCP app iframe was not created");
     // The host listener is connected before srcdoc creates the app document.
     const browserWindow = window as unknown as Window & {
       __mcpHost?: BrowserHostObject;
-      mountMcpHost: (target: HTMLIFrameElement, html: string, theme: string) => Promise<BrowserHostObject>;
+      mountMcpHost: (target: HTMLIFrameElement, html: string, theme: string, initialization: string) => Promise<BrowserHostObject>;
     };
-    browserWindow.__mcpHost = await browserWindow.mountMcpHost(frame, htmlContent, initialTheme);
-  }, { htmlContent: html, initialTheme: theme });
+    browserWindow.__mcpHost = await browserWindow.mountMcpHost(frame, htmlContent, initialTheme, initialization);
+  }, { htmlContent: html, initialTheme: theme, initialization });
   await page.frameLocator("iframe").locator("#app").waitFor({ state: "attached" });
   const handle = await page.evaluateHandle(() => (window as unknown as Window & { __mcpHost: BrowserHostObject }).__mcpHost);
-  return new BrowserMcpHost(handle as JSHandle<BrowserHostObject>);
+  const host = new BrowserMcpHost(handle as JSHandle<BrowserHostObject>);
+  if (initialization === "immediate") await host.waitUntilConnected();
+  return host;
 }
 
 export function checkResult(region: "UK" | "US", overrides: Record<string, unknown> = {}) {
