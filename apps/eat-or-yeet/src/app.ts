@@ -132,11 +132,11 @@ function renderRetainedFacts(): HTMLElement | null {
   return container;
 }
 
-function button(label: string, action: () => void, className = "button button-secondary"): HTMLButtonElement {
+function button(label: string, action: () => void, className = "button button-secondary", focusKey = label): HTMLButtonElement {
   const element = node("button", className, label);
   element.type = "button";
   if (label === "Cancel") element.dataset.cancel = "true";
-  element.dataset.focusKey = `button:${label}`;
+  element.dataset.focusKey = `button:${focusKey}`;
   element.addEventListener("click", action);
   return element;
 }
@@ -609,7 +609,7 @@ function renderSearchResult(result: UnknownResult, source: ToolInput): HTMLEleme
       const meta = paragraph(item, `${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · ${formatDateTime(warning.updatedAt)}`, "result-meta");
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
-      if (typeof warning.slug === "string") actions.append(button("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button"));
+      if (typeof warning.slug === "string") actions.append(button("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button", `warning-details:${warning.slug}`));
       if (links.length) actions.append(...links);
       item.append(title, summary, meta, actions);
       list.append(item);
@@ -809,7 +809,7 @@ function renderCompletedResult(): HTMLElement {
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
       const slug = typeof warning.slug === "string" ? warning.slug : null;
-      if (slug) actions.append(button("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button"));
+      if (slug) actions.append(button("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button", `full-warning-details:${slug}`));
       if (links.length) actions.append(...links);
       item.append(actions);
       list.append(item);

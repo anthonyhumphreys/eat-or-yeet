@@ -137,4 +137,14 @@ describe("portable plugin package", () => {
 
     await expect(createPluginArchive(fixture)).rejects.toThrow("Credential-like material found");
   });
+
+  it("scans UTF-8 SVG comments for credentials while accepting the current brand SVG", async () => {
+    await expect(createPluginArchive()).resolves.toBeInstanceOf(Buffer);
+
+    const fixture = await copyPackageFixture();
+    const iconPath = path.join(fixture, "assets/icon.svg");
+    await writeFile(iconPath, '<svg xmlns="http://www.w3.org/2000/svg"><!-- Authorization: Bearer 01234567890123456789012345 --></svg>\n');
+
+    await expect(createPluginArchive(fixture)).rejects.toThrow("Credential-like material found in assets/icon.svg");
+  });
 });

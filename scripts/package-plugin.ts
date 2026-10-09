@@ -166,8 +166,14 @@ async function walkPackage(packageDirectory: string): Promise<PackageFile[]> {
       totalBytes += status.size;
       if (totalBytes > maxPackageBytes) throw new Error("Plugin package exceeds the 10 MiB source limit");
       const bytes = await readFile(absolutePath);
-      if (!relativePath.startsWith("assets/")) {
-        const content = bytes.toString("utf8");
+      const isSvgAsset = relativePath.startsWith("assets/") && relativePath.toLowerCase().endsWith(".svg");
+      if (!relativePath.startsWith("assets/") || isSvgAsset) {
+        let content: string;
+        try {
+          content = isSvgAsset ? new TextDecoder("utf-8", { fatal: true }).decode(bytes) : bytes.toString("utf8");
+        } catch (error) {
+          throw new Error(`SVG asset must be valid UTF-8 text: ${relativePath}`, { cause: error });
+        }
         if (secretPatterns.some((pattern) => pattern.test(content))) {
           throw new Error(`Credential-like material found in ${relativePath}`);
         }

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { checkResult, mountMcpApp, searchResult, toolResult, warningDetails } from "./fixtures/mcp-host";
+import { checkResult, mountMcpApp, searchResult, toolError, toolResult, warningDetails } from "./fixtures/mcp-host";
 
 const frame = (page: import("@playwright/test").Page) => page.frameLocator('iframe[title="MCP app test frame"]');
 
@@ -185,5 +185,33 @@ test("warning search and paged detail return to the committed search without ano
   await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
   await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
   await expect(app.getByRole("button", { name: "Load more warnings" })).toBeVisible();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(2);
+});
+
+test("a failed detail request restores focus to the selected second warning row", async ({ page }) => {
+  const host = await mountMcpApp(page);
+  const app = frame(page);
+  await app.getByRole("navigation", { name: "Checker views" }).getByRole("button", { name: "Search warnings" }).click();
+  await app.getByLabel("Search region").selectOption("UK");
+  await app.getByLabel("Product, brand, or warning title").fill("Sample milk");
+  await app.locator("form.search-form").getByRole("button", { name: "Search warnings" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(1);
+  await host.resolveCall(0, toolResult(searchResult("UK", true)));
+
+  const secondWarning = app.locator(".warning-row").filter({ hasText: "Second Sample milk recall" });
+  const secondDetailButton = secondWarning.getByRole("button", { name: "Warning details" });
+  await expect(secondDetailButton).toBeVisible();
+  await secondDetailButton.click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(2);
+  expect((await host.readCalls())[1]).toMatchObject({
+    name: "get_warning",
+    arguments: { slug: "uk-second-recall", pageSize: 10 },
+  });
+  await host.resolveCall(1, toolError("The second warning details are temporarily unavailable."));
+
+  await expect(app.getByRole("status")).toContainText("second warning details are temporarily unavailable");
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await expect(app.locator(".warning-row")).toHaveCount(2);
+  await expect(secondDetailButton).toBeFocused();
   await expect.poll(async () => (await host.readCalls()).length).toBe(2);
 });
