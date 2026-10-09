@@ -115,6 +115,28 @@ describe("integration rate limits", () => {
     ]);
   });
 
+  it("shares the private hourly network and daily global/connection quotas across tool actions", async () => {
+    vi.mocked(fetchMutation).mockResolvedValueOnce([5, 20, 7] as never);
+    const connection = { id: "notion-shopping", dailyLimit: 40 };
+    const result = await takeIntegrationRateLimits("network:ipv4:198.51.100.17", "mcp_browse", 3, connection);
+
+    expect(result).toEqual([
+      { scope: "network", allowed: true, limit: 300, remaining: 295, resetAt: new Date("2026-03-05T00:00:00.000Z") },
+      { scope: "global", allowed: true, limit: 1_000, remaining: 980, resetAt: new Date("2026-03-05T00:00:00.000Z") },
+      { scope: "connection", allowed: true, limit: 40, remaining: 33, resetAt: new Date("2026-03-05T00:00:00.000Z") },
+    ]);
+    const buckets = (vi.mocked(fetchMutation).mock.calls[0]?.[1] as { buckets: Array<{ key: string; action: string; cost: number; limit: number; windowStartedAt: number }> }).buckets;
+    expect(buckets).toHaveLength(3);
+    expect(buckets.every(({ action, cost }) => action === "mcp_shopping" && cost === 3)).toBe(true);
+    expect(buckets.map(({ limit }) => limit)).toEqual([300, 1_000, 40]);
+    expect(buckets.map(({ windowStartedAt }) => windowStartedAt)).toEqual([
+      Date.parse("2026-03-04T23:00:00.000Z"), Date.parse("2026-03-04T00:00:00.000Z"), Date.parse("2026-03-04T00:00:00.000Z"),
+    ]);
+    expect(buckets[0]?.key).toMatch(/^integration:[0-9a-f]{64}:mcp_shopping:network:\d+$/);
+    expect(buckets[2]?.key).toMatch(/^integration:[0-9a-f]{64}:mcp_shopping:connection:/);
+    expect(buckets[2]?.key).not.toContain(connection.id);
+  });
+
   it("atomically increments backend buckets by each validated cost", async () => {
     const t = createBackend();
     const buckets = [
@@ -131,5 +153,18 @@ describe("integration rate limits", () => {
       secret,
       buckets: [{ ...buckets[0]!, key: "integration:invalid-cost", cost: 1.5 }],
     })).rejects.toThrow("cost must be an integer");
+  });
+
+  it("does not write any private quota bucket when one limit is exceeded", async () => {
+    const t = createBackend();
+    const buckets = [
+      { key: "integration:network:mcp_shopping:network:day", subjectHash: "network-hash", action: "mcp_shopping" as const, windowStartedAt: 1_000, expiresAt: 172_801_000, cost: 2, limit: 10 },
+      { key: "integration:global:mcp_shopping:global:day", subjectHash: "global-hash", action: "mcp_shopping" as const, windowStartedAt: 1_000, expiresAt: 172_801_000, cost: 2, limit: 10 },
+      { key: "integration:connection:mcp_shopping:connection:day", subjectHash: "connection-hash", action: "mcp_shopping" as const, windowStartedAt: 1_000, expiresAt: 172_801_000, cost: 2, limit: 1 },
+    ];
+
+    await expect(t.mutation(api.rateLimits.takeMany, { secret, buckets })).resolves.toEqual([2, 2, 2]);
+    const rows = await t.run((ctx) => ctx.db.query("rateLimits").collect());
+    expect(rows).toHaveLength(0);
   });
 });

@@ -6,10 +6,12 @@ import { getWarningDetails, WarningDetailsCursorError } from "@/lib/incidents/de
 import { searchWarnings, WarningSearchCursorError } from "@/lib/incidents/search";
 import { takeIntegrationRateLimits, type IntegrationRateLimitAction } from "@/lib/security/integration-rate-limit";
 import { CheckProductInputSchema, GetCoverageInputSchema, GetWarningInputSchema, SearchWarningsInputSchema } from "../contracts";
+import { ReviewShoppingInputSchema } from "../shopping/contracts";
+import { reviewShoppingItems } from "../shopping/review";
 import { PublicResponseTooLargeError, serializeCheckResult, serializeCoverage, serializeSearchResult } from "../serialize";
 
-export type ToolName = "check_product" | "search_warnings" | "get_warning" | "get_coverage";
-export type ToolContext = { signal: AbortSignal; network: string };
+export type ToolName = "check_product" | "search_warnings" | "get_warning" | "get_coverage" | "review_shopping_items";
+export type ToolContext = { signal: AbortSignal; network: string; connection?: { id: string; dailyLimit: number } };
 
 export class IntegrationToolError extends Error {
   constructor(
@@ -22,6 +24,7 @@ export class IntegrationToolError extends Error {
 
 const actions: Record<ToolName, IntegrationRateLimitAction> = {
   check_product: "mcp_check", search_warnings: "mcp_browse", get_warning: "mcp_browse", get_coverage: "mcp_coverage",
+  review_shopping_items: "mcp_shopping",
 };
 
 /** Stops waiting on cancellation. Convex requests already sent may still finish. */
@@ -42,7 +45,7 @@ function parsedArguments(name: ToolName, args: unknown) {
     throw new IntegrationToolError("invalid_arguments", "Tool arguments exceed the 16 KiB limit.");
   }
   const schema = { check_product: CheckProductInputSchema, search_warnings: SearchWarningsInputSchema,
-    get_warning: GetWarningInputSchema, get_coverage: GetCoverageInputSchema }[name];
+    get_warning: GetWarningInputSchema, get_coverage: GetCoverageInputSchema, review_shopping_items: ReviewShoppingInputSchema }[name];
   const parsed = schema.safeParse(args);
   if (!parsed.success) throw new IntegrationToolError("invalid_arguments", "Supply the required region and valid product or warning details. Dates must use YYYY-MM-DD.");
   return parsed.data;
@@ -54,8 +57,16 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
   let outcome: string = "unavailable";
   try {
     context.signal.throwIfAborted();
-    parsedArguments(name, args);
-    const limits = await untilAborted(takeIntegrationRateLimits(context.network, actions[name]), context.signal);
+    const parsed = parsedArguments(name, args);
+    if (name === "review_shopping_items" && !context.connection) {
+      throw new IntegrationToolError("unavailable", "This tool requires an authenticated private connection.");
+    }
+    const units = name === "review_shopping_items" ? (parsed as ReturnType<typeof ReviewShoppingInputSchema.parse>).items.length : 1;
+    const action = context.connection ? "mcp_shopping" : actions[name];
+    const quota = context.connection
+      ? takeIntegrationRateLimits(context.network, action, units, context.connection)
+      : takeIntegrationRateLimits(context.network, actions[name]);
+    const limits = await untilAborted(quota, context.signal);
     context.signal.throwIfAborted();
     const exhausted = limits.filter((limit) => !limit.allowed);
     if (exhausted.length) {
@@ -81,6 +92,8 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
           const { region } = GetCoverageInputSchema.parse(args);
           return serializeCoverage(await getRegionCoverage(region), region);
         }
+        case "review_shopping_items":
+          return reviewShoppingItems(ReviewShoppingInputSchema.parse(args), { signal: context.signal });
       }
     })(), context.signal);
     context.signal.throwIfAborted();
@@ -102,4 +115,20 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
       console.info(JSON.stringify({ event: "mcp_operation", operation: name, latencyMs: Date.now() - startedAt, outcome }));
     }
   }
+}
+
+/** Sanitizes errors before they cross an integration protocol boundary. */
+export function redactedIntegrationToolError(error: unknown) {
+  if (error instanceof IntegrationToolError) {
+    return {
+      message: error.message,
+      metadata: {
+        code: error.code,
+        ...(typeof error.retryAfterSeconds === "number" && Number.isFinite(error.retryAfterSeconds)
+          ? { retryAfterSeconds: Math.max(0, error.retryAfterSeconds) } : {}),
+        ...(typeof error.recoverable === "boolean" ? { recoverable: error.recoverable } : {}),
+      },
+    };
+  }
+  return { message: "This request could not be completed. Please try again later.", metadata: { code: "INTERNAL_ERROR", recoverable: true } };
 }
