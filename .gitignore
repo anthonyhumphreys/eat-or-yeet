@@ -22,6 +22,8 @@
 
 # production
 /build
+/dist/
+/public/mcp-app/
 
 # misc
 .DS_Store

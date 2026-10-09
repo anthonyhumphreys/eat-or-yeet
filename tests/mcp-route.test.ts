@@ -4,6 +4,8 @@ vi.mock("@/lib/integrations/mcp/server", () => ({ createMcpTransport: vi.fn() })
 
 import { GET, DELETE, OPTIONS, POST } from "@/app/mcp/route";
 import { createMcpTransport } from "@/lib/integrations/mcp/server";
+import { MCP_APP_RESOURCE_URI } from "@/lib/integrations/mcp/app-resource";
+import { MAX_APP_RESPONSE_BYTES } from "@/lib/integrations/mcp/app-limits";
 
 const fetchHandler = vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: {} }));
 const close = vi.fn(async () => undefined);
@@ -61,6 +63,15 @@ describe("MCP ingress", () => {
     expect((await GET(new Request("https://eatoryeet.app/mcp"))).status).toBe(405);
     expect((await DELETE(new Request("https://eatoryeet.app/mcp", { method: "DELETE" }))).status).toBe(405);
     expect(createMcpTransport).not.toHaveBeenCalled();
+  });
+
+  it("reserves the larger allowance for the exact static resource only", async () => {
+    fetchHandler.mockImplementation(async () => new Response("x".repeat(300 * 1024)));
+    expect((await POST(request({ method: "resources/read", params: { uri: MCP_APP_RESOURCE_URI }, id: 1 }))).status).toBe(200);
+    expect((await POST(request({ method: "resources/read", params: { uri: "ui://other/app.html" }, id: 1 }))).status).toBe(503);
+    expect((await POST(request({ method: "tools/call", params: { name: "get_warning" }, id: 1 }))).status).toBe(503);
+    fetchHandler.mockImplementation(async () => new Response("x".repeat(MAX_APP_RESPONSE_BYTES + 1)));
+    expect((await POST(request({ method: "resources/read", params: { uri: MCP_APP_RESOURCE_URI }, id: 1 }))).status).toBe(503);
   });
 
   it("keeps the concurrency slot until the legacy response body finishes", async () => {

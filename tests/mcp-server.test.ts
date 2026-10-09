@@ -8,6 +8,7 @@ import {
   type ToolExecutor,
 } from "@/lib/integrations/mcp/server";
 import { IntegrationToolError } from "@/lib/integrations/mcp/services";
+import { MCP_APP_RESOURCE_URI } from "@/lib/integrations/mcp/app-resource";
 
 const coverage = {
   contractVersion: "1" as const,
@@ -58,6 +59,19 @@ function executorFor(
 }
 
 describe("MCP server transport", () => {
+  it("serves the inline app with explicit CSP and no data-service calls", async () => {
+    const executor = executorFor();
+    const { client } = await connect(executor);
+    const { tools } = await client.listTools();
+    expect(tools.filter((tool) => (tool._meta?.ui as { resourceUri?: string })?.resourceUri)
+      .map((tool) => tool.name)).toEqual(["check_product", "get_warning"]);
+    const resource = await client.readResource({ uri: MCP_APP_RESOURCE_URI });
+    const content = resource.contents[0];
+    expect(content.mimeType).toBe("text/html;profile=mcp-app");
+    expect(content._meta?.ui).toMatchObject({ domain: "https://eatoryeet.app", csp: { connectDomains: [], resourceDomains: [] } });
+    expect("text" in content && content.text).toContain("Content-Security-Policy");
+    expect(executor).not.toHaveBeenCalled();
+  });
   it("serves modern discovery, strict tool schemas, annotations, and structured output", async () => {
     const executor = executorFor();
     const { client } = await connect(executor);
