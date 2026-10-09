@@ -2,7 +2,7 @@
 
 Updated: 9 October 2026
 
-Status: Implementation proposal. The existing website and cost optimisations are live. No MCP endpoint, plugin package, embedded interface, bot adapter, host connection or marketplace submission has been implemented or tested.
+Status: Implementation in progress. Shared services/contracts are ready for review in [PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2). The default-off MCP endpoint is implemented on the next branch, with local SDK protocol tests. Production MCP access, plugin installation, embedded UI, bot adapters, host connections and marketplace submission are not yet verified. See [MCP pilot controls](./mcp-service.md).
 
 Build one hosted MCP service around the existing deterministic checker. Package it for ChatGPT and Codex, connect compatible agent hosts to the same endpoint, and add messaging bots as small channel adapters when there is demand. Keep the richer ChatGPT experience, Grok and Meta Muse as the proposed coordinated public launch. Broader client compatibility can be tested alongside that work; it does not require a separate backend for each provider.
 
@@ -68,7 +68,7 @@ Keep these as explicit functions and schemas. There is no need for a generic pro
 
 ## Transport and SDK decision
 
-Start the transport spike with `mcp-handler` 2.x, `@modelcontextprotocol/server` 2.x and the existing Zod 4. The adapter documents Web-standard Request/Response support and stateless fallback for 2025-era Streamable HTTP clients. The current MCP protocol uses per-request metadata and `server/discover`; exercise older `initialize` clients too. Do not build process-local session storage, Redis or legacy HTTP+SSE support. [Adapter](https://github.com/vercel-labs/mcp-handler/blob/main/README.md), [protocol compatibility](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/protocol-versions.md).
+Use `@modelcontextprotocol/server` 2.3.1 directly with the existing Zod 4. The installed SDK provides a Web-standard `createMcpHandler`, so an additional adapter adds no benefit here. Local official-client tests cover current per-request metadata/discovery and older `initialize` clients. Do not build process-local session storage, Redis or a legacy HTTP+SSE endpoint. [Web serving](https://ts.sdk.modelcontextprotocol.io/v2/serving/web-standard), [protocol compatibility](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/protocol-versions.md).
 
 There is a current dependency mismatch: OpenAI's TypeScript MCP Extensions package peers on `@modelcontextprotocol/sdk` ^1.29.0 and `@modelcontextprotocol/ext-apps` ^1.7.5, while the current MCP Apps 2.x stack targets SDK v2. Use standard MCP Apps for the first UI. Gate sidebar, native settings, mentions and rich-form extensions on a supported dependency set and real client tests. Do not force peer overrides. If native extensions become essential before compatibility is available, evaluate an isolated v1 endpoint sharing the same services, including its migration cost and support window, before choosing it. [OpenAI peers](https://github.com/openai/mcp-extensions/blob/main/typescript/package.json), [MCP Apps SDK](https://github.com/modelcontextprotocol/ext-apps), [SDK support policy](https://github.com/modelcontextprotocol/typescript-sdk).
 
@@ -215,4 +215,4 @@ Prepare complete primary-platform integrations in parallel and retain the propos
 
 Deploy additive Convex changes before Next.js. Confirm live source health, a known fixture/live warning, Oreo checking, trusted proxy behaviour and measured resource use. Enable the MCP pilot independently from the website. Disable it through `MCP_ENABLED` if its quotas, errors or cost exceed the agreed budget; preserve website checks and source refreshes. Give native bot adapters their own enable switches. Keep the canonical submitted MCP URL stable; OpenAI's current update flow does not support self-serve URL changes. [Submission/update flow](https://developers.openai.com/plugins/deploy/submission).
 
-The next implementation task is PR 1. Its concrete acceptance result is shared-service parity with the current checker, strict public schemas and complete revision-aware search, with no new publicly reachable integration.
+PR 1 is ready for review. PR 2 adds the default-off hosted MCP pilot. The next implementation task is the portable package and MCP Apps result/evidence interface; actual host tests remain a release gate.
