@@ -200,7 +200,7 @@ export function checkResult(region: "UK" | "US", overrides: Record<string, unkno
   };
 }
 
-export function searchResult(region: "UK" | "US" = "UK") {
+export function searchResult(region: "UK" | "US" = "UK", includeSecondWarning = false) {
   const checkedAt = "2026-10-09T12:00:00.000Z";
   const warning = checkResult(region).warnings[0]!.warning;
   return {
@@ -215,7 +215,12 @@ export function searchResult(region: "UK" | "US" = "UK") {
       coveredRegions: [region],
       sources: [{ id: region === "US" ? "fda" : "fsa", name: region === "US" ? "FDA" : "Food Standards Agency", region, lastSuccessfulAt: checkedAt, status: "healthy", scope: "Food alerts" }],
     },
-    warnings: [warning],
+    warnings: includeSecondWarning ? [warning, {
+      ...warning,
+      slug: `${region.toLowerCase()}-second-recall`,
+      title: "Second Sample milk recall",
+      summary: "Review the second affected notice.",
+    }] : [warning],
     total: 2,
     nextCursor: "search-page-two",
     complete: false,
@@ -244,4 +249,8 @@ export function warningDetails(region: "UK" | "US" = "UK") {
 
 export function toolResult(structuredContent: unknown, isError = false) {
   return { content: [{ type: "text" as const, text: isError ? "The test tool failed." : "Completed test result." }], structuredContent, ...(isError ? { isError: true } : {}) };
+}
+
+export function toolError(message = "The test tool failed.") {
+  return { content: [{ type: "text" as const, text: message }], isError: true };
 }

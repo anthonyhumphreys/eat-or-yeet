@@ -132,11 +132,11 @@ function renderRetainedFacts(): HTMLElement | null {
   return container;
 }
 
-function button(label: string, action: () => void, className = "button button-secondary"): HTMLButtonElement {
+function button(label: string, action: () => void, className = "button button-secondary", focusKey = label): HTMLButtonElement {
   const element = node("button", className, label);
   element.type = "button";
   if (label === "Cancel") element.dataset.cancel = "true";
-  element.dataset.focusKey = `button:${label}`;
+  element.dataset.focusKey = `button:${focusKey}`;
   element.addEventListener("click", action);
   return element;
 }
@@ -552,6 +552,7 @@ function renderWarningsView(): HTMLElement {
     void callTool("search_warnings", { region, query: query.value.trim(), pageSize: 10 });
   });
   form.append(queryLabel, searchRegion, submit);
+  if (state.pending && requestOrigin === "app") form.append(button("Cancel", cancelAppRequest));
   const committedSearch = lastSearch?.tool === "search_warnings" ? lastSearch : null;
   const current = committedSearch?.result ?? null;
   section.append(heading, form);
@@ -609,7 +610,7 @@ function renderSearchResult(result: UnknownResult, source: ToolInput): HTMLEleme
       const meta = paragraph(item, `${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · ${formatDateTime(warning.updatedAt)}`, "result-meta");
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
-      if (typeof warning.slug === "string") actions.append(button("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button"));
+      if (typeof warning.slug === "string") actions.append(button("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button", `warning-details:${warning.slug}`));
       if (links.length) actions.append(...links);
       item.append(title, summary, meta, actions);
       list.append(item);
@@ -706,6 +707,7 @@ function renderCoverageView(): HTMLElement {
   }, "button button-primary");
   action.disabled = Boolean(state.pending);
   section.append(heading, regionField, action);
+  if (state.pending && requestOrigin === "app") section.append(button("Cancel", cancelAppRequest));
   const result = state.completed?.tool === "get_coverage" ? state.completed.result : null;
   if (isRecord(result)) section.append(renderCoverageResult(result));
   else if (state.pending?.tool === "get_coverage") section.append(emptyMessage("Waiting for source coverage…"));
@@ -809,7 +811,7 @@ function renderCompletedResult(): HTMLElement {
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
       const slug = typeof warning.slug === "string" ? warning.slug : null;
-      if (slug) actions.append(button("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button"));
+      if (slug) actions.append(button("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button", `full-warning-details:${slug}`));
       if (links.length) actions.append(...links);
       item.append(actions);
       list.append(item);
