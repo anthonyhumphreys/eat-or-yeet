@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getCheckDataset } from "@/db/queries";
 import { CheckRequestSchema } from "@/lib/domain/schemas";
-import { runMatcher } from "@/lib/matching/matcher";
-import { enrichObservation } from "@/lib/products/enrich";
+import { checkProduct } from "@/lib/checks/service";
 import { anonymousSubject, attachAnonymousCookie, trustedNetworkSubject } from "@/lib/security/anonymous";
 import { readBoundedJson } from "@/lib/security/request-body";
 import { takeRateLimits } from "@/lib/security/rate-limit";
@@ -50,11 +48,7 @@ export async function POST(request: NextRequest) {
     const parsed = CheckRequestSchema.safeParse(body.ok ? body.value : null);
     if (!parsed.success) return jsonResponse({ error: "The product details were not valid." }, 400, cookieValue);
 
-    const [observation, dataset] = await Promise.all([
-      enrichObservation(parsed.data.observation),
-      getCheckDataset(parsed.data.region),
-    ]);
-    const result = runMatcher(observation, dataset.incidents, [parsed.data.region], dataset.status);
+    const { result } = await checkProduct(parsed.data.observation, parsed.data.region);
     const response = jsonResponse({ ...result, shareToken: createShareToken(result) ?? undefined }, 200, cookieValue, {
       "X-RateLimit-Remaining": String(Math.min(...limits.map((limit) => limit.remaining))),
     });
