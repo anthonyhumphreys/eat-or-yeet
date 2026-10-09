@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createShoppingWebhookWorker, inputFingerprint, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
+import { createShoppingWebhookWorker, inputFingerprint, NotionRestClient, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
 
 const secret = "test-verification-token";
 const databaseId = "database-1";
@@ -43,6 +43,7 @@ class MemoryStore implements WorkerStore {
   current(pageId: string) { const page = this.pages.get(pageId); return page ? { fingerprint: page.fingerprint, busy: page.busy } : undefined; }
   schedule(pageId: string, dueAt: number, _touchedAt: number) { void _touchedAt; const page = this.pages.get(pageId); this.pages.set(pageId, { due: dueAt, fingerprint: page?.fingerprint ?? "", reviewedAt: page?.reviewedAt, busy: page?.busy ?? false }); }
   markReviewed(pageId: string, fingerprint: string, reviewedAt: number) { const page = this.pages.get(pageId); this.pages.set(pageId, { due: page?.due !== undefined && page.due > reviewedAt ? page.due : Infinity, fingerprint, reviewedAt, busy: false }); }
+  release(pageId: string, _touchedAt: number) { void _touchedAt; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page) page.busy = false; }
   finish(pageId: string, now: number) { if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page) { page.busy = false; if (page.due <= now) page.due = Infinity; } }
   cleanup(before: number) { void before; }
   close() { this.closed = true; }
@@ -134,6 +135,24 @@ describe("Notion shopping webhook worker", () => {
       expect(store.acceptEvent("event-1", "page-1", 90_000_000, 90_000_000)).toBe("duplicate");
       store.cleanup(100_000_000 - 25 * 60 * 60 * 1_000);
       expect(store.acceptEvent("event-1", "page-1", 100_000_000, 100_000_000)).toBe("accepted");
+    } finally { store.close(); }
+  });
+
+  it("rolls back event deduplication when enqueue fails so delivery can recover", () => {
+    class FailingEnqueueStore extends SqliteWorkerStore {
+      failEnqueue = true;
+      override schedule(pageId: string, dueAt: number, touchedAt: number): void {
+        if (this.failEnqueue) throw new Error("injected enqueue failure");
+        super.schedule(pageId, dueAt, touchedAt);
+      }
+    }
+    const store = new FailingEnqueueStore(":memory:");
+    try {
+      expect(() => store.acceptEvent("event-retry-enqueue", "page-retry-enqueue", 2_000, 1_000)).toThrow("injected enqueue failure");
+      expect(store.nextDue()).toBeUndefined();
+      store.failEnqueue = false;
+      expect(store.acceptEvent("event-retry-enqueue", "page-retry-enqueue", 2_000, 1_000)).toBe("accepted");
+      expect(store.duePages(2_000, 1)).toEqual([{ pageId: "page-retry-enqueue" }]);
     } finally { store.close(); }
   });
 
@@ -270,13 +289,28 @@ describe("Notion shopping webhook worker", () => {
       if (signal.aborted) { reject(signal.reason); return; }
       signal.addEventListener("abort", () => reject(signal.reason), { once: true });
     });
-    const { url, worker, store } = await setup({ now: () => currentTime, notion });
-    await send(url, payload("evt-stop-in-flight"));
-    currentTime += 4_000;
-    await pageStarted;
-    await worker.stop();
-    expect(store.closed).toBe(true);
-    expect(store.current("page-1")?.busy).toBe(false);
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-stop-"));
+    const path = join(directory, "state.sqlite");
+    const store = new SqliteWorkerStore(path);
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer: new FakeReview(), store, now: () => currentTime, delay: async () => undefined, debounceMs: 10 });
+    workers.push(worker);
+    let restarted: SqliteWorkerStore | undefined;
+    try {
+      await worker.start();
+      const address = worker.server.address();
+      if (!address || typeof address === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload("evt-stop-in-flight"));
+      currentTime += 4_000;
+      await pageStarted;
+      await worker.stop();
+      restarted = new SqliteWorkerStore(path);
+      expect(restarted.nextDue()).toBeLessThanOrEqual(currentTime);
+      expect(restarted.duePages(currentTime, 1)).toEqual([{ pageId: "page-1" }]);
+    } finally {
+      await worker.stop();
+      restarted?.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("drops page events outside the selected database without pausing this worker", async () => {
@@ -319,4 +353,50 @@ describe("Notion shopping webhook worker", () => {
     expect(notion.patches).toHaveLength(1);
     expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: "page-1", name: "Changed during rate limit", bought: false }, false) } }] });
   });
+
+  for (const [scenario, mutate] of [
+    ["edited", (page: TestPage) => { page.properties.Item.title = [{ plain_text: "New after write failure" }]; }],
+    ["bought", (page: TestPage) => { page.properties.Bought.checkbox = true; }],
+    ["moved outside the selected data source", (page: TestPage) => { page.parent.data_source_id = "another-source"; }],
+  ] as const) {
+    it(`re-preflights through the real Notion client after a PATCH 503 when the row is ${scenario}`, async () => {
+      const page = makePage();
+      const schema = await new FakeNotion().getDataSource(sourceId);
+      let pageReads = 0, patchAttempts = 0;
+      const successfulWrites: Array<Record<string, unknown>> = [];
+      const notion = new NotionRestClient("notion-token", async (input, init) => {
+        const path = new URL(String(input)).pathname;
+        if (path === `/v1/data_sources/${sourceId}`) return Response.json(schema);
+        if (path === `/v1/pages/${page.id}` && (init?.method ?? "GET") === "GET") {
+          pageReads += 1;
+          return Response.json(page);
+        }
+        if (path === `/v1/pages/${page.id}` && init?.method === "PATCH") {
+          patchAttempts += 1;
+          if (patchAttempts === 1) return new Response("temporary failure", { status: 503, headers: { "retry-after": "0" } });
+          successfulWrites.push(JSON.parse(String(init.body)).properties as Record<string, unknown>);
+          return new Response(null, { status: 200 });
+        }
+        return new Response(null, { status: 404 });
+      });
+      const review = new FakeReview();
+      const store = new MemoryStore();
+      const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer: review, store, delay: async () => { mutate(page); }, debounceMs: 10 });
+      workers.push(worker);
+      await worker.start();
+      const address = worker.server.address();
+      if (!address || typeof address === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload(`evt-real-client-${scenario}`));
+      await eventually(() => scenario === "edited" ? successfulWrites.length === 1 : pageReads >= 3 && store.current(page.id)?.busy === false);
+      expect(patchAttempts).toBe(scenario === "edited" ? 2 : 1);
+      if (scenario === "edited") {
+        await eventually(() => review.items.length === 2);
+        expect(review.items.map((item) => item.name)).toEqual(["Milk", "New after write failure"]);
+        expect(successfulWrites[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: page.id, name: "New after write failure", bought: false }, false) } }] });
+      } else {
+        expect(successfulWrites).toHaveLength(0);
+        expect(review.items).toHaveLength(1);
+      }
+    });
+  }
 });

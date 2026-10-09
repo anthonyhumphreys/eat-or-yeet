@@ -62,6 +62,7 @@ export interface WorkerStore {
   current(pageId: string): { fingerprint: string; busy: boolean } | undefined;
   schedule(pageId: string, dueAt: number, touchedAt: number): void;
   markReviewed(pageId: string, fingerprint: string, reviewedAt: number): void;
+  release(pageId: string, touchedAt: number): void;
   finish(pageId: string, now: number): void;
   cleanup(before: number): void;
   close(): void;
@@ -79,15 +80,31 @@ export class SqliteWorkerStore implements WorkerStore {
   }
   acceptEvent(eventId: string, pageId: string, dueAt: number, now: number): "accepted" | "duplicate" | "full" {
     const eventHash = createHash("sha256").update(eventId).digest("hex");
-    if (this.#db.prepare("SELECT 1 FROM seen_events WHERE id=?").get(eventHash)) return "duplicate";
-    const pending = this.#db.prepare("SELECT pending FROM pending_pages WHERE page_id=?").get(pageId) as { pending: number } | undefined;
-    const eventCount = this.#db.prepare("SELECT COUNT(*) AS count FROM seen_events").get() as { count: number };
-    const pageCount = this.#db.prepare("SELECT COUNT(*) AS count FROM pending_pages WHERE pending=1").get() as { count: number };
-    if (eventCount.count >= MAX_DEDUPE_ROWS || (!pending?.pending && pageCount.count >= MAX_PENDING_PAGES)) return "full";
-    const result = this.#db.prepare("INSERT OR IGNORE INTO seen_events(id,page_id,seen_at) VALUES(?,?,?)").run(eventHash, pageId, now);
-    if (result.changes === 0) return "duplicate";
-    this.schedule(pageId, dueAt, now);
-    return "accepted";
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      if (this.#db.prepare("SELECT 1 FROM seen_events WHERE id=?").get(eventHash)) {
+        this.#db.exec("ROLLBACK");
+        return "duplicate";
+      }
+      const pending = this.#db.prepare("SELECT pending FROM pending_pages WHERE page_id=?").get(pageId) as { pending: number } | undefined;
+      const eventCount = this.#db.prepare("SELECT COUNT(*) AS count FROM seen_events").get() as { count: number };
+      const pageCount = this.#db.prepare("SELECT COUNT(*) AS count FROM pending_pages WHERE pending=1").get() as { count: number };
+      if (eventCount.count >= MAX_DEDUPE_ROWS || (!pending?.pending && pageCount.count >= MAX_PENDING_PAGES)) {
+        this.#db.exec("ROLLBACK");
+        return "full";
+      }
+      const result = this.#db.prepare("INSERT OR IGNORE INTO seen_events(id,page_id,seen_at) VALUES(?,?,?)").run(eventHash, pageId, now);
+      if (result.changes === 0) {
+        this.#db.exec("ROLLBACK");
+        return "duplicate";
+      }
+      this.schedule(pageId, dueAt, now);
+      this.#db.exec("COMMIT");
+      return "accepted";
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
   duePages(now: number, limit: number): Array<{ pageId: string }> {
     const db = this.#db;
@@ -114,6 +131,7 @@ export class SqliteWorkerStore implements WorkerStore {
   markReviewed(pageId: string, fingerprint: string, reviewedAt: number): void {
     this.#db.prepare("UPDATE pending_pages SET last_fingerprint=?,last_reviewed_at=?,busy_until=0,pending=CASE WHEN due_at <= ? THEN 0 ELSE 1 END,touched_at=? WHERE page_id=?").run(fingerprint, reviewedAt, reviewedAt, reviewedAt, pageId);
   }
+  release(pageId: string, touchedAt: number): void { this.#db.prepare("UPDATE pending_pages SET busy_until=0,pending=1,touched_at=? WHERE page_id=?").run(touchedAt, pageId); }
   finish(pageId: string, now: number): void { this.#db.prepare("UPDATE pending_pages SET busy_until=0,pending=CASE WHEN due_at <= ? THEN 0 ELSE 1 END,touched_at=? WHERE page_id=?").run(now, now, pageId); }
   cleanup(before: number): void {
     this.#db.prepare("DELETE FROM seen_events WHERE seen_at < ?").run(before);
@@ -174,6 +192,7 @@ export class NotionRestClient implements NotionClient {
           headers: { Authorization: `Bearer ${this.#token}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json", ...init.headers },
         });
       } catch (error) {
+        if (method === "PATCH") throw new WorkerError("Notion write transport failed", "temporary");
         if (attempt === MAX_RETRIES || signal.aborted) throw error;
         await sleep(retryDelay(undefined, attempt), signal);
         continue;
@@ -185,6 +204,11 @@ export class NotionRestClient implements NotionClient {
         throw new WorkerError("Notion write was rate limited", "temporary", retryAt);
       }
       const retryable = response.status === 429 || response.status === 529 || [500, 502, 503, 504].includes(response.status);
+      if (method === "PATCH" && retryable) {
+        const retryAfterMs = retryAfterMilliseconds(response.headers.get("retry-after"));
+        await response.body?.cancel();
+        throw new WorkerError("Notion write requires a fresh preflight before retry", "temporary", retryAfterMs);
+      }
       if (!retryable || attempt === MAX_RETRIES) {
         if (response.status === 401 || response.status === 403) throw new WorkerError("Notion access was revoked or denied", "revoked");
         if (response.status === 404) throw new WorkerError("Notion resource is unavailable", path.startsWith("/pages/") ? "out_of_scope" : "missing_property");
@@ -381,6 +405,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
         }
       }
     } catch (error) {
+      if (controller.signal.aborted) { store.release(pageId, now()); return; }
       if (error instanceof WorkerError && error.code === "out_of_scope") { store.finish(pageId, now()); return; }
       if (error instanceof WorkerError && (error.code === "revoked" || error.code === "missing_property" || error.code === "invalid_config")) {
         paused = true;
