@@ -81,6 +81,47 @@ describe("complete warning search", () => {
     expect(calls("getDatasetStatus")).toHaveLength(1);
   });
 
+  it("stops paging after cancellation arrives while a page is in flight", async () => {
+    const controller = new AbortController();
+    let pageReads = 0;
+    query.mockImplementation(async (ref) => {
+      const name = getFunctionName(ref);
+      if (name === "incidents:getDatasetStatus") return { ...status, version: revision };
+      if (name === "incidents:listActivePage") {
+        pageReads += 1;
+        controller.abort();
+        return { page: rows.slice(0, 20), isDone: false, continueCursor: "page-two" };
+      }
+      throw new Error(`Unexpected query ${name}`);
+    });
+    const { searchWarnings } = await import("@/lib/incidents/search");
+
+    await expect(searchWarnings({ region: "UK" }, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect(pageReads).toBe(1);
+  });
+
+  it("fails with a qualified no-partial-results error at the complete snapshot cap", async () => {
+    const capPage = Array.from({ length: 100 }, (_, index) => makeRow(index));
+    let pageReads = 0;
+    query.mockImplementation(async (ref) => {
+      const name = getFunctionName(ref);
+      if (name === "incidents:getDatasetStatus") return { ...status, version: revision };
+      if (name === "incidents:listActivePage") {
+        pageReads += 1;
+        return { page: capPage, isDone: false, continueCursor: `page-${pageReads}` };
+      }
+      throw new Error(`Unexpected query ${name}`);
+    });
+    const { searchWarnings } = await import("@/lib/incidents/search");
+    const { WarningSnapshotLimitError } = await import("@/db/queries");
+
+    const search = searchWarnings({ region: "UK" });
+    await expect(search).rejects.toBeInstanceOf(WarningSnapshotLimitError);
+    await expect(search).rejects.toMatchObject({ message: expect.stringMatching(/complete warning dataset.*No partial results/i) });
+    expect(pageReads).toBe(50);
+    expect(calls("getDatasetStatus")).toHaveLength(1);
+  });
+
   it("filters the complete regional snapshot before slicing and continues past page one", async () => {
     const { searchWarnings } = await import("@/lib/incidents/search");
     const first = await searchWarnings({ region: "UK", pageSize: 20 });

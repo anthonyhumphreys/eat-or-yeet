@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getRegionCoverage } from "@/db/queries";
+import { getRegionCoverage, WarningSnapshotLimitError } from "@/db/queries";
 import { checkProduct } from "@/lib/checks/service";
 import { getWarningDetails, WarningDetailsCursorError } from "@/lib/incidents/details";
 import { searchWarnings, WarningSearchCursorError } from "@/lib/incidents/search";
@@ -13,7 +13,7 @@ export type ToolContext = { signal: AbortSignal; network: string };
 
 export class IntegrationToolError extends Error {
   constructor(
-    readonly code: "invalid_arguments" | "quota_exceeded" | "unavailable" | "restart_pagination" | "response_too_large" | "interrupted" | "not_found",
+    readonly code: "invalid_arguments" | "quota_exceeded" | "unavailable" | "restart_pagination" | "response_too_large" | "snapshot_limit" | "interrupted" | "not_found",
     message: string,
     readonly retryAfterSeconds?: number,
     readonly recoverable = false,
@@ -70,7 +70,7 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
         }
         case "search_warnings": {
           const input = SearchWarningsInputSchema.parse(args);
-          return serializeSearchResult(await searchWarnings(input), input.region);
+          return serializeSearchResult(await searchWarnings(input, { signal: context.signal }), input.region);
         }
         case "get_warning": {
           const result = await getWarningDetails(GetWarningInputSchema.parse(args));
@@ -92,6 +92,8 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
     else if (error instanceof IntegrationToolError) publicError = error;
     else if (error instanceof WarningSearchCursorError || error instanceof WarningDetailsCursorError) {
       publicError = new IntegrationToolError("restart_pagination", "The warning page expired or changed. Restart without a cursor.", undefined, true);
+    } else if (error instanceof WarningSnapshotLimitError) {
+      publicError = new IntegrationToolError("snapshot_limit", "A complete warning search exceeds the supported dataset limit. No partial results were returned.", undefined, true);
     } else if (error instanceof PublicResponseTooLargeError) {
       publicError = new IntegrationToolError("response_too_large", "The complete identifying details exceed the response limit. Open the warning on the website.");
     } else publicError = new IntegrationToolError("unavailable", "The warning service is unavailable. No completed check was returned.", undefined, true);
