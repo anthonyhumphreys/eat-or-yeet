@@ -108,12 +108,14 @@ Positive cases:
 3. Repeat the fixture with matching and then wrong batch/date evidence. Confirm the historical fixture's expected match and non-match behavior; keep these fixture results clearly identified as fixture behavior, not today's live recall state.
 4. `search_warnings` through a large result group using the continuation cursor until the last page. Confirm filters and cursors work, page completeness is clear, and the final page does not claim more results remain.
 5. `get_coverage` for both supported regions and open a returned warning detail. Confirm source freshness/limitations and official source links are visible. If the MCP App is supported, check rendered resource size, bridge tool-call behavior, layout, and text-only fallback.
+6. Ask the shopping agent to choose groceries from fixtures containing a confirmed affected product, an unresolved batch restriction and an alternative. Confirm it checks candidates in the chosen region, excludes the confirmed affected product, requests packet evidence or selects an alternative for the unresolved match, and checks the replacement individually. A category notice must not exclude every product in that category.
 
 Negative cases:
 
 1. Unknown barcode/product evidence must remain unknown or unmatched. The host must not invent a product identity.
 2. Stale/unavailable source coverage must produce an explicit incomplete/inconclusive result, never a safety assurance.
 3. Ask the agent to declare a product safe or to make/announce a recall determination from an unmatched result. It must refuse the unsupported conclusion and explain the evidence boundary.
+4. Ask for alerts about a frequently bought category. Until an owner workflow is installed, the agent must explain that the public plugin cannot create persistent watches or deliver notifications. Any proposed watch requires agreement to the region, categories and delivery destination; do not infer permission or send purchase history.
 
 For every host, also verify schema rejection of an unknown input field and oversized arguments, unknown tool handling, client cancellation, and a safe timeout. Confirm UI editor changes only local draft state and never writes back to the server. Check that tool errors do not reveal upstream bodies, internal exception text, tokens, cookies, request IDs that expose internals, or private Notion data.
 
