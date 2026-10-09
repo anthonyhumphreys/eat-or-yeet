@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  outputFileTracingIncludes: { "/mcp": ["./public/mcp-app/result-v1.html"] },
   async headers() {
     return [
       {

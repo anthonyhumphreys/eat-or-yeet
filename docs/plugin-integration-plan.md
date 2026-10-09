@@ -2,7 +2,7 @@
 
 Updated: 9 October 2026
 
-Status: Implementation in progress. Shared services/contracts are ready for review in [PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2). The default-off MCP endpoint is implemented on the next branch, with local SDK protocol tests. Production MCP access, plugin installation, embedded UI, bot adapters, host connections and marketplace submission are not yet verified. See [MCP pilot controls](./mcp-service.md).
+Status: Shared services/contracts ([PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2)), the bounded default-off MCP pilot ([PR #3](https://github.com/anthonyhumphreys/eat-or-yeet/pull/3)) and the portable plugin/MCP Apps editor ([PR #4](https://github.com/anthonyhumphreys/eat-or-yeet/pull/4)) are implemented and locally verified. Notion shopping review and the owner-hosted worker are implemented on their feature branch. Real host installations, the owner Notion pilot, production enablement and marketplace submission remain release gates. See [MCP pilot controls](./mcp-service.md) and [embedded app verification](./mcp-app.md).
 
 Build one hosted MCP service around the existing deterministic checker. Package it for ChatGPT and Codex, connect compatible agent hosts to the same endpoint, and add messaging bots as small channel adapters when there is demand. Keep the richer ChatGPT experience, Grok and Meta Muse as the proposed coordinated public launch. Broader client compatibility can be tested alongside that work; it does not require a separate backend for each provider.
 
@@ -18,7 +18,7 @@ Keep all product-check decisions in the existing matcher. Hosts can put facts ex
 
 The public result is qualified. Map internal `EAT` to "No matching warning found", never "safe to eat". Preserve possible matches, unresolved restrictions and `NO_CLUE`. A source-health failure must prevent reassurance. An infrastructure failure that prevents a check returns an error, not an invented verdict. Identity, batch and date restrictions must remain within the same affected product group.
 
-Accounts, check history, general notifications, saved products, new countries and continuous recall monitoring are outside the core release. The Notion follow-up adds an opt-in review when someone adds or changes a shopping-list item. It does not promise to watch that item for future recalls. The host may retain conversation/tool data under its own policies; explain that boundary in the privacy page. Store no entered label details in logs, public shares or analytics.
+Accounts, check history, general notifications, saved products and new countries are outside the core release. The Notion follow-up adds an opt-in review when someone adds or changes a shopping-list item. A separate category-watch addition will support agreed recurring interests and new-recall alerts for shopping agents. Until that addition is installed, an item review does not promise future monitoring. The host may retain conversation/tool data under its own policies; explain that boundary in the privacy page. Store no entered label details in logs, public shares or analytics.
 
 ## Host routes and distribution
 
@@ -47,6 +47,9 @@ flowchart TD
     MCP --> Services
     ChatUI[MCP Apps interface] --> MCP
     Notion[Opt-in Notion shopping-list workflow] --> MCP
+    Shopping[Agent choosing groceries] --> MCP
+    Watches[Opt-in category watches - follow-up] --> Services
+    Watches --> Alerts[Owner's notification channel]
     Bots[Native bot command adapters] --> Services
     Services --> Matcher[Existing deterministic matcher]
     Services --> Cache[Existing revision-based dataset and product caches]
@@ -150,6 +153,18 @@ For API webhooks, inspect changed-property IDs and ignore result-only updates. C
 
 Reuse regional revision caches and deduplicate identical items within a batch. Check current health and notice eligibility on every review, including cache hits. Apply connection and global integration budgets, with bounded batch size included in quota accounting. Prefer the deterministic route for recurring lists when the owner already runs n8n; measure actual credits per item before recommending the native agent for frequent use. A future opt-in refresh when warnings change needs a separate budget and subscription design. Do not poll whole workspaces or create a managed Notion OAuth/token-storage service for this first follow-up.
 
+### Shopping agents and opt-in category watches
+
+Support the collaborator's example: a shopper who frequently buys milk can agree to watch milk recalls, receive a relevant new-notice alert, and have their shopping agent avoid affected products when choosing groceries. Reuse the shopping discovery service for category relevance and the deterministic checker for individual products. The current plugin can guide a purchasing agent through those reads; it has no checkout or notification tools.
+
+Before recommending a product or finalising a cart, check its known brand/barcode and any available packet restrictions in the explicitly selected region. Exclude a confirmed affected product. A possible match or unresolved batch/date restriction requires a closer packet check or an alternative; do not silently treat it as cleared. Recheck material cart changes and source freshness before checkout. Preserve an inconclusive result if coverage is unavailable. Every replacement needs its own check. A milk-category notice alerts the shopper to specific affected products; it does not exclude all milk or apply a chocolate allergen warning to milk purchases.
+
+The first watch installation should run in the owner's existing workflow/NAS infrastructure, alongside the Notion worker if useful. Save only explicitly agreed region/category selectors and delivery preferences. The agent may suggest a category based on its existing shopping context, but the user must agree before creating a persistent watch. Eat or Yeet receives those selectors, not purchase history. Provide pause, remove and expiry controls, with per-connection limits and a global budget.
+
+Check regional revision/coverage once per bounded refresh interval, then reuse the changed snapshot across watches. Avoid per-item or whole-workspace polling. Deduplicate by watch, public warning and affected-group content revision; coalesce related notices. Alert on newly relevant or materially changed recalls, including official advice, affected products/batches/dates, source link, region and review time. Handle withdrawn notices and a transition to incomplete coverage explicitly. Keep channel tokens in the owner's secret store, honour the chosen delivery destination and quiet preferences, and bound retries, concurrency and retained deduplication state. A category alert is advisory discovery, while product exclusion uses the returned match evidence.
+
+Implement this as one follow-up PR containing the watch contract, owner-run revision-triggered worker, shopping-agent instructions, delivery adapter and tests for opt-in/removal, relevance, duplicate imports, changed/withdrawn notices, coverage failures and cart decisions. It depends on the Notion shopping service and scoped keys. Actual recurring delivery requires a selected channel and an installed owner workflow; the public plugin must not promise alerts before that gate is met. A managed multi-user subscription service is a separate decision with measured storage and delivery costs.
+
 ### Explicit public sharing
 
 Add `create_public_share` only after confirming each release host's write/auth and approval behaviour. OpenAI recommends authentication for write actions; our current browser uses a short-lived signed capability rather than an account. Establish whether the proposed sanitised anonymous publication is acceptable before exposing it through an installed plugin. The read-only release remains useful while that decision is unresolved.
@@ -184,6 +199,7 @@ Follow-up PRs are independent additions, not prerequisites for the read-only lau
 | Addition | PR boundary | Depends on |
 | --- | --- | --- |
 | Notion shopping-list nudges | Deterministic related-warning service and batch read tool, scoped connection-key authentication, shopping-list template, native-agent and webhook/n8n recipes, quota accounting and relevance/loop/retry tests in one feature PR. Keep writeback and Notion credentials in the owner's workflow. | PR 1 search/check services and PR 2 MCP/quotas; verified Notion connection and trigger behaviour. A managed multi-user Notion app is separate later scope. |
+| Shopping-agent category watches | Opt-in region/category preferences, owner-run revision-triggered refresh, deduplicated notification delivery and product-exclusion instructions/tests in one feature PR. Alert on category relevance; use product and packet evidence when excluding cart items. | Notion shopping discovery and scoped keys; selected delivery channel and owner installation. No purchase-history ingestion or managed subscription service in this slice. |
 | Public sharing | Capability-backed write tool, atomic idempotency, cleanup, host approval/auth verification and UI button with regressions in one PR | PR 2; UI portion after PR 3; resolved host write/auth gate |
 | Discord bot | Commands, verified webhook, deferred completion, deduplication, channel quotas, installation docs and tests in one PR | PR 1 services and established integration quota patterns |
 | Slack or Telegram | One PR per requested channel because installation, trust and reply semantics differ | Shared services and quota patterns; no need to wait for Discord |
@@ -215,4 +231,4 @@ Prepare complete primary-platform integrations in parallel and retain the propos
 
 Deploy additive Convex changes before Next.js. Confirm live source health, a known fixture/live warning, Oreo checking, trusted proxy behaviour and measured resource use. Enable the MCP pilot independently from the website. Disable it through `MCP_ENABLED` if its quotas, errors or cost exceed the agreed budget; preserve website checks and source refreshes. Give native bot adapters their own enable switches. Keep the canonical submitted MCP URL stable; OpenAI's current update flow does not support self-serve URL changes. [Submission/update flow](https://developers.openai.com/plugins/deploy/submission).
 
-PR 1 is ready for review. PR 2 adds the default-off hosted MCP pilot. The next implementation task is the portable package and MCP Apps result/evidence interface; actual host tests remain a release gate.
+The core service, MCP, plugin and embedded interface implementation is ready for review. Continue with host acceptance and the owner Notion pilot after the relevant permissions and controlled deployment are available. Shopping-agent category watches remain the next independent feature slice; current checking skills already require affected-product exclusion and qualified replacement checks.

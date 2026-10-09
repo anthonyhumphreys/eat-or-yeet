@@ -14,6 +14,7 @@ type HandlerOptions = {
   createTransport: (network: string, context?: unknown) => McpTransport;
   authorize?: (request: Request) => Promise<{ ok: true; context?: unknown } | { ok: false; status: 401 | 503 }>;
   privatePreflight?: boolean;
+  responseLimit?: (envelope: unknown) => number;
 };
 
 function failure(status: number, message: string, headers?: Record<string, string>) {
@@ -67,7 +68,7 @@ export function createMcpHttpHandler(options: HandlerOptions) {
       const response = await untilAborted(transport.fetch(new Request(request.url, {
         method: "POST", headers, body: JSON.stringify(body.value), signal,
       })), signal);
-      const text = await untilAborted(readResponseText(response, 256 * 1024), signal);
+      const text = await untilAborted(readResponseText(response, options.responseLimit?.(body.value) ?? 256 * 1024), signal);
       const responseHeaders = new Headers(response.headers);
       responseHeaders.set("Cache-Control", "no-store");
       for (const [key, value] of Object.entries(cors)) responseHeaders.set(key, value);
