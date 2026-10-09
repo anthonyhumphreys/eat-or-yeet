@@ -73,7 +73,7 @@ export function ScanFlow() {
         <section aria-labelledby="scan-heading">
           <h1 id="scan-heading" className="text-[2rem] font-black leading-[1.05] tracking-[-0.035em] sm:text-5xl">Scan a barcode</h1>
           <p className="mb-5 mt-3 max-w-xl text-base leading-7 text-muted-foreground">Checking against current <span className="font-semibold text-foreground">{regionNames[region]}</span> warnings.</p>
-          {needsRegionChoice ? <p role="status" className="rounded-xl bg-muted p-4 text-sm leading-6">Choose a warning region above to start scanning.</p> : <BarcodeCamera onDetected={onDetected} />}
+          {needsRegionChoice ? <p role="status" className="rounded-xl bg-muted p-4 text-sm leading-6">Choose your country to start scanning.</p> : <BarcodeCamera onDetected={onDetected} />}
           <form className="mt-8 border-t pt-6" onSubmit={(event) => { event.preventDefault(); if (typedValid && !needsRegionChoice) onDetected(barcodeStatus(typed).digits); }}>
             <BarcodeField id="typed-barcode" label="Or type the number" value={typed} onChange={setTyped} />
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">

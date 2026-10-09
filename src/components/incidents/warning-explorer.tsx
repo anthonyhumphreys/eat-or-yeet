@@ -4,8 +4,10 @@ import { ArrowRight, ChevronDown, ChevronRight, Search, SearchX, X } from "lucid
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
 
+import { ShareButton } from "@/components/share-button";
 import { foodCategoryGroups, type FoodCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
+import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
 import { regionNames, type WarningRegion } from "@/lib/location";
 
@@ -22,6 +24,8 @@ export type ExplorerRow = {
 export type ExplorerFilters = { q: string; hazard?: HazardKind; category?: FoodCategory; store?: string };
 
 const STEP = 40;
+const foodTabs = foodCategoryGroups.flatMap((group) => group.categories);
+const sourceNames: Record<WarningRegion, string> = { UK: "Food Standards Agency", US: "FDA and USDA FSIS" };
 const officialUrls: Record<WarningRegion, string> = {
   UK: "https://alerts.food.gov.uk/",
   US: "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts",
@@ -52,29 +56,27 @@ function Highlight({ text, query }: { text: string; query: string }) {
     : part);
 }
 
-const dayFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "numeric", timeZone: "Europe/London" });
-const yearFormat = new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: "Europe/London" });
-// Fixed month names avoid different abbreviations in server and browser ICU versions.
-const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function WarningRow({ row, query, thisYear }: { row: ExplorerRow; query: string; thisYear: string }) {
-  const date = new Date(row.updatedAt);
-  const year = yearFormat.format(date);
-  const parts = dayFormat.formatToParts(date);
-  const day = parts.find((part) => part.type === "day")?.value;
-  const month = Number(parts.find((part) => part.type === "month")?.value);
+function WarningRow({ row, query }: { row: ExplorerRow; query: string }) {
+  const iso = new Date(row.updatedAt).toISOString();
+  const date = formatRecallDate(row.updatedAt);
+  // "x ago" depends on the viewer's clock, so a render either side of midnight may differ from the server's.
+  const ago = timeAgo(row.updatedAt);
   return (
     <li className="border-b last:border-b-0">
-      <Link href={`/incidents/${row.slug}`} className="group -mx-3 grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto] sm:gap-x-4">
-        <time dateTime={date.toISOString()} className="pt-0.5 text-[13px] leading-5 tabular-nums text-muted-foreground">
-          {`${day} ${monthNames[month - 1]}`}{year !== thisYear ? <span className="block">{year}</span> : null}
-        </time>
+      <Link href={`/incidents/${row.slug}`} className="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[6.75rem_minmax(0,1fr)_auto] sm:gap-x-4">
+        <span className="hidden pt-0.5 text-[13px] leading-5 sm:block">
+          <time dateTime={iso} className="block font-semibold tabular-nums">{date}</time>
+          <span suppressHydrationWarning className="block text-muted-foreground">{ago}</span>
+        </span>
         <span className="min-w-0">
           <span className="block text-[0.9375rem] font-semibold leading-snug sm:text-base"><Highlight text={row.title} query={query} /></span>
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-5 text-muted-foreground">
             <span className={`rounded-full px-2 font-semibold ${tagTone[row.hazard.kind]}`}><span className="sr-only">Hazard: </span>{row.hazard.label}</span>
             <span>{row.categories.join(", ")}</span>
             {row.stores.length ? <span>Sold at <Highlight text={row.stores.join(", ")} query={query} /></span> : null}
+          </span>
+          <span className="mt-1.5 block text-xs leading-5 text-muted-foreground sm:hidden">
+            <time dateTime={iso} className="tabular-nums">{date}</time> · <span suppressHydrationWarning>{ago}</span>
           </span>
         </span>
         <ChevronRight className="mt-0.5 size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden />
@@ -89,7 +91,7 @@ function Chip({ href, active, onSelect, children }: { href: string; active: bool
       href={href}
       aria-current={active ? "true" : undefined}
       onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onSelect(); }}
-      className={`inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${active ? "border-foreground bg-foreground text-background" : "bg-background hover:border-muted-foreground"}`}
+      className={`inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${active ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:border-muted-foreground"}`}
     >
       {children}
     </a>
@@ -115,7 +117,6 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const inputRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   const { q, hazard, category, store } = filters;
-  const thisYear = yearFormat.format(new Date());
 
   const index = useMemo(() => (rows ?? []).map(warningSearchText), [rows]);
 
@@ -142,7 +143,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const { results } = view;
   const visible = results.slice(0, limit);
   const filtered = Boolean(q || hazard || category || store);
-  const countLabel = `${results.length.toLocaleString("en-GB")} ${results.length === 1 ? "warning" : "warnings"}`;
+  const countLabel = `${results.length.toLocaleString("en-GB")} ${results.length === 1 ? "recall" : "recalls"}`;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -154,11 +155,11 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   }, [filters, path, region, rows, countLabel]);
 
   useEffect(() => {
-    // Keep the selected hazard visible in the horizontally scrolling chip row without moving the page.
+    // Keep the selected food type visible in the horizontally scrolling tab row without moving the page.
     const row = chipsRef.current;
     const chip = row?.querySelector<HTMLElement>("[aria-current]");
     if (row && chip && (chip.offsetLeft < row.scrollLeft || chip.offsetLeft + chip.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = chip.offsetLeft - 16;
-  }, [hazard]);
+  }, [category]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -187,9 +188,26 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
 
   return (
     <div id="warnings" className="min-w-0 scroll-mt-4">
-      <form role="search" action={path} onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
+      <div ref={chipsRef} className="relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by food type">
+        <div className="flex gap-2 sm:flex-wrap">
+          <Chip href={filterUrl(path, region, { ...filters, category: undefined })} active={!category} onSelect={() => update({ category: undefined })}>
+            All foods
+          </Chip>
+          {/* Every food type is always shown, so the tabs stay put while people search. */}
+          {foodTabs.map((item) => {
+            const count = view.categoryCounts.get(item) ?? 0;
+            return (
+              <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
+                {item} <span className="tabular-nums">{count.toLocaleString("en-GB")}</span>
+              </Chip>
+            );
+          })}
+        </div>
+      </div>
+
+      <form role="search" action={path} className="mt-3" onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
         <input type="hidden" name="region" value={region} />
-        <label htmlFor="warning-search" className="sr-only">Search {region} warnings</label>
+        <label htmlFor="warning-search" className="sr-only">Search {region} recalls</label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
@@ -205,39 +223,24 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
             onChange={(event) => update({ q: event.target.value }, false)}
             onKeyDown={(event) => { if (event.key === "Escape" && q) { event.preventDefault(); update({ q: "" }, false); } }}
             placeholder="Product, brand, allergen or shop"
-            className="h-14 w-full min-w-0 rounded-xl border bg-background pl-12 pr-14 text-base shadow-[0_1px_2px_oklch(0.17_0.018_110/6%)] placeholder:text-muted-foreground hover:border-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full min-w-0 rounded-xl border bg-background pl-12 pr-14 text-base shadow-[0_1px_2px_rgb(29_26_22/6%)] placeholder:text-muted-foreground hover:border-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-search-cancel-button]:hidden"
           />
           {q ? (
-            <button type="button" aria-label="Clear search" onClick={() => { update({ q: "" }, false); inputRef.current?.focus(); }} className="absolute right-2 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><X className="size-4" aria-hidden /></button>
+            <button type="button" aria-label="Clear search" onClick={() => { update({ q: "" }, false); inputRef.current?.focus(); }} className="absolute right-1 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><X className="size-4" aria-hidden /></button>
           ) : (
             <kbd aria-hidden className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground sm:block">/</kbd>
           )}
         </div>
       </form>
 
-      <div ref={chipsRef} className="relative -mx-4 mt-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by hazard">
-        <div className="flex gap-2 sm:flex-wrap">
-          <Chip href={filterUrl(path, region, { ...filters, hazard: undefined })} active={!hazard} onSelect={() => update({ hazard: undefined })}>
-            All hazards <span className="tabular-nums opacity-60">{view.hazardTotal.toLocaleString("en-GB")}</span>
-          </Chip>
+      <div className="mt-3 flex gap-2">
+        <FacetSelect id="hazard-filter" label="Hazard" value={hazard ?? ""} onChange={(value) => update({ hazard: (value || undefined) as HazardKind | undefined })}>
+          <option value="">All hazards ({view.hazardTotal.toLocaleString("en-GB")})</option>
           {hazardKinds.map((kind) => {
             const count = view.hazardCounts.get(kind) ?? 0;
             if (!count && hazard !== kind) return null;
-            return (
-              <Chip key={kind} href={filterUrl(path, region, { ...filters, hazard: kind })} active={hazard === kind} onSelect={() => update({ hazard: hazard === kind ? undefined : kind })}>
-                {hazardKindNames[kind]} <span className="tabular-nums opacity-60">{count.toLocaleString("en-GB")}</span>
-              </Chip>
-            );
+            return <option key={kind} value={kind}>{hazardKindNames[kind]} ({count.toLocaleString("en-GB")})</option>;
           })}
-        </div>
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        <FacetSelect id="category-filter" label="Food category" value={category ?? ""} onChange={(value) => update({ category: (value || undefined) as FoodCategory | undefined })}>
-          <option value="">All foods</option>
-          {foodCategoryGroups.map((group) => <optgroup key={group.label} label={group.label}>
-            {group.categories.map((item) => <option key={item} value={item}>{item} ({view.categoryCounts.get(item) ?? 0})</option>)}
-          </optgroup>)}
         </FacetSelect>
         {view.stores.length ? (
           <FacetSelect id="store-filter" label="Shop" value={store ?? ""} onChange={(value) => update({ store: value || undefined })}>
@@ -248,15 +251,19 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
       </div>
 
       <ViewTransition name="warning-context" default="none" update="warning-context" share="warning-context">
-        <div className="mt-7 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b pb-3">
-          <h2 className="text-lg font-bold tracking-tight">
-            {rows ? <><span className="tabular-nums">{countLabel}</span>{filtered ? " found" : ` in the ${region}`}</> : `${region} warnings`}
-          </h2>
-          {filtered ? (
-            <button type="button" onClick={() => update({ q: "", hazard: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
-          ) : (
-            <p className="text-xs text-muted-foreground">Newest first · {region === "UK" ? "Food Standards Agency" : "FDA and USDA FSIS"}</p>
-          )}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold tracking-tight">
+              {rows ? <><span className="tabular-nums">{countLabel}</span>{filtered ? " found" : ` in the ${region}`}</> : `${region} recalls`}
+            </h2>
+            <p className="text-xs text-muted-foreground">Newest first · {sourceNames[region]}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {filtered ? (
+              <button type="button" onClick={() => update({ q: "", hazard: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
+            ) : null}
+            {rows ? <ShareButton label="Share this list" title={`${region} food recalls`} text={`${region} food recalls right now, from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
+          </div>
         </div>
       </ViewTransition>
       <p aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</p>
@@ -270,7 +277,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
         <ul>
           {visible.map((row) => (
             <ViewTransition key={row.id} name={`warning-${row.id}`} default="none" share="warning-row" update="warning-row" enter="warning-enter" exit="warning-exit">
-              <WarningRow row={row} query={q} thisYear={thisYear} />
+              <WarningRow row={row} query={q} />
             </ViewTransition>
           ))}
         </ul>
@@ -288,7 +295,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
                 ))}
               </div>
             ) : null}
-            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a food is safe. Have the pack? <Link href="/scan" className="font-semibold text-foreground underline underline-offset-4">Check its barcode</Link> against batch details.</p>
+            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a food is safe. Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</p>
           </div>
         </div>
       )}

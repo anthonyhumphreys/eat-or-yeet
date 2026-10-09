@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 
 import { LocationProvider } from "@/components/location-provider";
 import { RegionPrompt } from "@/components/region-prompt";
-import { SiteNews } from "@/components/news/site-news";
 import { getSavedRegion, getSuggestedRegion } from "@/lib/location-server";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { MobileCheckBar } from "@/components/mobile-check-bar";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -30,7 +27,7 @@ export const metadata: Metadata = {
     default: "Eat or Yeet?",
     template: "%s | Eat or Yeet",
   },
-  description: "Check packaged food against published official UK and US food-safety warnings. A missing match does not tell you whether food is safe to eat.",
+  description: "Official UK and US food recalls in one place, newest first, with a quick way to check a pack. A missing match does not tell you whether food is safe to eat.",
   applicationName: "Eat or Yeet",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Eat or Yeet" },
@@ -48,10 +45,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <LocationProvider initialRegion={region} hasSavedRegion={Boolean(savedRegion)} suggestedRegion={suggestedRegion}>
             <SiteHeader />
             <RegionPrompt />
-            <Suspense fallback={null}><SiteNews region={region} /></Suspense>
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
             <SiteFooter />
-            <MobileCheckBar />
           </LocationProvider>
         </ThemeProvider>
       </body>
