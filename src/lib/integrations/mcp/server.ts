@@ -186,7 +186,9 @@ export function createMcpTransport(network: string, executor: ToolExecutor = exe
     () => createMcpServer(executor, network),
     {
       legacy: "stateless",
-      responseMode: "json",
+      // Tools emit no mid-call notifications, so auto returns JSON without
+      // the SDK's per-handler warning about deliberately dropping them.
+      responseMode: "auto",
       maxRequestBodySize: 32 * 1024,
       maxSubscriptions: 0,
       keepAliveMs: 0,

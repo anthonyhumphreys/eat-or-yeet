@@ -58,6 +58,17 @@ function executorFor(
 }
 
 describe("MCP server transport", () => {
+  it("creates per-request transports without SDK warning noise", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let request = 0; request < 3; request += 1) {
+        const handler = createMcpTransport("test-network", executorFor());
+        await handler.close();
+      }
+      expect(warn).not.toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+
   it("serves modern discovery, strict tool schemas, annotations, and structured output", async () => {
     const executor = executorFor();
     const { client } = await connect(executor);
