@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createShoppingWebhookWorker, inputFingerprint, NotionRestClient, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
+import { classifyMcpToolResultError, createShoppingWebhookWorker, inputFingerprint, NotionRestClient, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
 
 const secret = "test-verification-token";
 const databaseId = "database-1";
 const sourceId = "source-1";
-const ids = { item: "item", brand: "brand", bought: "bought", warnings: "warnings", status: "status", reviewed: "reviewed", fingerprint: "fingerprint" };
+const ids = { item: "item", brand: "brand", barcode: "barcode", bought: "bought", warnings: "warnings", status: "status", reviewed: "reviewed", fingerprint: "fingerprint" };
 type TestProperty = { id: string; type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; checkbox?: boolean; select?: { name: string } | null; date?: { start: string } | null };
 type TestPage = { id: string; parent: { database_id: string; data_source_id: string }; properties: Record<string, TestProperty> };
 const property = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, ...extra }) as TestProperty;
@@ -57,13 +57,17 @@ class FakeNotion implements NotionClient {
   readonly page = makePage();
   readonly patchedPages: string[] = [];
   readonly patches: Array<Record<string, unknown>> = [];
+  dataSourceCalls = 0;
   getPageCalls = 0;
+  failDataSource: WorkerError | undefined;
   failGet: WorkerError | undefined;
   beforePatch?: () => void | Promise<void>;
   patchError?: (attempt: number) => WorkerError | undefined;
   async getDataSource(dataSourceId: string) {
+    this.dataSourceCalls += 1;
+    if (this.failDataSource) throw this.failDataSource;
     expect(dataSourceId).toBe(sourceId);
-    return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
+    return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "barcode" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
   }
   async getPage(pageId: string, _signal: AbortSignal) { void _signal; this.getPageCalls += 1; if (this.failGet) throw this.failGet; const page = structuredClone(this.page); page.id = pageId; return page; }
   async patchPage(pageId: string, properties: Record<string, unknown>) {
@@ -78,11 +82,12 @@ class FakeNotion implements NotionClient {
 class FakeReview implements ReviewClient {
   items: ShoppingItem[] = [];
   next: Promise<void> | undefined;
+  result?: ReviewResponse;
   async close() {}
   async review(item: ShoppingItem): Promise<ReviewResponse> {
     this.items.push(structuredClone(item));
     if (this.next) await this.next;
-    return { status: "related_warnings", notices: [{ title: "Official notice", url: "https://example.gov/notice" }] };
+    return this.result ?? { status: "related_warnings", notices: [{ title: "Official notice", url: "https://example.gov/notice" }] };
   }
 }
 
@@ -90,6 +95,7 @@ function makePage(): TestPage {
   return {
     id: "page-1", parent: { database_id: databaseId, data_source_id: sourceId }, properties: {
       Item: property(ids.item, "title", { title: [{ plain_text: "Milk" }] }), Brand: property(ids.brand, "rich_text", { rich_text: [] }),
+      Barcode: property(ids.barcode, "rich_text", { rich_text: [] }),
       Bought: property(ids.bought, "checkbox", { checkbox: false }), Warnings: property(ids.warnings, "rich_text", { rich_text: [] }),
       Status: property(ids.status, "select", { select: null }), Reviewed: property(ids.reviewed, "date", { date: null }),
       Fingerprint: property(ids.fingerprint, "rich_text", { rich_text: [] }),
@@ -98,12 +104,12 @@ function makePage(): TestPage {
 }
 
 const workers: Array<ReturnType<typeof createShoppingWebhookWorker>> = [];
-async function setup(options: { now?: () => number; review?: FakeReview; notion?: FakeNotion } = {}) {
+async function setup(options: { now?: () => number; review?: FakeReview; notion?: FakeNotion; config?: ShoppingWorkerConfig } = {}) {
   const notion = options.notion ?? new FakeNotion();
   const review = options.review ?? new FakeReview();
   const store = new MemoryStore();
   const logs: string[] = [];
-  const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer: review, store, now: options.now, delay: async () => undefined, debounceMs: 10, log: (message) => logs.push(message) });
+  const worker = createShoppingWebhookWorker({ config: options.config ?? makeConfig(0), notion, reviewer: review, store, now: options.now, delay: async () => undefined, debounceMs: 10, log: (message) => logs.push(message) });
   workers.push(worker);
   await worker.start();
   const address = worker.server.address();
@@ -253,6 +259,48 @@ describe("Notion shopping webhook worker", () => {
     expect(review.items).toHaveLength(0); // Debounce is still pending.
   });
 
+  it("treats recoverable MCP tool errors as temporary and ignores payloads on error results", async () => {
+    const internal = classifyMcpToolResultError({
+      isError: true,
+      structuredContent: { items: [{ id: "page-1", status: "no_related_warnings", notices: [] }] },
+      _meta: { publicError: { code: "INTERNAL_ERROR", recoverable: true } },
+    });
+    expect(internal).toMatchObject({ code: "temporary", retryAfterMs: undefined });
+    expect(classifyMcpToolResultError({ isError: true, _meta: { publicError: { code: "quota_exceeded", recoverable: true, retryAfterSeconds: 3_000_000 } } }))
+      .toMatchObject({ code: "temporary", retryAfterMs: 24 * 60 * 60 * 1_000 });
+    expect(classifyMcpToolResultError({ isError: true, _meta: { publicError: { code: "invalid_arguments", recoverable: false } } }))
+      .toMatchObject({ code: "invalid_config" });
+    expect(classifyMcpToolResultError({ isError: false, structuredContent: { items: [] } })).toBeUndefined();
+
+    let currentTime = Date.now();
+    const review = new FakeReview();
+    let calls = 0;
+    review.review = async () => {
+      calls += 1;
+      if (calls === 1) throw new WorkerError(internal!.message, internal!.code, 0);
+      return { status: "no_related_warnings", notices: [] };
+    };
+    const { url, notion, store, logs } = await setup({ now: () => currentTime, review });
+    await send(url, payload("evt-recoverable-mcp-error"));
+    currentTime += 4_000;
+    await eventually(() => notion.patches.length === 1);
+    expect(calls).toBe(2);
+    expect(logs).not.toContain("Notion resource or property configuration changed; worker paused.");
+    expect(store.current("page-1")?.fingerprint).not.toBe("");
+  });
+
+  it("accepts separator-formatted 14-digit GTINs within the shared 300-character limit", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.barcode = { id: ids.barcode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    const formattedBarcode = "0-000 0000-00000 0";
+    notion.page.properties.Barcode = property(ids.barcode, "rich_text", { rich_text: [{ plain_text: formattedBarcode }] });
+    const { url, review } = await setup({ config, notion });
+    await send(url, payload("evt-separated-gtin"));
+    await eventually(() => review.items.length === 1);
+    expect(review.items[0]?.barcode).toBe(formattedBarcode);
+  });
+
   it("fetches and reviews the latest row after debounce; old/out-of-order signals cannot restore old fields", async () => {
     let currentTime = Date.now();
     const { url, notion, review, store } = await setup({ now: () => currentTime });
@@ -264,6 +312,39 @@ describe("Notion shopping webhook worker", () => {
     expect(review.items).toEqual([{ id: "page-1", name: "Changed after event", bought: false }]);
     expect(notion.patches[0]?.[ids.fingerprint]).toBeDefined();
     expect(store.current("page-1")?.fingerprint).toBe(inputFingerprint({ id: "page-1", name: "Changed after event", bought: false }, false));
+  });
+
+  it("reserves warning-output space for qualifications and never writes a partial URL", async () => {
+    const notion = new FakeNotion();
+    const review = new FakeReview();
+    const qualification = `Coverage qualification: ${"reviewed evidence; ".repeat(20)}END-QUALIFICATION`;
+    const longUrl = `https://example.gov/notice/${"x".repeat(340)}`;
+    review.result = {
+      status: "related_warnings",
+      warnings: [qualification],
+      notices: Array.from({ length: 5 }, (_, index) => ({
+        title: `Notice ${index + 1} ${"T".repeat(160)}`,
+        url: longUrl,
+        date: "2026-10-09",
+        reason: `${"Detailed batch evidence. ".repeat(15)}Batch LOT-EXACT-421; use-by 2026-10-09.`,
+        relationshipCount: 5,
+        relationshipsShown: 1,
+        relationshipsComplete: false,
+      })),
+    };
+    const { url } = await setup({ notion, review });
+    await send(url, payload("evt-long-notices"));
+    await eventually(() => notion.patches.length === 1);
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text).toContain(qualification);
+    expect(text).toContain("Batch LOT-EXACT-421");
+    expect(text).toContain("2026-10-09");
+    expect(text).toContain("Some affected product groups are omitted; inspect the official notice.");
+    expect(text).toContain("official notice link omitted");
+    expect(text).toContain("Additional notice details omitted");
+    expect(text).not.toContain("https://example.gov/notice/");
+    expect(text.length).toBeLessThanOrEqual(1_900);
   });
 
   it("discards an in-flight review after the shopper edits the input and schedules the newer value", async () => {
@@ -356,6 +437,80 @@ describe("Notion shopping webhook worker", () => {
     expect(subsequent.status).toBe(503);
   });
 
+  it("retries transient startup validation with the server retry hint before draining queued work", async () => {
+    const currentTime = Date.now();
+    const notion = new FakeNotion();
+    const getDataSource = notion.getDataSource.bind(notion);
+    let validationAttempts = 0;
+    notion.getDataSource = async (dataSourceId: string) => {
+      validationAttempts += 1;
+      if (validationAttempts === 1) throw new WorkerError("temporary", "temporary", 2_300);
+      return await getDataSource(dataSourceId);
+    };
+    const reviewer = new FakeReview();
+    const store = new MemoryStore();
+    store.acceptEvent("persisted-before-start", "page-1", currentTime, currentTime);
+    const delays: number[] = [];
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer, store, now: () => currentTime, delay: async (ms) => { delays.push(ms); } });
+    workers.push(worker);
+    await worker.start();
+    expect(validationAttempts).toBe(2);
+    expect(delays).toEqual([2_300]);
+    expect(notion.getPageCalls).toBe(0); // The queue is gated until validation succeeds.
+    await eventually(() => reviewer.items.length === 1);
+  });
+
+  it("keeps accepted work queued when access pauses, then drains it after restart", async () => {
+    let currentTime = Date.now();
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-pause-"));
+    const path = join(directory, "state.sqlite");
+    const firstStore = new SqliteWorkerStore(path);
+    const revokedNotion = new FakeNotion();
+    revokedNotion.failGet = new WorkerError("revoked", "revoked");
+    const firstLogs: string[] = [];
+    const firstWorker = createShoppingWebhookWorker({ config: makeConfig(0), notion: revokedNotion, reviewer: new FakeReview(), store: firstStore, now: () => currentTime, log: (entry) => firstLogs.push(entry) });
+    workers.push(firstWorker);
+    let secondWorker: ReturnType<typeof createShoppingWebhookWorker> | undefined;
+    let secondStore: SqliteWorkerStore | undefined;
+    try {
+      await firstWorker.start();
+      const firstAddress = firstWorker.server.address();
+      if (!firstAddress || typeof firstAddress === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${firstAddress.port}/webhooks/notion`, payload("evt-accepted-before-pause"));
+      currentTime += 4_000;
+      await eventually(() => firstLogs.some((entry) => entry === "Notion access stopped; worker paused.") && firstStore.nextDue() !== undefined && firstStore.nextDue()! <= currentTime);
+      await firstWorker.stop();
+
+      secondStore = new SqliteWorkerStore(path);
+      const reviewer = new FakeReview();
+      secondWorker = createShoppingWebhookWorker({ config: makeConfig(0), notion: new FakeNotion(), reviewer, store: secondStore, now: () => currentTime });
+      workers.push(secondWorker);
+      await secondWorker.start();
+      await eventually(() => reviewer.items.length === 1);
+      expect(reviewer.items[0]?.name).toBe("Milk");
+    } finally {
+      await firstWorker.stop();
+      await secondWorker?.stop();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("permanently pauses on invalid startup schema without processing queued rows", async () => {
+    const notion = new FakeNotion();
+    notion.failDataSource = new WorkerError("missing", "missing_property");
+    const reviewer = new FakeReview();
+    const logs: string[] = [];
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer, store: new MemoryStore(), log: (entry) => logs.push(entry) });
+    workers.push(worker);
+    await worker.start();
+    const address = worker.server.address();
+    if (!address || typeof address === "string") throw new Error("Expected local test server address");
+    expect((await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload("evt-startup-invalid-schema"))).status).toBe(503);
+    expect(logs).toEqual(["Selected data source or configured properties are invalid; worker paused."]);
+    expect(notion.getPageCalls).toBe(0);
+    expect(reviewer.items).toHaveLength(0);
+  });
+
   it("rejects unsupported brand and barcode property types before startup", () => {
     const reviewer = new FakeReview();
     const brandConfig = makeConfig(0);
@@ -370,10 +525,10 @@ describe("Notion shopping webhook worker", () => {
     let currentTime = Date.now();
     const review = new FakeReview();
     review.review = async () => { throw new WorkerError("revoked", "revoked"); };
-    const { url, store } = await setup({ now: () => currentTime, review });
+    const { url, store, logs } = await setup({ now: () => currentTime, review });
     await send(url, payload("evt-mcp-revoked"));
     currentTime += 4_000;
-    await eventually(() => store.current("page-1")?.busy === false && store.pages.get("page-1")?.due === Infinity);
+    await eventually(() => logs.includes("Notion access stopped; worker paused.") && store.current("page-1")?.busy === false && store.pages.get("page-1")?.due !== Infinity);
     expect((await send(url, payload("evt-after-mcp-revoke"))).status).toBe(503);
   });
 

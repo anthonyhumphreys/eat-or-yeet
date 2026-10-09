@@ -6,6 +6,8 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 const NOTION_VERSION = "2025-09-03";
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_NOTION_RESPONSE_BYTES = 256 * 1024;
+const MAX_WARNING_OUTPUT_CHARS = 1_900;
+const WARNING_OMISSION_NOTE = "[Additional notice details omitted to fit this field; open the official notice for full scope.]";
 const DEBOUNCE_MS = 3_000;
 const DEDUPE_MS = 25 * 60 * 60 * 1_000;
 const NOTION_INTERVAL_MS = 334;
@@ -269,13 +271,7 @@ export class McpReviewClient implements ReviewClient {
       throw new WorkerError("Review MCP transport failed");
     }
     if (result.isError) {
-      const publicError = isRecord(result._meta?.publicError) ? result._meta.publicError : undefined;
-      if (publicError?.code === "quota_exceeded" && typeof publicError.retryAfterSeconds === "number" && Number.isFinite(publicError.retryAfterSeconds)) {
-        const retryAfterMs = Math.min(Math.max(0, publicError.retryAfterSeconds * 1_000), MAX_DURABLE_RETRY_AFTER_MS);
-        throw new WorkerError("Review MCP quota requires a durable retry", "temporary", retryAfterMs);
-      }
-      if (publicError && publicError.code !== "unavailable" && publicError.code !== "interrupted") throw new WorkerError("Review MCP rejected the configured tool request", "invalid_config");
-      throw new WorkerError("Review MCP tool was unavailable");
+      throw classifyMcpToolResultError(result) ?? new WorkerError("Review MCP tool was unavailable");
     }
     let payload: unknown = result.structuredContent;
     const content = result.content.find((part) => part.type === "text");
@@ -312,6 +308,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
   let pumpDeadline: number | undefined;
   let started = false;
   let paused = false;
+  let ready = false;
   let active = 0;
   const activeTasks = new Set<Promise<void>>();
   let stopPromise: Promise<void> | undefined;
@@ -377,7 +374,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
     }
   }
   async function pump(): Promise<void> {
-    if (controller.signal.aborted || paused) return;
+    if (controller.signal.aborted || paused || !ready) return;
     store.cleanup(now() - DEDUPE_MS);
     const slots = MAX_NOTION_CONCURRENCY - active;
     if (slots > 0) {
@@ -442,6 +439,8 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       if (error instanceof WorkerError && (error.code === "revoked" || error.code === "missing_property" || error.code === "invalid_config")) {
         paused = true;
         log(error.code === "revoked" ? "Notion access stopped; worker paused." : "Notion resource or property configuration changed; worker paused.");
+        store.release(pageId, generation, claimToken, now());
+        return;
       } else if (!controller.signal.aborted) {
         log(`Shopping row processing failed (${error instanceof WorkerError ? error.code : "network_or_parse_error"}).`);
         const retryAfterMs = error instanceof WorkerError && error.retryAfterMs !== undefined
@@ -450,6 +449,29 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
         store.schedule(pageId, now() + retryAfterMs, now());
       }
       store.finish(pageId, generation, claimToken, now());
+    }
+  }
+  async function validateStartup(): Promise<void> {
+    let attempt = 0;
+    while (!controller.signal.aborted && !paused) {
+      try {
+        await validateSelectedDataSource(notion, config, controller.signal);
+        ready = true;
+        return;
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof WorkerError && ["revoked", "missing_property", "invalid_config", "out_of_scope"].includes(error.code)) {
+          paused = true;
+          log(error.code === "revoked" ? "Notion access stopped; worker paused." : "Selected data source or configured properties are invalid; worker paused.");
+          return;
+        }
+        const backoff = Math.min(1_000 * (2 ** Math.min(attempt, 6)), 60_000);
+        const requested = error instanceof WorkerError ? error.retryAfterMs ?? 0 : 0;
+        const waitMs = Math.min(Math.max(backoff, requested), MAX_DURABLE_RETRY_AFTER_MS);
+        attempt += 1;
+        log("Notion startup validation is temporarily unavailable; retrying.");
+        try { await delay(waitMs, controller.signal); } catch { return; }
+      }
     }
   }
   return {
@@ -461,11 +483,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
         server.once("error", reject);
         server.listen(config.listenPort, config.listenHost, () => { server.removeListener("error", reject); resolve(); });
       });
-      try { await validateSelectedDataSource(notion, config, controller.signal); }
-      catch (error) {
-        paused = true;
-        log(error instanceof WorkerError && error.code === "revoked" ? "Notion access stopped; worker paused." : "Selected data source or configured properties could not be validated; worker paused.");
-      }
+      await validateStartup();
       kick(); // Resume durable due work after process restart; no workspace scan/poll is performed.
     },
     async stop() {
@@ -494,9 +512,28 @@ export function verifySignature(rawBody: Uint8Array, signature: string, verifica
 export function inputFingerprint(item: ShoppingItem, bought: boolean): string {
   return createHash("sha256").update(JSON.stringify({ name: item.name.trim(), brand: item.brand?.trim() ?? "", barcode: item.barcode?.trim() ?? "", bought })).digest("hex");
 }
+/** Classifies an MCP tool result without trusting its content text or payload. */
+export function classifyMcpToolResultError(result: { [key: string]: unknown; isError?: unknown; _meta?: unknown }): WorkerError | undefined {
+  if (!result.isError) return undefined;
+  const metadata = isRecord(result._meta) && isRecord(result._meta.publicError) ? result._meta.publicError : undefined;
+  if (!metadata) return new WorkerError("Review MCP tool was unavailable");
+
+  const retryAfterSeconds = metadata.retryAfterSeconds;
+  const retryAfterMs = typeof retryAfterSeconds === "number" && Number.isFinite(retryAfterSeconds)
+    ? Math.min(Math.max(0, retryAfterSeconds * 1_000), MAX_DURABLE_RETRY_AFTER_MS)
+    : undefined;
+  if (metadata.recoverable === true || (metadata.recoverable === undefined && metadata.code === "quota_exceeded")) {
+    return new WorkerError("Review MCP returned a recoverable tool error", "temporary", retryAfterMs);
+  }
+  if (metadata.recoverable === false) return new WorkerError("Review MCP rejected the configured tool request", "invalid_config");
+  if (metadata.code === "unavailable" || metadata.code === "interrupted" || metadata.code === "INTERNAL_ERROR") {
+    return new WorkerError("Review MCP tool was unavailable");
+  }
+  return new WorkerError("Review MCP rejected the configured tool request", "invalid_config");
+}
 function canReviewItem(item: ShoppingItem): boolean {
   const barcode = item.barcode?.trim();
-  return item.id.length <= 100 && item.name.trim().length > 0 && item.name.trim().length <= 200 && (item.brand === undefined || (item.brand.trim().length > 0 && item.brand.trim().length <= 200)) && (barcode === undefined || (barcode.length <= 14 && isValidGtin(barcode)));
+  return item.id.length <= 100 && item.name.trim().length > 0 && item.name.trim().length <= 200 && (item.brand === undefined || (item.brand.trim().length > 0 && item.brand.trim().length <= 200)) && (barcode === undefined || (barcode.length <= 300 && isValidGtin(barcode)));
 }
 function isValidGtin(value: string): boolean {
   if (!/^[\d\s-]+$/.test(value)) return false;
@@ -535,16 +572,47 @@ function parseRow(page: NotionPage, config: ShoppingWorkerConfig): { item: Shopp
 function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewResponse, fingerprint: string, reviewedAt: number): Record<string, unknown> {
   const labels = config.statusLabels;
   const status = review.status === "related_warnings" ? labels.found : review.status === "no_related_warnings" ? labels.none : labels.unable;
-  const lines = review.notices.slice(0, 5).map((notice) => {
-    const date = notice.date ? ` (${notice.date.slice(0, 40)})` : "";
+  const sourceQualifications = review.warnings ?? [];
+  const qualification = sourceQualifications[0]?.slice(0, 500) ?? "";
+  let omitted = sourceQualifications.length > 1 || (sourceQualifications[0]?.length ?? 0) > 500 || review.notices.length > 5;
+  const lines: string[] = [];
+  let remaining = MAX_WARNING_OUTPUT_CHARS - qualification.length - (qualification ? 1 : 0) - WARNING_OMISSION_NOTE.length - 1;
+  for (const notice of review.notices.slice(0, 5)) {
+    const titleWasShortened = notice.title.length > 180;
+    const title = notice.title.slice(0, 180) + (titleWasShortened ? "…" : "");
+    const dateWasShortened = (notice.date?.length ?? 0) > 100;
+    const date = notice.date ? ` (${notice.date.slice(0, 100)}${dateWasShortened ? "…" : ""})` : "";
     const incomplete = notice.relationshipsComplete === false || (notice.relationshipCount !== undefined && notice.relationshipsShown !== undefined && notice.relationshipCount > notice.relationshipsShown);
-    const reasonText = [notice.reason, incomplete ? "Some affected product groups are omitted; inspect the official notice." : undefined].filter(Boolean).join(" ");
-    const reason = reasonText ? ` — ${reasonText.slice(0, 180)}` : "";
+    const incompleteText = incomplete ? "Some affected product groups are omitted; inspect the official notice." : "";
+    const evidence = notice.reason ?? "";
+    const detailsOmittedText = "… [earlier notice details omitted]";
+    const reasonWasShortened = evidence.length > 800;
+    const reasonText = `${evidence.slice(0, 800)}${reasonWasShortened ? detailsOmittedText : ""}${incompleteText ? ` ${incompleteText}` : ""}`;
+    const reason = reasonText ? ` — ${reasonText}` : "";
     const url = safeHttpsUrl(notice.url);
-    return `${notice.title.slice(0, 180)}${date}${reason}${url ? ` ${url}` : ""}`;
-  });
-  const warnings = (review.warnings ?? []).slice(0, 4).map((warning) => warning.slice(0, 180));
-  const text = [...lines, ...warnings].join("\n").slice(0, 1_900);
+    const urlNote = notice.url && !url ? " [official notice link omitted]" : "";
+    const shorteningNote = titleWasShortened || dateWasShortened ? " [notice details shortened]" : "";
+    const baseLine = `${title}${date}${reason}${urlNote}${shorteningNote}`;
+    const line = `${baseLine}${url ? ` ${url}` : ""}`;
+    const separator = qualification || lines.length ? 1 : 0;
+    if (line.length + separator <= remaining) {
+      lines.push(line);
+      remaining -= line.length + separator;
+      omitted ||= titleWasShortened || dateWasShortened || reasonWasShortened || Boolean(urlNote);
+      continue;
+    }
+    omitted = true;
+    if (url) {
+      const withoutUrl = `${baseLine} [official notice link omitted to preserve notice details]`;
+      if (withoutUrl.length + separator <= remaining) {
+        lines.push(withoutUrl);
+        remaining -= withoutUrl.length + separator;
+      }
+    }
+  }
+  const parts = [...(qualification ? [qualification] : []), ...lines];
+  if (omitted) parts.push(WARNING_OMISSION_NOTE);
+  const text = parts.join("\n");
   const p = config.notionProperties;
   return {
     [decodePropertyId(p.relatedWarnings.id)]: { rich_text: text ? [{ type: "text", text: { content: text } }] : [] },
@@ -609,7 +677,7 @@ async function validateSelectedDataSource(notion: NotionClient, config: Shopping
 }
 function safeHttpsUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  try { const url = new URL(value); return url.protocol === "https:" ? url.toString().slice(0, 300) : undefined; } catch { return undefined; }
+  try { const url = new URL(value); const normalized = url.toString(); return url.protocol === "https:" && normalized.length <= 300 ? normalized : undefined; } catch { return undefined; }
 }
 async function isBlocked(response: Response): Promise<boolean> {
   try { const body = await response.clone().json() as { additional_data?: { rate_limit_reason?: string } }; return body.additional_data?.rate_limit_reason === "public_api_request_blocked"; } catch { return false; }

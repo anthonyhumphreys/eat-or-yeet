@@ -89,6 +89,14 @@ describe("shopping review contract", () => {
     expect(ReviewShoppingInputSchema.safeParse({ region: "UK", items: Array.from({ length: 20 }, (_, i) => shoppingItem({ id: `row-${i}` })) }).success).toBe(true);
     expect(ReviewShoppingInputSchema.safeParse({ region: "UK", items: Array.from({ length: 21 }, (_, i) => shoppingItem({ id: `row-${i}` })) }).success).toBe(false);
     expect(ReviewShoppingInputSchema.safeParse({ region: "UK", items: [shoppingItem({ extra: true } as never)] }).success).toBe(false);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [shoppingItem({ barcode: "400638 1333 931" })],
+    }).success).toBe(true);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [shoppingItem({ barcode: "400638 1333 932" })],
+    }).success).toBe(false);
   });
 });
 
@@ -176,6 +184,27 @@ describe("reviewShoppingItems", () => {
         "row-1": names[1] === "Egg white bread" ? ["bread-warning", "egg-warning"] : ["bread-warning"],
       });
     }
+  });
+
+  it("recognizes milk in chocolate milk without treating milk chocolate as milk", async () => {
+    const warnings = [
+      incident("chocolate-milk", "UK", [target("chocolate-milk", "product", "Chocolate milk")]),
+      incident("milk-chocolate", "UK", [target("milk-chocolate", "product", "Milk chocolate")]),
+    ];
+    mocks.dataset.mockResolvedValue({ incidents: warnings, status: healthyStatus("UK") });
+
+    const review = await reviewShoppingItems({
+      region: "UK",
+      items: [
+        shoppingItem({ id: "milk", name: "Milk" }),
+        shoppingItem({ id: "choc-milk", name: "Chocolate milk" }),
+      ],
+    });
+
+    expect(review.items.map(({ id, relatedWarnings }) => [id, relatedWarnings.map(({ warning }) => warning.slug)])).toEqual([
+      ["milk", ["chocolate-milk"]],
+      ["choc-milk", ["chocolate-milk"]],
+    ]);
   });
 
   it.each([

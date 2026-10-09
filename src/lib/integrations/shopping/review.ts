@@ -51,8 +51,8 @@ function foodClasses(value: string): FoodClass[] {
 
   // These compounds name other foods; ingredient-like tokens must not make them
   // candidates for the standalone class (milk chocolate, peanut butter, etc.).
-  const chocolateMilkDrink = /\bchocolate milk (?:drink|drinks|beverage|beverages)\b/.test(words);
-  if (classes.has("milk") && classes.has("chocolate") && !chocolateMilkDrink) classes.delete("milk");
+  if (classes.has("milk") && classes.has("chocolate") && /\bmilk chocolate\b/.test(words)) classes.delete("milk");
+  if (classes.has("milk") && classes.has("chocolate") && /\bchocolate milk\b/.test(words)) classes.delete("chocolate");
   if (classes.has("eggs") && classes.has("chocolate") && /\bchocolate eggs?\b/.test(words)) classes.delete("eggs");
   if (classes.has("butter") && /\b(?:peanuts?|almonds?|nuts?) butter\b|\bbutter (?:cookies?|biscuits?)\b/.test(words)) {
     classes.delete("butter");

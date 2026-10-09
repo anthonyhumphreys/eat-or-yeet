@@ -8,7 +8,7 @@ const shoppingItemSchema = z.strictObject({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(200),
   brand: z.string().trim().min(1).max(200).optional(),
-  barcode: z.string().trim().max(14).refine(isValidGtin, "Enter a valid GTIN barcode.").optional(),
+  barcode: z.string().trim().max(300).refine(isValidGtin, "Enter a valid GTIN barcode.").optional(),
   bought: z.boolean().default(false),
 });
 
