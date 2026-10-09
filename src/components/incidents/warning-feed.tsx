@@ -1,4 +1,4 @@
-import { ArrowRight, ScanBarcode } from "lucide-react";
+import { ArrowDown, ArrowRight, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -7,11 +7,14 @@ import { RegionalNews } from "@/components/news/regional-news";
 import { listActivePublicIncidents } from "@/db/queries";
 import { foodCategories, type FoodCategory } from "@/lib/incidents/browse";
 import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/hazard";
+import { formatRecallDate, pickTopAlert, timeAgo } from "@/lib/incidents/recency";
 import { type WarningRegion } from "@/lib/location";
-
-import styles from "./warning-feed.module.css";
+import { getFoodSafetyNews } from "@/lib/news/feed";
+import { newsForRegion } from "@/lib/news/related";
 
 export type WarningParams = Record<string, string | string[] | undefined>;
+
+const HOME_NEWS_LIMIT = 8;
 
 function param(params: WarningParams, key: string) {
   const value = params[key];
@@ -20,8 +23,9 @@ function param(params: WarningParams, key: string) {
 
 export async function WarningFeed({ params, region, path }: { params: WarningParams; region: WarningRegion; path: "/" | "/incidents" }) {
   const [warnings] = await Promise.allSettled([listActivePublicIncidents(region)]);
-  const rows: ExplorerRow[] | null = warnings.status === "fulfilled"
-    ? warnings.value.filter((row) => row.region === region).map((row) => ({
+  const regional = warnings.status === "fulfilled" ? warnings.value.filter((row) => row.region === region) : null;
+  const rows: ExplorerRow[] | null = regional
+    ? regional.map((row) => ({
       id: row.id,
       slug: row.slug,
       title: row.title,
@@ -31,39 +35,82 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       hazard: classifyHazard(row),
     }))
     : null;
+  const top = rows ? pickTopAlert(rows) : undefined;
   const category = param(params, "category");
   const hazard = param(params, "hazard");
   const page = param(params, "page");
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-12">
-      <WarningExplorer
-        rows={rows}
-        region={region}
-        path={path}
-        initialPage={page && /^\d{1,3}$/.test(page) ? Math.max(1, Number(page)) : 1}
-        initial={{
-          q: (param(params, "q") ?? "").slice(0, 120),
-          hazard: hazardKinds.includes(hazard as HazardKind) ? hazard as HazardKind : undefined,
-          category: foodCategories.includes(category as FoodCategory) ? category as FoodCategory : undefined,
-          store: param(params, "store")?.slice(0, 120) || undefined,
-        }}
-      />
-      <aside className="space-y-10 lg:sticky lg:top-6 lg:self-start">
-        <section className={`${styles.scanPanel} hidden rounded-xl bg-secondary p-6 lg:block`}>
-          <div className={styles.scanPreview} aria-hidden>
-            <ScanBarcode className="size-14 text-secondary-foreground" strokeWidth={1.25} />
-            <span className={styles.scanLine} />
-          </div>
-          <h2 className="mt-4 text-xl font-black leading-tight tracking-tight">Got the pack in your hand?</h2>
-          <p className="mt-2 text-sm leading-6 text-secondary-foreground">Scan the barcode, add a batch code or date if you can read one, and compare it with published warnings.</p>
-          <Link href="/scan" className="mt-5 flex min-h-12 items-center justify-between gap-3 rounded-full bg-foreground px-5 text-sm font-bold text-background transition-colors hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Scan a barcode<ArrowRight className="size-4" aria-hidden /></Link>
-          <Link href="/search" className="mt-1 inline-flex min-h-11 items-center rounded-sm text-sm font-semibold text-secondary-foreground underline underline-offset-4 hover:decoration-2 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Type the number instead</Link>
-        </section>
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
+      <div className="min-w-0">
+        {top ? <TopAlert row={top} summary={regional?.find((row) => row.id === top.id)?.summary} /> : null}
         <Suspense key={region} fallback={null}>
-          <RegionalNews region={region} />
+          <NewsButton region={region} />
+        </Suspense>
+        <div className="mt-6">
+          <WarningExplorer
+            rows={rows}
+            region={region}
+            path={path}
+            initialPage={page && /^\d{1,3}$/.test(page) ? Math.max(1, Number(page)) : 1}
+            initial={{
+              q: (param(params, "q") ?? "").slice(0, 120),
+              hazard: hazardKinds.includes(hazard as HazardKind) ? hazard as HazardKind : undefined,
+              category: foodCategories.includes(category as FoodCategory) ? category as FoodCategory : undefined,
+              store: param(params, "store")?.slice(0, 120) || undefined,
+            }}
+          />
+        </div>
+      </div>
+      {/* On wide screens the news runs down beside the list, level with the top alert. On phones it follows the list. */}
+      <aside id="news" className="min-w-0 scroll-mt-4">
+        <Suspense key={region} fallback={null}>
+          <RegionalNews region={region} limit={HOME_NEWS_LIMIT} />
         </Suspense>
       </aside>
     </div>
+  );
+}
+
+/** The one recall to see first: the newest food-poisoning recall this month, otherwise the newest recall. */
+function TopAlert({ row, summary }: { row: ExplorerRow; summary?: string }) {
+  return (
+    <Link
+      href={`/incidents/${row.slug}`}
+      className="group block rounded-xl border bg-card p-4 transition-colors hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:p-5"
+    >
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-yeet px-2.5 py-0.5 text-xs font-bold text-white dark:text-background">
+          <TriangleAlert className="size-3.5" aria-hidden />Top alert · {row.hazard.label}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          <time dateTime={new Date(row.updatedAt).toISOString()} className="tabular-nums">{formatRecallDate(row.updatedAt)}</time> · {timeAgo(row.updatedAt)}
+        </span>
+      </span>
+      <span className="mt-2 block break-words text-lg font-black leading-snug tracking-tight sm:text-2xl">{row.title}</span>
+      {summary ? <span className="mt-1.5 hidden max-w-[65ch] text-sm leading-6 text-muted-foreground sm:line-clamp-2">{summary}</span> : null}
+      <span className="mt-3 hidden items-center gap-1 text-sm font-bold text-link sm:inline-flex">
+        See full warning<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </span>
+    </Link>
+  );
+}
+
+/** Same shape as the top alert, so it reads as the second thing to look at. Hidden where the news is already beside the list. */
+async function NewsButton({ region }: { region: WarningRegion }) {
+  const feed = await getFoodSafetyNews().catch(() => null);
+  const count = feed ? Math.min(newsForRegion(feed.articles, region).length, HOME_NEWS_LIMIT) : 0;
+  if (!count) return null;
+  return (
+    <a
+      href="#news"
+      className="group mt-2 flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-5 lg:hidden"
+    >
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold text-muted-foreground">In the news · {count} {count === 1 ? "story" : "stories"}</span>
+        <span className="block font-bold">See the news</span>
+      </span>
+      <ArrowDown className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" aria-hidden />
+    </a>
   );
 }
