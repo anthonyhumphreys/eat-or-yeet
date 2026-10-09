@@ -19,7 +19,9 @@ Send one JSON-RPC envelope per POST. The route rejects batches and caps the enve
 
 GET and DELETE return 405. OPTIONS supports an explicitly allowed browser origin. Server clients may omit Origin. The canonical `NEXT_PUBLIC_APP_URL`, the platform's `VERCEL_URL`, and optional comma-separated `MCP_ALLOWED_ORIGINS` define allowed hosts/origins. Production origins require HTTPS. Local loopback HTTP is supported only outside production.
 
-Calls have a 20-second deadline and a maximum of eight concurrent HTTP exchanges per process. Modern responses use JSON. Legacy responses retain their finite SSE wire format, buffered under the same deadline so the concurrency slot lasts through completion. Subscription streams are disabled. Cancellation stops waiting and aborts Open Food Facts requests. Convex work and shared cache loads already started may finish, consume allowance and write cache metadata; their late results do not produce a completed check.
+Calls have a 20-second deadline and a maximum of eight concurrent HTTP exchanges per process. Modern responses use JSON. Legacy responses retain their finite SSE wire format, buffered under the same deadline so the concurrency slot lasts through completion. Subscription streams are disabled. Cancellation stops waiting and aborts Open Food Facts requests. Warning searches check cancellation before and after each cached page read, so an in-flight Convex/cache load may finish but no subsequent page is started. The signal is not part of the persistent page-cache key. Other Convex work and shared cache loads already started may finish, consume allowance and write cache metadata; their late results do not produce a completed check.
+
+Complete warning searches support snapshots of up to 5,000 rows (50 backend pages of 100 rows) per revision attempt. A single request makes at most two attempts, bounded to 100 pages and 10,000 rows total, including a retry after a dataset revision change. A larger snapshot fails with a recoverable `snapshot_limit` error and returns no partial results. Search results remain complete within the supported cap.
 
 ## Budgets and privacy
 

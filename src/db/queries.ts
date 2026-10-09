@@ -10,6 +10,10 @@ import type { DatasetStatus, MatchableIncident } from "@/lib/domain/types";
 
 const MATCH_DATA_CACHE_TTL_MS = 5 * 60 * 1_000;
 const MAX_MATCH_DATA_CACHE_ENTRIES = 4;
+const MAX_PUBLIC_SNAPSHOT_ROWS_PER_REVISION = 5_000;
+const MAX_PUBLIC_SNAPSHOT_PAGES_PER_REVISION = 50;
+const MAX_PUBLIC_SNAPSHOT_ROWS_PER_REQUEST = MAX_PUBLIC_SNAPSHOT_ROWS_PER_REVISION * 2;
+const MAX_PUBLIC_SNAPSHOT_PAGES_PER_REQUEST = MAX_PUBLIC_SNAPSHOT_PAGES_PER_REVISION * 2;
 
 type Region = "UK" | "US";
 
@@ -167,13 +171,47 @@ const cachedPublicListPage = unstable_cache(
 
 type PublicIncidentRow = Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number];
 
-async function listPublicRegion(region: Region, url: string, requestedVersion?: string) {
+export class WarningSnapshotLimitError extends Error {
+  readonly recoverable = true;
+
+  constructor() {
+    super("The complete warning dataset exceeds the supported search limit. No partial results were returned.");
+    this.name = "WarningSnapshotLimitError";
+  }
+}
+
+type SnapshotReadBudget = { pages: number; rows: number };
+
+async function listPublicRegion(
+  region: Region,
+  url: string,
+  requestedVersion?: string,
+  options: { signal?: AbortSignal; budget?: SnapshotReadBudget } = {},
+) {
   const version = requestedVersion ?? await fetchQuery(api.incidents.getDatasetVersion, { region }, { url });
   const rows: Array<Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number]> = [];
+  const budget = options.budget;
+  let revisionPages = 0;
+  let revisionRows = 0;
   let cursor: string | null = null;
   let isDone = false;
   while (!isDone) {
+    options.signal?.throwIfAborted();
+    if (budget && (revisionPages >= MAX_PUBLIC_SNAPSHOT_PAGES_PER_REVISION || budget.pages >= MAX_PUBLIC_SNAPSHOT_PAGES_PER_REQUEST)) {
+      throw new WarningSnapshotLimitError();
+    }
+    revisionPages += 1;
+    if (budget) budget.pages += 1;
     const page = await cachedPublicListPage(region, cursor, url, version);
+    options.signal?.throwIfAborted();
+    if (budget && (
+      revisionRows + page.page.length > MAX_PUBLIC_SNAPSHOT_ROWS_PER_REVISION ||
+      budget.rows + page.page.length > MAX_PUBLIC_SNAPSHOT_ROWS_PER_REQUEST
+    )) {
+      throw new WarningSnapshotLimitError();
+    }
+    revisionRows += page.page.length;
+    if (budget) budget.rows += page.page.length;
     rows.push(...page.page);
     cursor = page.continueCursor;
     isDone = page.isDone;
@@ -195,19 +233,23 @@ async function currentPublicRegion(region: Region, url: string) {
 }
 
 /** A complete, revision-keyed public snapshot with eligibility boundaries retained. */
-export async function getPublicWarningSnapshot(region: Region): Promise<{
+export async function getPublicWarningSnapshot(region: Region, options: { signal?: AbortSignal } = {}): Promise<{
   rows: PublicIncidentRow[];
   revision: string;
   asOf: number;
   status: DatasetStatus;
 }> {
   const url = deploymentUrl();
+  const budget: SnapshotReadBudget = { pages: 0, rows: 0 };
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    options.signal?.throwIfAborted();
     const { version: revision, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
+    options.signal?.throwIfAborted();
     try {
-      const rows = await listPublicRegion(region, url, revision);
+      const rows = await listPublicRegion(region, url, revision, { signal: options.signal, budget });
       return { rows, revision, asOf: Date.now(), status };
     } catch (error) {
+      if (options.signal?.aborted) options.signal.throwIfAborted();
       if (attempt === 1 || !revisionChanged(error)) throw error;
     }
   }

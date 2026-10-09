@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/db/queries", () => ({ getRegionCoverage: vi.fn() }));
+vi.mock("@/db/queries", () => ({
+  getRegionCoverage: vi.fn(),
+  WarningSnapshotLimitError: class extends Error {},
+}));
 vi.mock("@/lib/checks/service", () => ({ checkProduct: vi.fn() }));
 vi.mock("@/lib/incidents/details", () => ({ getWarningDetails: vi.fn(), WarningDetailsCursorError: class extends Error {} }));
+vi.mock("@/lib/incidents/search", () => ({
+  searchWarnings: vi.fn(),
+  WarningSearchCursorError: class extends Error {},
+}));
 vi.mock("@/lib/security/integration-rate-limit", () => ({ takeIntegrationRateLimits: vi.fn() }));
 vi.mock("@/lib/integrations/serialize", () => ({ serializeCoverage: vi.fn((value) => value), serializeCheckResult: vi.fn((value) => value), serializeSearchResult: vi.fn((value) => value), PublicResponseTooLargeError: class extends Error {} }));
 vi.mock("@/lib/integrations/shopping/review", () => ({ reviewShoppingItems: vi.fn() }));
@@ -11,8 +18,10 @@ import { getRegionCoverage } from "@/db/queries";
 import { checkProduct } from "@/lib/checks/service";
 import { getWarningDetails } from "@/lib/incidents/details";
 import { reviewShoppingItems } from "@/lib/integrations/shopping/review";
+import { searchWarnings } from "@/lib/incidents/search";
 import { executeTool, untilAborted } from "@/lib/integrations/mcp/services";
 import { takeIntegrationRateLimits } from "@/lib/security/integration-rate-limit";
+import { WarningSnapshotLimitError } from "@/db/queries";
 
 const context = () => ({ signal: new AbortController().signal, network: "network:ipv4:198.51.100.1" });
 
@@ -74,6 +83,18 @@ describe("MCP application boundary", () => {
     vi.mocked(takeIntegrationRateLimits).mockImplementationOnce(async () => { inFlight.abort(); return []; });
     await expect(executeTool("get_coverage", { region: "US" }, { ...context(), signal: inFlight.signal })).rejects.toMatchObject({ code: "interrupted" });
     expect(getRegionCoverage).not.toHaveBeenCalled();
+  });
+
+  it("passes request cancellation into searches and returns a qualified snapshot-cap error", async () => {
+    const current = context();
+    vi.mocked(searchWarnings).mockRejectedValueOnce(new WarningSnapshotLimitError());
+
+    await expect(executeTool("search_warnings", { region: "UK" }, current)).rejects.toMatchObject({
+      code: "snapshot_limit",
+      recoverable: true,
+      message: expect.stringMatching(/complete warning search.*No partial results/i),
+    });
+    expect(searchWarnings).toHaveBeenCalledWith({ region: "UK", pageSize: 20 }, { signal: current.signal });
   });
 
   it("settles promptly on abort even while an uncancellable dependency finishes later", async () => {

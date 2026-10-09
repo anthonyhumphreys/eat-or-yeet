@@ -129,10 +129,15 @@ function matches(row: BrowseRow, filters: Filters): boolean {
 }
 
 /** Complete regional warning search over the cached public snapshot. */
-export async function searchWarnings(input: SearchWarningsInput): Promise<SearchWarningsResult> {
+export async function searchWarnings(
+  input: SearchWarningsInput,
+  options: { signal?: AbortSignal } = {},
+): Promise<SearchWarningsResult> {
+  options.signal?.throwIfAborted();
   const filters = normalizedFilters(input);
   const pageSize = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(input.pageSize ?? MAX_PAGE_SIZE)));
-  const snapshot = await getPublicWarningSnapshot(input.region);
+  const snapshot = await getPublicWarningSnapshot(input.region, options);
+  options.signal?.throwIfAborted();
   let offset = 0;
   let asOf = snapshot.asOf;
   let boundaryAt = nextEligibilityBoundary(snapshot.rows, asOf);
