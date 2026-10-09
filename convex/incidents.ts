@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
 import { fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
@@ -204,8 +204,12 @@ export const listActivePage = query({
     region: v.union(v.literal("UK"), v.literal("US")),
     cursor: v.union(v.string(), v.null()),
     snapshot: v.optional(v.boolean()),
+    expectedVersion: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if (args.expectedVersion !== undefined && args.expectedVersion !== await datasetVersion(ctx, args.region)) {
+      throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
+    }
     const now = args.snapshot ? 0 : Date.now();
     const page = await ctx.db
       .query("incidentMatchData")

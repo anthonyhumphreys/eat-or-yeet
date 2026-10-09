@@ -1,4 +1,5 @@
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { query, entries } = vi.hoisted(() => ({ query: vi.fn(), entries: new Map<string, Promise<unknown>>() }));
@@ -82,6 +83,43 @@ describe("warning data caches", () => {
     expect((await db.getRegionCoverage("UK")).healthy).toBe(true);
     expect(calls("getDatasetStatus")).toHaveLength(1);
     expect(calls("listActivePage")).toHaveLength(0);
+  });
+
+  it("restarts the full traversal and source status when an import changes a later page", async () => {
+    const implementation = query.getMockImplementation()!;
+    query.mockImplementation(async (ref, args) => {
+      if (getFunctionName(ref) !== "incidents:listActivePage") return implementation(ref, args);
+      if (args.expectedVersion === "UK:initial" && args.cursor === null) {
+        return { page: [{ ...row, id: "old" }], isDone: false, continueCursor: "later" };
+      }
+      if (args.expectedVersion === "UK:initial") {
+        revision = "UK:changed:1";
+        healthy = false;
+        throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
+      }
+      return { page: [{ ...row, id: "new", title: "Updated recall" }], isDone: true, continueCursor: "done" };
+    });
+    const db = await import("@/db/queries");
+    const snapshot = await db.getPublicWarningSnapshot("UK");
+    expect(snapshot.rows.map((item) => item.id)).toEqual(["new"]);
+    expect(snapshot.revision).toBe("UK:changed:1");
+    expect(snapshot.status.healthy).toBe(false);
+    expect(calls("getDatasetStatus")).toHaveLength(2);
+    expect(calls("listActivePage").map(([, args]) => args.expectedVersion)).toEqual(["UK:initial", "UK:initial", "UK:changed:1"]);
+  });
+
+  it("fails closed after two revision changes instead of returning a mixed complete snapshot", async () => {
+    const implementation = query.getMockImplementation()!;
+    query.mockImplementation(async (ref, args) => {
+      if (getFunctionName(ref) === "incidents:listActivePage") {
+        revision += ":changed";
+        throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
+      }
+      return implementation(ref, args);
+    });
+    const db = await import("@/db/queries");
+    await expect(db.getPublicWarningSnapshot("UK")).rejects.toMatchObject({ data: { code: "DATASET_REVISION_CHANGED" } });
+    expect(calls("getDatasetStatus")).toHaveLength(2);
   });
 
   it("invalidates pages when a warning changes, including a partial import", async () => {

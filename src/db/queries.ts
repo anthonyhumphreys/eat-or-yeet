@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchQuery } from "convex/nextjs";
+import { ConvexError } from "convex/values";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -158,9 +159,9 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
 const cachedPublicListPage = unstable_cache(
   async (region: Region, cursor: string | null, url: string, version: string) => {
     void version;
-    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true }, { url });
+    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version }, { url });
   },
-  ["public-warning-page-v4"],
+  ["public-warning-page-v5"],
   { revalidate: false },
 );
 
@@ -180,6 +181,19 @@ async function listPublicRegion(region: Region, url: string, requestedVersion?: 
   return rows;
 }
 
+function revisionChanged(error: unknown) {
+  return error instanceof ConvexError && typeof error.data === "object" && error.data !== null
+    && "code" in error.data && error.data.code === "DATASET_REVISION_CHANGED";
+}
+
+async function currentPublicRegion(region: Region, url: string) {
+  try { return await listPublicRegion(region, url); }
+  catch (error) {
+    if (!revisionChanged(error)) throw error;
+    return listPublicRegion(region, url);
+  }
+}
+
 /** A complete, revision-keyed public snapshot with eligibility boundaries retained. */
 export async function getPublicWarningSnapshot(region: Region): Promise<{
   rows: PublicIncidentRow[];
@@ -188,9 +202,16 @@ export async function getPublicWarningSnapshot(region: Region): Promise<{
   status: DatasetStatus;
 }> {
   const url = deploymentUrl();
-  const { version: revision, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
-  const rows = await listPublicRegion(region, url, revision);
-  return { rows, revision, asOf: Date.now(), status };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { version: revision, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
+    try {
+      const rows = await listPublicRegion(region, url, revision);
+      return { rows, revision, asOf: Date.now(), status };
+    } catch (error) {
+      if (attempt === 1 || !revisionChanged(error)) throw error;
+    }
+  }
+  throw new Error("A consistent warning snapshot could not be loaded.");
 }
 
 /** Reads source health without loading or traversing the public warning dataset. */
@@ -204,8 +225,8 @@ export async function getRegionCoverage(region: Region): Promise<DatasetStatus> 
 // Only public browsing is cached here. Check requests still read source health every time.
 export async function listActivePublicIncidents(region?: Region) {
   const url = deploymentUrl();
-  const rows = region ? await listPublicRegion(region, url)
-    : (await Promise.all([listPublicRegion("UK", url), listPublicRegion("US", url)])).flat();
+  const rows = region ? await currentPublicRegion(region, url)
+    : (await Promise.all([currentPublicRegion("UK", url), currentPublicRegion("US", url)])).flat();
   const now = Date.now();
   return rows
     .filter((row) => activeAt(row, now))
