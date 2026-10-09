@@ -25,7 +25,7 @@ Use the endpoint only after a reviewer confirms the release gate is open. All sn
 
 ### Codex CLI and desktop
 
-Codex reads MCP servers from `~/.codex/config.toml` (shared by CLI and IDE) and supports `codex mcp add`:
+Codex reads MCP servers from `~/.codex/config.toml` (shared by the desktop app, CLI and IDE) and supports `codex mcp add`:
 
 ```sh
 codex mcp add eat-or-yeet --url "$MCP_URL"
@@ -40,6 +40,19 @@ url = "https://eatoryeet.app/mcp"
 ```
 
 Then restart/reload the MCP client if needed, inspect the discovered tool names, and run the acceptance cases below. Configuring the URL does not make the production endpoint available while its release gate is off. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+
+For a server already running locally with `MCP_ENABLED=true`, register the test connection in the desktop client's configuration:
+
+```sh
+codex mcp add eat-or-yeet-test --url http://localhost:3000/mcp
+codex mcp get eat-or-yeet-test
+```
+
+Reload the client's MCP configuration or restart the desktop app, then start a new chat and ask: “Use eat-or-yeet-test. Check barcode 044000061494 in the US.” Keep the local server running. Missing local recall coverage should produce an inconclusive result.
+
+If the tool returns a result but the card says “Couldn't display”, inspect the resource-loader error separately. An `unknown MCP server 'eat-or-yeet-test'` error means the loader cannot resolve that server name; confirm the same name is registered and reload the client before changing the widget. Successful tool output alone does not prove that the UI loader has an active connection.
+
+On 9 October 2026, a supplied local desktop trace identified Oreo and returned the expected qualified, inconclusive US result. The matching desktop log showed `resources/read` failing with `unknown MCP server 'eat-or-yeet-test'` before receiving any HTML. Registration was absent and was added through the CLI. A successful desktop UI retry remains unverified; this run does not establish host acceptance.
 
 ### Cursor
 
@@ -82,6 +95,8 @@ n8n documents Bearer, generic header, multiple-header, and OAuth2 credentials fo
 ### ChatGPT plugin / custom MCP connection
 
 For a manual private acceptance connection, use ChatGPT's **Add custom MCP server** flow in the Plugins area, enter the test endpoint, review the risk notice, and create a plugin. This requires an account and UI access; the person testing must confirm the connection and tool list in ChatGPT. The local plugin package schema check is not a connection test.
+
+ChatGPT web needs a reachable test endpoint or a configured secure MCP tunnel. Its `localhost` cannot reach the developer's machine. The direct loopback recipe above applies to the local desktop MCP client. [Secure MCP tunnels](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
 
 The portable package uses root `plugin.json` and root `mcp.json`; `mcp.json` declares `type: "streamable-http"` and the server URL. Its manifest points to `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`; the MCP file points to `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`. OpenAI-specific metadata belongs under `extensions.com.openai`. Keep the OpenAI compatibility layer on the shared MCP Apps `ui/*` JSON-RPC `postMessage` bridge and `_meta.ui.resourceUri`; do not make `window.openai` required for core rendering. A ChatGPT UI acceptance run still needs to exercise this app through a real account.
 
