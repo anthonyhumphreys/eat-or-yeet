@@ -10,14 +10,17 @@ vi.mock("@/lib/products/enrich", () => ({ enrichObservation: vi.fn(async (observ
 vi.mock("@/lib/security/anonymous", () => ({
   anonymousSubject: vi.fn(() => ({ id: "test-user" })),
   attachAnonymousCookie: vi.fn(),
-  trustedNetworkSubject: vi.fn(() => null),
+  trustedNetworkSubject: vi.fn(() => "test-network"),
 }));
-vi.mock("@/lib/security/rate-limit", () => ({ takeRateLimit: vi.fn(async () => ({ allowed: true, limit: 120, remaining: 119, resetAt: new Date() })) }));
+vi.mock("@/lib/security/rate-limit", () => ({ takeRateLimits: vi.fn(async () => [
+  { scope: "anonymous", allowed: true, limit: 120, remaining: 119, resetAt: new Date() },
+  { scope: "network", allowed: true, limit: 600, remaining: 599, resetAt: new Date() },
+]) }));
 
 import { getCheckDataset } from "@/db/queries";
 import { POST } from "@/app/api/check/route";
 import { emptyObservation } from "@/lib/domain/schemas";
-import { takeRateLimit } from "@/lib/security/rate-limit";
+import { takeRateLimits } from "@/lib/security/rate-limit";
 
 const healthyDataset = {
   incidents: [],
@@ -57,7 +60,7 @@ describe("POST /api/check", () => {
   });
 
   it("returns JSON 503 when the rate-limit datastore is unavailable", async () => {
-    vi.mocked(takeRateLimit).mockRejectedValueOnce(new Error("Convex unavailable"));
+    vi.mocked(takeRateLimits).mockRejectedValueOnce(new Error("Convex unavailable"));
     const request = new Request("http://localhost/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -67,6 +70,23 @@ describe("POST /api/check", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ error: expect.any(String) });
+    expect(getCheckDataset).not.toHaveBeenCalled();
+  });
+
+  it.each(["anonymous", "network"] as const)("rejects a check when the %s bucket is over its cap", async (scope) => {
+    vi.mocked(takeRateLimits).mockResolvedValueOnce([
+      { scope: "anonymous", allowed: scope !== "anonymous", limit: 120, remaining: 0, resetAt: new Date() },
+      { scope: "network", allowed: scope !== "network", limit: 600, remaining: 0, resetAt: new Date() },
+    ]);
+    const request = new Request("http://localhost/api/check", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observation: emptyObservation(), region: "UK" }),
+    });
+
+    const response = await POST(request as never);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("0");
     expect(getCheckDataset).not.toHaveBeenCalled();
   });
 });

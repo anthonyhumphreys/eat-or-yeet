@@ -13,7 +13,7 @@ vi.mock("@/lib/security/anonymous", () => ({
   attachAnonymousCookie: vi.fn(),
   trustedNetworkSubject: () => null,
 }));
-vi.mock("@/lib/security/rate-limit", () => ({ takeRateLimit: async () => ({ allowed: true, remaining: 119 }) }));
+vi.mock("@/lib/security/rate-limit", () => ({ takeRateLimits: async () => [{ scope: "anonymous", allowed: true, limit: 120, remaining: 119, resetAt: new Date() }] }));
 
 const checkedAt = "2026-10-08T12:00:00.000Z";
 const status: DatasetStatus = { healthy: true, checkedAt, regions: ["US"], sources: [] };
@@ -35,7 +35,7 @@ async function checkOreo(barcode = "044000061494") {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
-  mocks.query.mockResolvedValue(null);
+  mocks.query.mockResolvedValue({ product: null, metadata: null });
   mocks.mutation.mockResolvedValue(null);
   mocks.dataset.mockResolvedValue({ incidents: [unrelatedIncident], status });
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(oreoMetadata))));

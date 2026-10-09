@@ -5,10 +5,13 @@ vi.mock("convex/nextjs", () => ({ fetchMutation: vi.fn(async () => undefined) })
 vi.mock("@/lib/security/anonymous", () => ({
   anonymousSubject: vi.fn(() => ({ id: "test-user" })),
   attachAnonymousCookie: vi.fn(),
-  trustedNetworkSubject: vi.fn(() => null),
+  trustedNetworkSubject: vi.fn(() => "test-network"),
 }));
 vi.mock("@/lib/security/rate-limit", () => ({
-  takeRateLimit: vi.fn(async () => ({ allowed: true, limit: 20, remaining: 19, resetAt: new Date() })),
+  takeRateLimits: vi.fn(async () => [
+    { scope: "anonymous", allowed: true, limit: 20, remaining: 19, resetAt: new Date() },
+    { scope: "network", allowed: true, limit: 100, remaining: 99, resetAt: new Date() },
+  ]),
 }));
 vi.mock("@/lib/security/share-token", () => ({
   verifyShareToken: vi.fn(() => ({
@@ -26,7 +29,7 @@ vi.mock("@/lib/security/share-token", () => ({
 
 import { fetchMutation } from "convex/nextjs";
 import { POST } from "@/app/api/share/route";
-import { takeRateLimit } from "@/lib/security/rate-limit";
+import { takeRateLimits } from "@/lib/security/rate-limit";
 import { verifyShareToken } from "@/lib/security/share-token";
 
 const originalNodeEnv = process.env.NODE_ENV;
@@ -48,7 +51,10 @@ describe("POST /api/share", () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
     process.env.CONVEX_SERVER_SECRET = "test-only-convex-secret";
     vi.mocked(fetchMutation).mockResolvedValue(undefined as never);
-    vi.mocked(takeRateLimit).mockResolvedValue({ allowed: true, limit: 20, remaining: 19, resetAt: new Date() });
+    vi.mocked(takeRateLimits).mockResolvedValue([
+      { scope: "anonymous", allowed: true, limit: 20, remaining: 19, resetAt: new Date() },
+      { scope: "network", allowed: true, limit: 100, remaining: 99, resetAt: new Date() },
+    ]);
     vi.mocked(verifyShareToken).mockReturnValue({
       verdict: "YEET",
       matchLevel: "probable",
@@ -101,7 +107,7 @@ describe("POST /api/share", () => {
 
     expect(response.status).toBe(503);
     expect(fetchMutation).not.toHaveBeenCalled();
-    expect(takeRateLimit).not.toHaveBeenCalled();
+    expect(takeRateLimits).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -118,7 +124,7 @@ describe("POST /api/share", () => {
 
     expect(response.status).toBe(503);
     expect(fetchMutation).not.toHaveBeenCalled();
-    expect(takeRateLimit).not.toHaveBeenCalled();
+    expect(takeRateLimits).not.toHaveBeenCalled();
   });
 
   it("uses a configured HTTPS origin even when the request host is malicious", async () => {
@@ -157,5 +163,17 @@ describe("POST /api/share", () => {
 
     expect(response.status).toBe(413);
     expect(verifyShareToken).not.toHaveBeenCalled();
+  });
+
+  it.each(["anonymous", "network"] as const)("rejects a share when the %s bucket is over its cap", async (scope) => {
+    vi.mocked(takeRateLimits).mockResolvedValueOnce([
+      { scope: "anonymous", allowed: scope !== "anonymous", limit: 20, remaining: 0, resetAt: new Date() },
+      { scope: "network", allowed: scope !== "network", limit: 100, remaining: 0, resetAt: new Date() },
+    ]);
+
+    const response = await POST(shareRequest(JSON.stringify({ token: "a".repeat(60) })));
+
+    expect(response.status).toBe(429);
+    expect(fetchMutation).not.toHaveBeenCalled();
   });
 });

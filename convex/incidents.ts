@@ -16,6 +16,8 @@ import { action, internalAction, internalMutation, internalQuery, query, type Ac
 import { requireServerSecret } from "./security";
 import { bumpDatasetVersions, datasetVersion } from "./lib/dataset_version";
 import { sameIncidentContent } from "../src/lib/incidents/unchanged";
+import { incidentFingerprint } from "../src/lib/incidents/fingerprint";
+import { IMPORT_ARCHIVE_AUDIT_MS, invalidateImportState } from "./lib/import_state";
 
 const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource];
 const UPSERT_BATCH_SIZE = 25;
@@ -298,6 +300,8 @@ export const repairLegacyFdaSourceIdsBatch = internalMutation({
         throw new Error(`FDA source ID repair for incident ${row._id} would collide with ${collision._id}`);
       }
 
+      await invalidateImportState(ctx, row.authority, row.sourceId);
+      await invalidateImportState(ctx, row.authority, sourceId);
       await ctx.db.patch(row._id, { sourceId });
       const compact = await ctx.db
         .query("incidentMatchData")
@@ -358,6 +362,19 @@ export const upsertBatch = internalMutation({
     let unchanged = 0;
     const regions = new Set<"UK" | "US">();
     for (const item of items) {
+      const fingerprint = await incidentFingerprint(item);
+      const state = await ctx.db.query("incidentImportState")
+        .withIndex("by_authority_sourceId", (q) => q.eq("authority", item.authority).eq("sourceId", item.sourceId)).unique();
+      const savedMatch = state ? await ctx.db.get(state.matchDataId) : null;
+      const now = Date.now();
+      if (state && state.fingerprint === fingerprint
+        && now >= state.archiveVerifiedAt && now - state.archiveVerifiedAt < IMPORT_ARCHIVE_AUDIT_MS
+        && savedMatch?.incidentId === state.incidentId
+        && sameIncidentContent(savedMatch, compactMatchRecord(state.incidentId, item))) {
+        unchanged += 1;
+        continue;
+      }
+
       const existing = await ctx.db
         .query("incidents")
         .withIndex("by_authority_sourceId", (q) => q.eq("authority", item.authority).eq("sourceId", item.sourceId))
@@ -376,17 +393,33 @@ export const upsertBatch = internalMutation({
       }
 
       const matchRecord = compactMatchRecord(incidentId, item);
-      const existingMatch = await ctx.db
-        .query("incidentMatchData")
-        .withIndex("by_incidentId", (q) => q.eq("incidentId", incidentId))
-        .unique();
+      let existingMatch = savedMatch?.incidentId === incidentId ? savedMatch : null;
+      // If an archive record was deleted outside the importer, relink its
+      // verified projection rather than publishing a second copy of the notice.
+      if (!existingMatch && !existing && state && savedMatch?.incidentId === state.incidentId
+        && savedMatch.authority === item.authority && savedMatch.sourceId === item.sourceId
+        && !await ctx.db.get(state.incidentId)) existingMatch = savedMatch;
+      existingMatch ??= await ctx.db.query("incidentMatchData")
+        .withIndex("by_incidentId", (q) => q.eq("incidentId", incidentId)).unique();
+      let matchDataId = existingMatch?._id;
       if (!existingMatch || !sameIncidentContent(existingMatch, matchRecord)) {
         if (existingMatch) {
           regions.add(existingMatch.region);
           await ctx.db.patch(existingMatch._id, matchRecord);
-        } else await ctx.db.insert("incidentMatchData", matchRecord);
+        } else matchDataId = await ctx.db.insert("incidentMatchData", matchRecord);
         regions.add(item.region);
       }
+      if (!matchDataId) throw new Error("Warning projection was not saved");
+      const importState = {
+        authority: item.authority,
+        sourceId: item.sourceId,
+        incidentId,
+        matchDataId,
+        fingerprint,
+        archiveVerifiedAt: now,
+      };
+      if (state) await ctx.db.patch(state._id, importState);
+      else await ctx.db.insert("incidentImportState", importState);
     }
     await bumpDatasetVersions(ctx, regions);
     return { created, updated, unchanged };
@@ -412,16 +445,17 @@ export const cleanupExpired = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const [shares, limits] = await Promise.all([
+    const [shares, limits, metadata] = await Promise.all([
       ctx.db.query("publicShares").withIndex("by_expiresAt", (q) => q.lt("expiresAt", now)).take(EPHEMERAL_CLEANUP_BATCH_SIZE),
       ctx.db.query("rateLimits").withIndex("by_expiresAt", (q) => q.lt("expiresAt", now)).take(EPHEMERAL_CLEANUP_BATCH_SIZE),
+      ctx.db.query("productMetadataCache").withIndex("by_expiresAt", (q) => q.lt("expiresAt", now)).take(EPHEMERAL_CLEANUP_BATCH_SIZE),
     ]);
-    await Promise.all([...shares, ...limits].map((row) => ctx.db.delete(row._id)));
+    await Promise.all([...shares, ...limits, ...metadata].map((row) => ctx.db.delete(row._id)));
 
-    if (cleanupNeedsContinuation(shares.length, limits.length)) {
+    if (cleanupNeedsContinuation(shares.length, limits.length, metadata.length)) {
       await ctx.scheduler.runAfter(0, internal.incidents.cleanupExpired, {});
     }
-    return { sharesDeleted: shares.length, rateLimitsDeleted: limits.length };
+    return { sharesDeleted: shares.length, rateLimitsDeleted: limits.length, metadataDeleted: metadata.length };
   },
 });
 

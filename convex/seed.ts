@@ -4,6 +4,7 @@ import type { TargetType } from "../src/lib/domain/schemas";
 import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
 import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
 import { bumpDatasetVersions } from "./lib/dataset_version";
+import { invalidateImportState } from "./lib/import_state";
 import { mutation } from "./_generated/server";
 import { requireServerSecret } from "./security";
 
@@ -54,6 +55,7 @@ export const demo = mutation({
         retrievedAt: now, isDemo: true,
         targets: item.targets.map(([type, value, weight]) => ({ type, value, valueNormalized: normalise(type, value), matchType: "exact" as const, weight, confidence: 1 })),
       };
+      await invalidateImportState(ctx, record.authority, record.sourceId);
       const existing = await ctx.db.query("incidents").withIndex("by_authority_sourceId", (q) => q.eq("authority", record.authority).eq("sourceId", record.sourceId)).unique();
       const incidentId = existing
         ? (await ctx.db.patch(existing._id, record), existing._id)

@@ -58,7 +58,8 @@ async function incidentBySlug(slug: string, includeDemo: boolean, url: string) {
   return fetchQuery(api.incidents.getBySlug, { slug, includeDemo }, { url });
 }
 type IncidentDetailsRow = NonNullable<Awaited<ReturnType<typeof incidentBySlug>>>;
-type ActiveDatasetCacheEntry = { expiresAt: number; version: string; promise: Promise<IncidentRow[]> };
+type PreparedIncident = { startsAt: number; endsAt?: number; incident: MatchableIncident };
+type ActiveDatasetCacheEntry = { expiresAt: number; version: string; promise: Promise<PreparedIncident[]> };
 const activeDatasetCache = new Map<string, ActiveDatasetCacheEntry>();
 
 function mapIncident(row: IncidentRow | IncidentDetailsRow): MatchableIncident {
@@ -96,13 +97,17 @@ function mapIncident(row: IncidentRow | IncidentDetailsRow): MatchableIncident {
   };
 }
 
-function cachedActiveIncidents(region: Region, version: string, url: string): Promise<IncidentRow[]> {
+function cachedActiveIncidents(region: Region, version: string, url: string): Promise<PreparedIncident[]> {
   const includeDemo = process.env.ALLOW_DEMO_DATA === "true";
   const key = `${url}:${region}:${includeDemo ? "demo" : "official"}`;
   const current = activeDatasetCache.get(key);
   if (current && current.version === version && current.expiresAt > Date.now()) return current.promise;
 
-  const promise = activeRows(region, url, includeDemo, version);
+  const promise = activeRows(region, url, includeDemo, version).then((rows) => rows.map((row) => ({
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    incident: mapIncident(row),
+  })));
   activeDatasetCache.delete(key);
   activeDatasetCache.set(key, { expiresAt: Date.now() + MATCH_DATA_CACHE_TTL_MS, version, promise });
   while (activeDatasetCache.size > MAX_MATCH_DATA_CACHE_ENTRIES) {
@@ -122,7 +127,7 @@ export async function getCheckDataset(region: Region): Promise<{ incidents: Matc
   const { version, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
   const rows = await cachedActiveIncidents(region, version, url);
   const now = Date.now();
-  const incidents = rows.filter((row) => activeAt(row, now)).map(mapIncident);
+  const incidents = rows.filter((row) => activeAt(row, now)).map((row) => row.incident);
   return { incidents, status };
 }
 

@@ -30,13 +30,6 @@ function lookupBarcode(value: string): string {
   return digits;
 }
 
-async function cachedMetadata(gtin: string): Promise<{ hit: boolean; metadata: Metadata | null }> {
-  const row = await fetchQuery(api.products.getCachedMetadata, { gtin });
-  if (!row) return { hit: false, metadata: null };
-  const parsed = offSchema.shape.product.safeParse(row.metadata);
-  return { hit: true, metadata: parsed.success ? parsed.data ?? null : null };
-}
-
 async function fetchOpenFoodFacts(gtin: string, lookupCode: string): Promise<Metadata | null> {
   try {
     const response = await fetch(
@@ -67,7 +60,8 @@ async function fetchOpenFoodFacts(gtin: string, lookupCode: string): Promise<Met
 export async function enrichObservation(observation: ProductObservation): Promise<ProductObservation> {
   if (!observation.barcode || !isValidGtin(observation.barcode)) return observation;
   const gtin = normaliseGtin(observation.barcode);
-  const local = await fetchQuery(api.products.getByGtin, { gtin });
+  const lookup = await fetchQuery(api.products.lookupByGtin, { gtin });
+  const local = lookup.product;
   if (local) {
     return {
       ...observation,
@@ -79,8 +73,14 @@ export async function enrichObservation(observation: ProductObservation): Promis
       category: observation.category ?? local.category ?? null,
     };
   }
-  const cached = await cachedMetadata(gtin);
-  const metadata = cached.hit ? cached.metadata : await fetchOpenFoodFacts(gtin, lookupBarcode(observation.barcode));
+  const cached = lookup.metadata;
+  let metadata: Metadata | null;
+  if (cached) {
+    const parsed = offSchema.shape.product.safeParse(cached.metadata);
+    metadata = parsed.success ? parsed.data ?? null : null;
+  } else {
+    metadata = await fetchOpenFoodFacts(gtin, lookupBarcode(observation.barcode));
+  }
   if (!metadata) return { ...observation, barcode: gtin };
   return {
     ...observation,

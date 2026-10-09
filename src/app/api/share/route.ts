@@ -7,7 +7,7 @@ import { z } from "zod";
 import { api } from "@convex/_generated/api";
 import { anonymousSubject, attachAnonymousCookie, trustedNetworkSubject } from "@/lib/security/anonymous";
 import { readBoundedJson } from "@/lib/security/request-body";
-import { takeRateLimit } from "@/lib/security/rate-limit";
+import { takeRateLimits } from "@/lib/security/rate-limit";
 import { verifyShareToken } from "@/lib/security/share-token";
 
 export const runtime = "nodejs";
@@ -63,12 +63,12 @@ export async function POST(request: NextRequest) {
     const subject = anonymousSubject(request);
     cookieValue = subject.cookieValue;
     const networkSubject = trustedNetworkSubject(request);
-    const [anonymousLimit, networkLimit] = await Promise.all([
-      takeRateLimit(subject.id, "share", "anonymous"),
-      networkSubject ? takeRateLimit(networkSubject, "share", "network") : Promise.resolve(null),
-    ]);
+    const limits = await takeRateLimits([
+      { subject: subject.id, scope: "anonymous" },
+      ...(networkSubject ? [{ subject: networkSubject, scope: "network" as const }] : []),
+    ], "share");
 
-    if ([anonymousLimit, networkLimit].some((limit) => limit !== null && !limit.allowed)) {
+    if (limits.some((limit) => !limit.allowed)) {
       return jsonResponse({ error: "Share limit reached." }, 429, cookieValue);
     }
 

@@ -82,6 +82,17 @@ export default defineSchema({
 
   datasetVersions: defineTable({ region, revision: v.number() }).index("by_region", ["region"]),
 
+  // Small import fingerprints avoid rereading unchanged source payloads. The
+  // projection is checked on every import; incoming source records are reread weekly.
+  incidentImportState: defineTable({
+    authority: v.string(),
+    sourceId: v.string(),
+    incidentId: v.id("incidents"),
+    matchDataId: v.id("incidentMatchData"),
+    fingerprint: v.string(),
+    archiveVerifiedAt: v.number(),
+  }).index("by_authority_sourceId", ["authority", "sourceId"]),
+
   // Matcher reads this bounded, source-data-free projection rather than the
   // full incident documents (which may contain multi-kilobyte source payloads).
   incidentMatchData: defineTable({
@@ -131,7 +142,9 @@ export default defineSchema({
     metadata: v.any(),
     expiresAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_gtin", ["gtin"]),
+  })
+    .index("by_gtin", ["gtin"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   ingestionRuns: defineTable({
     source: v.string(),

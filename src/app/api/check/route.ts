@@ -6,7 +6,7 @@ import { runMatcher } from "@/lib/matching/matcher";
 import { enrichObservation } from "@/lib/products/enrich";
 import { anonymousSubject, attachAnonymousCookie, trustedNetworkSubject } from "@/lib/security/anonymous";
 import { readBoundedJson } from "@/lib/security/request-body";
-import { takeRateLimit } from "@/lib/security/rate-limit";
+import { takeRateLimits } from "@/lib/security/rate-limit";
 import { createShareToken } from "@/lib/security/share-token";
 
 export const runtime = "nodejs";
@@ -30,12 +30,10 @@ export async function POST(request: NextRequest) {
     const subject = anonymousSubject(request);
     cookieValue = subject.cookieValue;
     const networkSubject = trustedNetworkSubject(request);
-    const [anonymousLimit, networkLimit] = await Promise.all([
-      takeRateLimit(subject.id, "check", "anonymous"),
-      networkSubject ? takeRateLimit(networkSubject, "check", "network") : Promise.resolve(null),
-    ]);
-
-    const limits = [anonymousLimit, networkLimit].filter((limit): limit is NonNullable<typeof limit> => limit !== null);
+    const limits = await takeRateLimits([
+      { subject: subject.id, scope: "anonymous" },
+      ...(networkSubject ? [{ subject: networkSubject, scope: "network" as const }] : []),
+    ], "check");
     if (limits.some((limit) => !limit.allowed)) {
       return jsonResponse(
         { error: "Check limit reached. Try again after the current hour." },
