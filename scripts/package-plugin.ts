@@ -241,6 +241,10 @@ export async function createPluginArchive(packageDirectory = pluginRoot): Promis
       throw new Error(`${label} references a source file omitted from the plugin archive: ${reference}`);
     }
   }
+  const onboardingReference = resolvedReferences.find((reference) => reference.label === "onboardingSkill")?.reference;
+  if (onboardingReference !== "./skills/setup/SKILL.md") {
+    throw new Error("onboardingSkill must reference ./skills/setup/SKILL.md");
+  }
 
   const zippable: Zippable = {};
   for (const file of files) {

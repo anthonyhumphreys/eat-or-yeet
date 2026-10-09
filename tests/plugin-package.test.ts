@@ -99,6 +99,20 @@ describe("portable plugin package", () => {
     );
   });
 
+  it("rejects an onboarding reference to a different valid archived skill", async () => {
+    const fixture = await copyPackageFixture();
+    const pluginPath = path.join(fixture, "plugin.json");
+    const plugin = JSON.parse(await readFile(pluginPath, "utf8")) as {
+      extensions: { "com.openai": { onboardingSkill: string } };
+    };
+    plugin.extensions["com.openai"].onboardingSkill = "./skills/checking/SKILL.md";
+    await writeFile(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
+
+    await expect(createPluginArchive(fixture)).rejects.toThrow(
+      "onboardingSkill must reference ./skills/setup/SKILL.md",
+    );
+  });
+
   it("rejects symlinks instead of following paths outside the plugin root", async () => {
     const fixture = await copyPackageFixture();
     const outside = path.join(path.dirname(fixture), `${path.basename(fixture)}-outside.txt`);
