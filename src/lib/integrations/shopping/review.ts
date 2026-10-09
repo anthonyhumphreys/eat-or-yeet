@@ -237,6 +237,7 @@ function reviewOne(item: ReviewShoppingItem, region: Region, incidents: Matchabl
 function dedupeKey(item: ReviewShoppingItem): string {
   return JSON.stringify([
     normaliseText(item.name),
+    foodClasses(item.name).sort(),
     normaliseText(item.brand ?? ""),
     normalizedBarcode(item.barcode ?? ""),
   ]);

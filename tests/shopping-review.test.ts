@@ -157,6 +157,27 @@ describe("reviewShoppingItems", () => {
     });
   });
 
+  it("keeps deduplicated reviews separate when normalized names share different food classes", async () => {
+    const eggWarning = incident("egg-warning", "UK", [target("egg-warning", "product", "Eggs")]);
+    const breadWarning = incident("bread-warning", "UK", [target("bread-warning", "product", "Bread")]);
+    mocks.dataset.mockResolvedValue({ incidents: [eggWarning, breadWarning], status: healthyStatus("UK") });
+
+    for (const names of [["Eggwhite bread", "Egg white bread"], ["Egg white bread", "Eggwhite bread"]]) {
+      const review = await reviewShoppingItems({
+        region: "UK",
+        items: names.map((name, index) => shoppingItem({ id: `row-${index}`, name })),
+      });
+      const slugsByRow = Object.fromEntries(review.items.map(({ id, relatedWarnings }) =>
+        [id, relatedWarnings.map(({ warning }) => warning.slug).sort()],
+      ));
+
+      expect(slugsByRow).toEqual({
+        "row-0": names[0] === "Egg white bread" ? ["bread-warning", "egg-warning"] : ["bread-warning"],
+        "row-1": names[1] === "Egg white bread" ? ["bread-warning", "egg-warning"] : ["bread-warning"],
+      });
+    }
+  });
+
   it.each([
     ["eggs", "egg"],
     ["peanut butter", "peanuts"],

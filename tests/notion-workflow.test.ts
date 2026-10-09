@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { createShoppingWebhookWorker, inputFingerprint, NotionRestClient, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
 
@@ -28,7 +29,8 @@ function makeConfig(port: number): ShoppingWorkerConfig {
 class MemoryStore implements WorkerStore {
   closed = false;
   readonly events = new Set<string>();
-  readonly pages = new Map<string, { due: number; fingerprint: string; reviewedAt?: number; busy: boolean }>();
+  readonly pages = new Map<string, { due: number; fingerprint: string; reviewedAt?: number; busy: boolean; generation: number; claimedGeneration?: number; claimToken?: string }>();
+  private claimCount = 0;
   acceptEvent(eventId: string, pageId: string, dueAt: number, _now: number): "accepted" | "duplicate" | "full" {
     void _now;
     if (this.events.has(eventId)) return "duplicate";
@@ -36,33 +38,37 @@ class MemoryStore implements WorkerStore {
   }
   duePages(now: number, limit: number) {
     const due = [...this.pages].filter(([, value]) => value.due <= now && !value.busy).slice(0, limit);
-    for (const [, value] of due) value.busy = true;
-    return due.map(([pageId]) => ({ pageId }));
+    return due.map(([pageId, value]) => {
+      value.busy = true; value.claimedGeneration = value.generation; value.claimToken = `claim-${++this.claimCount}`;
+      return { pageId, generation: value.generation, claimToken: value.claimToken };
+    });
   }
   nextDue() { const due = [...this.pages.values()].filter((page) => !page.busy && page.due !== Infinity).map((page) => page.due); return due.length ? Math.min(...due) : undefined; }
   current(pageId: string) { const page = this.pages.get(pageId); return page ? { fingerprint: page.fingerprint, busy: page.busy } : undefined; }
-  schedule(pageId: string, dueAt: number, _touchedAt: number) { void _touchedAt; const page = this.pages.get(pageId); this.pages.set(pageId, { due: dueAt, fingerprint: page?.fingerprint ?? "", reviewedAt: page?.reviewedAt, busy: page?.busy ?? false }); }
-  markReviewed(pageId: string, fingerprint: string, reviewedAt: number) { const page = this.pages.get(pageId); this.pages.set(pageId, { due: page?.due !== undefined && page.due > reviewedAt ? page.due : Infinity, fingerprint, reviewedAt, busy: false }); }
-  release(pageId: string, _touchedAt: number) { void _touchedAt; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page) page.busy = false; }
-  finish(pageId: string, now: number) { if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page) { page.busy = false; if (page.due <= now) page.due = Infinity; } }
+  schedule(pageId: string, dueAt: number, _touchedAt: number) { void _touchedAt; const page = this.pages.get(pageId); this.pages.set(pageId, { due: dueAt, fingerprint: page?.fingerprint ?? "", reviewedAt: page?.reviewedAt, busy: page?.busy ?? false, generation: (page?.generation ?? 0) + 1, claimedGeneration: page?.claimedGeneration, claimToken: page?.claimToken }); }
+  markReviewed(pageId: string, generation: number, claimToken: string, fingerprint: string, reviewedAt: number) { const page = this.pages.get(pageId); if (!page || page.claimedGeneration !== generation || page.claimToken !== claimToken) return; page.due = page.generation === generation ? Infinity : page.due; page.fingerprint = fingerprint; page.reviewedAt = reviewedAt; page.busy = false; page.claimedGeneration = undefined; page.claimToken = undefined; }
+  release(pageId: string, generation: number, claimToken: string, _touchedAt: number) { void _touchedAt; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page?.claimedGeneration === generation && page.claimToken === claimToken) { page.busy = false; page.claimedGeneration = undefined; page.claimToken = undefined; } }
+  finish(pageId: string, generation: number, claimToken: string, _now: number) { void _now; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page?.claimedGeneration === generation && page.claimToken === claimToken) { page.busy = false; if (page.generation === generation) page.due = Infinity; page.claimedGeneration = undefined; page.claimToken = undefined; } }
   cleanup(before: number) { void before; }
   close() { this.closed = true; }
 }
 
 class FakeNotion implements NotionClient {
   readonly page = makePage();
+  readonly patchedPages: string[] = [];
   readonly patches: Array<Record<string, unknown>> = [];
   getPageCalls = 0;
   failGet: WorkerError | undefined;
-  beforePatch?: () => void;
+  beforePatch?: () => void | Promise<void>;
   patchError?: (attempt: number) => WorkerError | undefined;
   async getDataSource(dataSourceId: string) {
     expect(dataSourceId).toBe(sourceId);
     return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
   }
-  async getPage(_pageId: string, _signal: AbortSignal) { void _pageId; void _signal; this.getPageCalls += 1; if (this.failGet) throw this.failGet; return structuredClone(this.page); }
-  async patchPage(_pageId: string, properties: Record<string, unknown>) {
-    this.beforePatch?.();
+  async getPage(pageId: string, _signal: AbortSignal) { void _signal; this.getPageCalls += 1; if (this.failGet) throw this.failGet; const page = structuredClone(this.page); page.id = pageId; return page; }
+  async patchPage(pageId: string, properties: Record<string, unknown>) {
+    this.patchedPages.push(pageId);
+    await this.beforePatch?.();
     const error = this.patchError?.(this.patches.length);
     if (error) throw error;
     this.patches.push(properties);
@@ -106,8 +112,8 @@ async function setup(options: { now?: () => number; review?: FakeReview; notion?
 }
 afterEach(async () => { await Promise.all(workers.splice(0).map((worker) => worker.stop())); });
 
-function payload(id: string, type = "page.created", updatedProperties?: string[]) {
-  return { id, timestamp: new Date().toISOString(), type, entity: { id: "page-1", type: "page" }, data: updatedProperties ? { updated_properties: updatedProperties } : {} };
+function payload(id: string, type = "page.created", updatedProperties?: string[], pageId = "page-1") {
+  return { id, timestamp: new Date().toISOString(), type, entity: { id: pageId, type: "page" }, data: updatedProperties ? { updated_properties: updatedProperties } : {} };
 }
 async function send(url: string, value: unknown) {
   const body = JSON.stringify(value);
@@ -133,6 +139,17 @@ describe("Notion shopping webhook worker", () => {
     expect((await send(url, payload("retry-enqueue"))).status).toBe(202);
     await eventually(() => review.items.length === 1);
   });
+  it("catches pump storage failures, logs no storage detail, and leaves queued work pending", async () => {
+    const { store, url, logs } = await setup();
+    await send(url, payload("evt-pump-storage"));
+    const cleanup = store.cleanup.bind(store);
+    let fail = true;
+    store.cleanup = (before: number) => { if (fail) { fail = false; throw new Error("private storage failure"); } cleanup(before); };
+    await eventually(() => logs.length === 1);
+    expect(logs[0]).toBe("Shopping queue maintenance failed; retrying later.");
+    expect(logs.join(" ")).not.toContain("private storage");
+    expect(store.pages.get("page-1")?.due).not.toBe(Infinity);
+  });
   it("durably deduplicates webhook IDs, claims due pages once, and expires IDs after the retry window", () => {
     const store = new SqliteWorkerStore(":memory:");
     try {
@@ -140,9 +157,10 @@ describe("Notion shopping webhook worker", () => {
       expect(store.acceptEvent("event-1", "page-1", 4_000, 1_000)).toBe("duplicate");
       expect(store.nextDue()).toBe(4_000);
       expect(store.duePages(3_999, 2)).toEqual([]);
-      expect(store.duePages(4_000, 2)).toEqual([{ pageId: "page-1" }]);
+      const [claim] = store.duePages(4_000, 2);
+      expect(claim).toMatchObject({ pageId: "page-1", generation: 1 });
       expect(store.duePages(4_001, 2)).toEqual([]);
-      store.finish("page-1", 4_001);
+      store.finish("page-1", claim!.generation, claim!.claimToken, 4_001);
       expect(store.duePages(4_001, 2)).toEqual([]); // finishing acknowledges the claimed event
       expect(store.acceptEvent("event-1", "page-1", 90_000_000, 90_000_000)).toBe("duplicate");
       store.cleanup(100_000_000 - 25 * 60 * 60 * 1_000);
@@ -164,7 +182,24 @@ describe("Notion shopping webhook worker", () => {
       expect(store.nextDue()).toBeUndefined();
       store.failEnqueue = false;
       expect(store.acceptEvent("event-retry-enqueue", "page-retry-enqueue", 2_000, 1_000)).toBe("accepted");
-      expect(store.duePages(2_000, 1)).toEqual([{ pageId: "page-retry-enqueue" }]);
+      expect(store.duePages(2_000, 1)[0]).toMatchObject({ pageId: "page-retry-enqueue", generation: 1 });
+    } finally { store.close(); }
+  });
+
+  it("only lets the current claim generation and token acknowledge or mark a row", () => {
+    const store = new SqliteWorkerStore(":memory:");
+    try {
+      store.acceptEvent("event-claim-one", "page-claim", 1, 1);
+      const first = store.duePages(1, 1)[0]!;
+      store.schedule("page-claim", 2, 2); // A newer edit arrives while the first worker is active.
+      store.finish(first.pageId, first.generation, first.claimToken, 2);
+      const second = store.duePages(2, 1)[0]!;
+      expect(second.generation).toBe(first.generation + 1);
+      store.markReviewed(first.pageId, first.generation, first.claimToken, "stale-fingerprint", 3);
+      expect(store.current(first.pageId)?.fingerprint).toBe("");
+      expect(store.duePages(3, 1)).toEqual([]); // The old claim cannot clear the newer lease.
+      store.markReviewed(second.pageId, second.generation, second.claimToken, "current-fingerprint", 3);
+      expect(store.current(second.pageId)?.fingerprint).toBe("current-fingerprint");
     } finally { store.close(); }
   });
 
@@ -174,12 +209,26 @@ describe("Notion shopping webhook worker", () => {
     let store = new SqliteWorkerStore(path);
     try {
       store.acceptEvent("event-claimed", "page-claimed", 1_000, 1_000);
-      expect(store.duePages(1_000, 1)).toEqual([{ pageId: "page-claimed" }]);
+      expect(store.duePages(1_000, 1)[0]).toMatchObject({ pageId: "page-claimed", generation: 1 });
       store.close(); // Simulate a process crash before finish().
       store = new SqliteWorkerStore(path);
       expect(store.nextDue()).toBe(601_000);
       expect(store.duePages(600_999, 1)).toEqual([]);
-      expect(store.duePages(601_000, 1)).toEqual([{ pageId: "page-claimed" }]);
+      expect(store.duePages(601_000, 1)[0]).toMatchObject({ pageId: "page-claimed", generation: 1 });
+    } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it("migrates an existing SQLite queue before claiming old pending work", () => {
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-migrate-"));
+    const path = join(directory, "state.sqlite");
+    const legacy = new DatabaseSync(path);
+    legacy.exec("CREATE TABLE seen_events (id TEXT PRIMARY KEY,page_id TEXT NOT NULL,seen_at INTEGER NOT NULL); CREATE TABLE pending_pages (page_id TEXT PRIMARY KEY,due_at INTEGER NOT NULL,busy_until INTEGER NOT NULL DEFAULT 0,pending INTEGER NOT NULL DEFAULT 1,last_fingerprint TEXT,last_reviewed_at INTEGER,touched_at INTEGER NOT NULL); INSERT INTO pending_pages(page_id,due_at,busy_until,pending,touched_at) VALUES('legacy-page',100,0,1,50);");
+    legacy.close();
+    const store = new SqliteWorkerStore(path);
+    try {
+      const claim = store.duePages(100, 1)[0];
+      expect(claim).toMatchObject({ pageId: "legacy-page", generation: 0 });
+      store.finish(claim!.pageId, claim!.generation, claim!.claimToken, 100);
     } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
   });
 
@@ -237,6 +286,46 @@ describe("Notion shopping webhook worker", () => {
     expect(store.current("page-1")?.fingerprint).not.toBe(inputFingerprint({ id: "page-1", name: "Milk", bought: false }, false));
   });
 
+  it("keeps an event accepted during a slow write pending after the old generation completes", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const writeStarted = new Promise<void>((resolve) => { started = resolve; });
+    const writeGate = new Promise<void>((resolve) => { release = resolve; });
+    let patchCount = 0;
+    let currentTime = Date.now();
+    const notion = new FakeNotion();
+    notion.beforePatch = async () => { patchCount += 1; if (patchCount === 1) { started(); await writeGate; } };
+    const { url, review, store } = await setup({ now: () => currentTime, notion });
+    try {
+      await send(url, payload("evt-slow-write-first"));
+      currentTime += 4_000;
+      await writeStarted;
+      notion.page.properties.Item.title = [{ plain_text: "Edited during write" }];
+      await send(url, payload("evt-slow-write-new-input", "page.properties_updated", [ids.item]));
+      currentTime += 4_000; // The newer event is due before the first write can finish.
+      release();
+      await eventually(() => review.items.length === 2 && notion.patches.length === 2);
+      expect(review.items.map((item) => item.name)).toEqual(["Milk", "Edited during write"]);
+      expect(store.pages.get("page-1")?.due).toBe(Infinity);
+      expect(store.current("page-1")?.fingerprint).toBe(inputFingerprint({ id: "page-1", name: "Edited during write", bought: false }, false));
+    } finally { release(); }
+  });
+
+  it("does not let continuous newer webhook events postpone an earlier due page", async () => {
+    let currentTime = Date.now();
+    const { url, notion, review } = await setup({ now: () => currentTime });
+    await send(url, payload("evt-early-page"));
+    let earlyPageReviewed = false;
+    for (let index = 0; index < 15; index += 1) {
+      currentTime += 100;
+      await send(url, payload(`evt-noise-${index}`, "page.created", undefined, `noise-page-${index}`));
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      earlyPageReviewed ||= review.items.some((item) => item.id === "page-1");
+    }
+    expect(earlyPageReviewed).toBe(true);
+    expect(notion.patchedPages).toContain("page-1");
+  });
+
   it("skips bought and blank rows and never writes shopper properties", async () => {
     let currentTime = Date.now();
     const { url, notion, review } = await setup({ now: () => currentTime });
@@ -265,6 +354,16 @@ describe("Notion shopping webhook worker", () => {
     expect(store.current("page-1")?.busy).toBe(false);
     const subsequent = await send(url, payload("evt-after-revoke"));
     expect(subsequent.status).toBe(503);
+  });
+
+  it("rejects unsupported brand and barcode property types before startup", () => {
+    const reviewer = new FakeReview();
+    const brandConfig = makeConfig(0);
+    brandConfig.notionProperties.brand = { id: ids.brand, kind: "select" };
+    const barcodeConfig = makeConfig(0);
+    barcodeConfig.notionProperties.barcode = { id: "barcode", kind: "checkbox" };
+    for (const config of [brandConfig, barcodeConfig]) expect(() => createShoppingWebhookWorker({ config, notion: new FakeNotion(), reviewer, store: new MemoryStore() })).toThrow(WorkerError);
+    expect(reviewer.items).toHaveLength(0);
   });
 
   it("pauses after the private review MCP connection is revoked", async () => {
@@ -317,7 +416,7 @@ describe("Notion shopping webhook worker", () => {
       await worker.stop();
       restarted = new SqliteWorkerStore(path);
       expect(restarted.nextDue()).toBeLessThanOrEqual(currentTime);
-      expect(restarted.duePages(currentTime, 1)).toEqual([{ pageId: "page-1" }]);
+      expect(restarted.duePages(currentTime, 1)[0]).toMatchObject({ pageId: "page-1", generation: 1 });
     } finally {
       await worker.stop();
       restarted?.close();
