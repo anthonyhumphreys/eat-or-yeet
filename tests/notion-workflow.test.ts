@@ -726,6 +726,57 @@ describe("Notion shopping webhook worker", () => {
     expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: "page-1", name: "Changed during rate limit", bought: false }, false) } }] });
   });
 
+  it("reserves request start times before waiting so concurrent Notion calls stay paced", async () => {
+    const starts: number[] = [];
+    const notion = new NotionRestClient("notion-token", async () => {
+      starts.push(Date.now());
+      return Response.json({});
+    });
+    await Promise.all([
+      notion.getPage("page-one", new AbortController().signal),
+      notion.getPage("page-two", new AbortController().signal),
+    ]);
+    starts.sort((left, right) => left - right);
+    expect(starts).toHaveLength(2);
+    expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(300);
+    expect(starts[1]! - starts[0]!).toBeLessThan(2_000);
+  });
+
+  it("releases a concurrency slot when a reserved pacing wait is aborted", async () => {
+    let releaseFirst!: (response: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => { releaseFirst = resolve; });
+    let firstStarted!: () => void;
+    const firstStartedPromise = new Promise<void>((resolve) => { firstStarted = resolve; });
+    let firstStartedAt = 0;
+    let thirdStartedAt: number | undefined;
+    const notion = new NotionRestClient("notion-token", async (input) => {
+      const pageId = new URL(String(input)).pathname.split("/").at(-1);
+      if (pageId === "first") { firstStartedAt = Date.now(); firstStarted(); return await firstResponse; }
+      if (pageId === "third") thirdStartedAt = Date.now();
+      if (pageId === "second") throw new Error("The aborted request must not reach Notion.");
+      return Response.json({});
+    });
+    const first = notion.getPage("first", new AbortController().signal);
+    let third: Promise<unknown> | undefined;
+    try {
+      await firstStartedPromise;
+      const aborter = new AbortController();
+      const second = notion.getPage("second", aborter.signal).then(() => undefined, (error: unknown) => error);
+      await new Promise((resolve) => setTimeout(resolve, 20)); // Let the second request reserve its future start slot.
+      third = notion.getPage("third", new AbortController().signal);
+      await new Promise((resolve) => setTimeout(resolve, 20)); // The third request now waits for one of the two slots.
+      aborter.abort(new Error("test cancellation"));
+      expect(await second).toBeInstanceOf(Error);
+      await eventually(() => thirdStartedAt !== undefined);
+      expect(thirdStartedAt! - firstStartedAt).toBeGreaterThanOrEqual(500);
+      expect(thirdStartedAt! - firstStartedAt).toBeLessThan(2_000);
+    } finally {
+      releaseFirst(Response.json({}));
+      await first;
+      await third;
+    }
+  });
+
   for (const [scenario, mutate] of [
     ["edited", (page: TestPage) => { page.properties.Item.title = [{ plain_text: "New after write failure" }]; }],
     ["bought", (page: TestPage) => { page.properties.Bought.checkbox = true; }],

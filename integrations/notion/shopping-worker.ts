@@ -245,10 +245,11 @@ export class NotionRestClient implements NotionClient {
       this.#queue.push(() => { signal.removeEventListener("abort", abort); resolve(); });
     });
     this.#inFlight += 1;
-    const spacing = this.#lastRequestAt + NOTION_INTERVAL_MS - Date.now();
+    const reservedAt = Math.max(Date.now(), this.#lastRequestAt + NOTION_INTERVAL_MS);
+    this.#lastRequestAt = reservedAt;
+    const spacing = reservedAt - Date.now();
     try { if (spacing > 0) await sleep(spacing, signal); }
     catch (error) { this.#release(); throw error; }
-    this.#lastRequestAt = Date.now();
   }
   #release(): void { this.#inFlight = Math.max(0, this.#inFlight - 1); this.#queue.shift()?.(); }
 }
