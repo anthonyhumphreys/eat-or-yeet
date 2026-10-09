@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Id } from "@convex/_generated/dataModel";
 
 import { emptyObservation } from "@/lib/domain/schemas";
 import type { DatasetStatus, MatchableIncident, MatchableTarget } from "@/lib/domain/types";
@@ -114,7 +115,7 @@ describe("public response mapping", () => {
 
   it("does not expose browse IDs or raw URLs, and keeps search distinct from checking", () => {
     const result = serializeSearchResult({
-      items: [{ ...notice, id: "private-id", startsAt: 0, publishedAt: +notice.publishedAt, updatedAt: +notice.updatedAt, categories: [], stores: [],
+      items: [{ ...notice, id: "private-id" as Id<"incidents">, startsAt: 0, endsAt: undefined, publishedAt: +notice.publishedAt, updatedAt: +notice.updatedAt, categories: [], stores: [],
         authorityUrl: "https://attacker.example/recall" }],
       total: 1, nextCursor: null, asOf: time, status: coverage, complete: true,
     }, "US");
