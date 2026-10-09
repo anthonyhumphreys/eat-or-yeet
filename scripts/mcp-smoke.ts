@@ -17,7 +17,13 @@ const PROTOCOLS = [
 
 const address = process.argv[2];
 if (!address) throw new Error("Usage: pnpm test:mcp http://localhost:3100/mcp");
-const url = new URL(address);
+let url: URL;
+try {
+  url = new URL(address);
+} catch {
+  throw new Error("MCP endpoint must be a valid URL.");
+}
+const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
 if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) {
   throw new Error("Use HTTPS or a local loopback test endpoint.");
 }
@@ -26,8 +32,8 @@ if (
   url.password ||
   url.search ||
   url.hash ||
-  url.hostname === "eatoryeet.app" ||
-  url.hostname.endsWith(".eatoryeet.app")
+  hostname === "eatoryeet.app" ||
+  hostname.endsWith(".eatoryeet.app")
 ) {
   throw new Error("Use a credential-free local or controlled test endpoint while production MCP is disabled.");
 }
