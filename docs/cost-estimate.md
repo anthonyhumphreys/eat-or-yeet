@@ -2,6 +2,8 @@
 
 Updated 2026-10-07. USD per month, excluding taxes, domain registration and engineering/support time. These are planning estimates, not an account invoice or a load-test result.
 
+The 9 October implementation adds persistent page caches keyed by dataset revision, removes unused indexes and skips unchanged import writes. The snapshot miss-rate scenarios below predate those changes. See [Convex usage](convex-usage.md) for observed rollout results; future daily traffic is still needed to revise the monthly forecast.
+
 ## What changed
 
 Model inference and packaging-image uploads now cost **$0**. The app uses barcode/manual input and deterministic rules. Matching reads a separate compact table in pages of 100, with a five-minute cache per server instance. Source health is checked on every request, and successful source-version changes invalidate that cache.
