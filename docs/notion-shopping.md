@@ -37,7 +37,7 @@ The Review status select must already contain the three configured labels for re
 
 The repository includes an owner-run schema provisioner at [`integrations/notion/template/provision.mjs`](../integrations/notion/template/provision.mjs). It creates a new shopping-list database below a page you select, reads back the database's data source and property IDs, and writes a complete worker config at a new local path. Notion generates the property IDs. The script records those stable IDs so renaming a property keeps the worker mapping intact; deleting and recreating a property requires a new config.
 
-For automatic schema creation, create a separate temporary setup connection with insert-content capability and share only the selected parent page with it. Put that setup token in an owner-managed secret file outside the checkout with mode `0400` or `0600`, then run this command from the repository root:
+For automatic schema creation, create a separate temporary setup connection with read-content and insert-content capabilities and share only the selected parent page with it. Read access is needed to retrieve the new database and property IDs. Put that setup token in an owner-managed secret file outside the checkout with mode `0400` or `0600`, then run this command from the repository root:
 
 ```sh
 node integrations/notion/template/provision.mjs \
@@ -164,6 +164,6 @@ The automated tests exercise these behaviors using injected local clients. They 
 - [Retrieve a data source](https://developers.notion.com/reference/retrieve-a-data-source) — API access under version `2025-09-03`.
 - [Notion request limits](https://developers.notion.com/reference/request-limits) — 429/529 handling and `Retry-After`.
 - [Notion Custom Agents](https://www.notion.com/help/custom-agents) and [MCP connections](https://www.notion.com/help/mcp-connections-for-custom-agents) — plan, trigger, and connection setup.
-- [Create a Notion database](https://developers.notion.com/reference/create-a-database) and [retrieve a data source](https://developers.notion.com/reference/retrieve-a-data-source) — owner-run schema setup and returned property IDs.
+- [Create a Notion database](https://developers.notion.com/reference/create-database), [retrieve a data source](https://developers.notion.com/reference/retrieve-a-data-source), and [connection capabilities](https://developers.notion.com/reference/capabilities) — owner-run schema setup, returned property IDs, and separate setup/runtime permissions. The provisioner and worker pin API version `2025-09-03`.
 - [n8n Webhook](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/), [HTTP Request](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/), and [Respond to Webhook](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.respondtowebhook/) — raw body, binary relay, status response, and body limits.
 - [n8n workflow settings](https://docs.n8n.io/workflows/settings/) and [import/export](https://docs.n8n.io/workflows/export-import/) — execution data retention settings and JSON import.
