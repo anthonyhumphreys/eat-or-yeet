@@ -19,7 +19,7 @@ export const NOTION_MCP_TOOL_NAMES = ["review_shopping_items", "search_warnings"
 type NotionToolName = (typeof NOTION_MCP_TOOL_NAMES)[number];
 
 const descriptions: Record<NotionToolName, string> = {
-  review_shopping_items: "Review up to 20 explicitly supplied shopping items against published warnings for the explicitly selected UK or US region. This is warning discovery, not a product safety check; no matching warning does not establish that food is safe, and category-only recall is not used.",
+  review_shopping_items: "Review up to 20 explicitly supplied shopping items against published warnings for the explicitly selected UK or US region. These are related notices, not packet verdicts or category-wide recalls. No matching warning does not establish that food is safe.",
   search_warnings: "Search published food warnings for the explicitly selected UK or US region. Search is discovery, not a product safety check; no search results do not establish that food is safe.",
   get_warning: "Read a published warning by its public slug, including consumer advice and affected product groups. This describes a warning record, not a current product check.",
   get_coverage: "Read source coverage and refresh health for the explicitly selected UK or US region.",

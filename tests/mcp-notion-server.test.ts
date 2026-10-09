@@ -55,7 +55,7 @@ describe("private Notion MCP server", () => {
 
     expect(tools.map(({ name }) => name)).toEqual(["review_shopping_items", "search_warnings", "get_warning", "get_coverage"]);
     expect(tools.every(({ annotations }) => annotations?.readOnlyHint === true && annotations.destructiveHint === false)).toBe(true);
-    expect(tools.find(({ name }) => name === "review_shopping_items")?.description).toContain("category-only recall is not used");
+    expect(tools.find(({ name }) => name === "review_shopping_items")?.description).toContain("does not establish that food is safe");
     expect(tools.find(({ name }) => name === "search_warnings")?.description).toContain("discovery, not a product safety check");
     expect(tools.map(({ name }) => name)).not.toContain("check_product");
 
