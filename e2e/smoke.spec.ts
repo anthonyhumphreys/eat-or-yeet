@@ -1,17 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const listHeading = (page: Page, region: "UK" | "US") => page.getByRole("heading", { name: new RegExp(`warnings in the ${region}$`) });
+const listHeading = (page: Page, region: "UK" | "US") => page.getByRole("heading", { name: new RegExp(`recalls in the ${region}$`) });
 const location = (page: Page) => page.getByRole("combobox", { name: "Warning location", exact: true });
 const chooseRegion = (page: Page, label: "United Kingdom" | "United States") => location(page).selectOption({ label });
-const searchBox = (page: Page) => page.getByRole("searchbox", { name: /^Search (UK|US) warnings$/ });
+const searchBox = (page: Page) => page.getByRole("searchbox", { name: /^Search (UK|US) recalls$/ });
+const checkLink = (page: Page) => page.getByRole("link", { name: "Check a product", exact: true });
+const foodTab = (page: Page, name: string) => page.getByRole("group", { name: "Filter by food type" }).getByRole("link", { name: new RegExp(`^${name}`) });
 
-test("home leads with warnings and exposes barcode and manual paths", async ({ page }) => {
+// First-visit country questions are covered in region.spec.ts; these tests start with a saved choice.
+test.beforeEach(async ({ context, baseURL }) => {
+  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
+});
+
+test("home leads with recalls and one way to check a product", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Food warnings. Before your next bite." })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Scan food", exact: true }).filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Type a barcode", exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UK food recalls", level: 1 })).toBeVisible();
+  await expect(checkLink(page)).toBeVisible();
+  await expect(checkLink(page)).toHaveAttribute("href", "/search");
   await expect(page.getByRole("search")).toBeVisible();
   await expect(listHeading(page, "UK")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -27,7 +34,7 @@ test("system dark mode hydrates without a framework error", async ({ page }) => 
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Food warnings. Before your next bite." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UK food recalls", level: 1 })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   expect(consoleErrors).toEqual([]);
 });
@@ -99,18 +106,18 @@ test("warning search filters instantly, keeps a shareable URL and preserves the 
   await page.keyboard.press("/");
   await expect(searchBox(page)).toBeFocused();
   await page.keyboard.type("chocolate");
-  await expect(page.getByRole("heading", { name: /warnings? found$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /recalls? found$/ })).toBeVisible();
   await expect(page).toHaveURL(/region=US.*q=chocolate/);
-  await page.getByLabel("Food category", { exact: true }).selectOption("Snacks & sweets");
+  await foodTab(page, "Snacks & sweets").click();
   await expect(page).toHaveURL(/category=Snacks/);
   await expect(location(page)).toHaveValue("US");
   expect(serverRequests).toEqual([]);
   await page.reload();
   await expect(searchBox(page)).toHaveValue("chocolate");
-  await expect(page.getByLabel("Food category", { exact: true })).toHaveValue("Snacks & sweets");
+  await expect(foodTab(page, "Snacks & sweets")).toHaveAttribute("aria-current", "true");
   await page.getByRole("button", { name: "Clear all" }).click();
   await expect(listHeading(page, "US")).toBeVisible();
-  await page.getByRole("link", { name: "Scan food", exact: true }).filter({ visible: true }).first().click();
+  await checkLink(page).click();
   await expect(page.getByText("Checking against current")).toContainText("United States");
   expect(errors).toEqual([]);
 });
@@ -210,7 +217,6 @@ test("camera denial keeps manual barcode entry available", async ({ page }) => {
     });
   });
   await page.goto("/scan");
-  await page.getByRole("button", { name: "Use UK warnings" }).click();
   await expect(page.getByLabel("Or type the number")).toBeVisible();
   await expect(page.getByRole("button", { name: "No barcode? Use label details" })).toBeVisible();
   await expect(page.getByText("Starting the camera…")).toBeVisible();
@@ -229,12 +235,12 @@ test("warning browsing works with reduced motion and without view transition sup
   await page.goto("/?region=UK");
   await chooseRegion(page, "United States");
   await expect(listHeading(page, "US")).toBeVisible();
-  await page.getByRole("link", { name: /^Allergens/ }).click();
+  await page.getByLabel("Hazard", { exact: true }).selectOption("allergen");
   await searchBox(page).fill("no such food warning");
   await expect(page.getByText("No current warnings match.")).toBeVisible();
   await page.getByRole("button", { name: "Remove “no such food warning”" }).click();
-  await expect(page.getByRole("heading", { name: /warnings? found$/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Allergens/ })).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("heading", { name: /recalls? found$/ })).toBeVisible();
+  await expect(page.getByLabel("Hazard", { exact: true })).toHaveValue("allergen");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("auto");
   expect(errors).toEqual([]);
 });
@@ -244,6 +250,6 @@ test("small screens keep the navigation and warnings inside the viewport", async
   await page.goto("/?region=UK");
   await expect(listHeading(page, "UK")).toBeVisible();
   await expect(location(page)).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Check food" })).toBeVisible();
+  await expect(checkLink(page)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

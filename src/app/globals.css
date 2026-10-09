@@ -25,6 +25,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-link: var(--link);
   --color-eat: var(--eat);
   --color-eat-soft: var(--eat-soft);
   --color-maybe: var(--maybe);
@@ -38,58 +39,62 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.17 0.018 110);
-  --card: oklch(0.975 0.008 110);
-  --card-foreground: oklch(0.17 0.018 110);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.018 110);
-  --primary: oklch(0.57 0.125 110);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.94 0.018 110);
-  --secondary-foreground: oklch(0.22 0.025 110);
-  --muted: oklch(0.955 0.008 110);
-  --muted-foreground: oklch(0.42 0.025 110);
-  --accent: oklch(0.28 0.055 255);
-  --accent-foreground: oklch(0.99 0 0);
-  --destructive: oklch(0.56 0.205 27);
-  --border: oklch(0.87 0.015 110);
-  --input: oklch(0.87 0.015 110);
-  --ring: oklch(0.57 0.125 110);
-  --eat: oklch(0.49 0.12 135);
-  --eat-soft: oklch(0.94 0.04 135);
-  --maybe: oklch(0.58 0.14 72);
-  --maybe-soft: oklch(0.95 0.045 72);
-  --yeet: oklch(0.53 0.205 27);
-  --yeet-soft: oklch(0.95 0.045 27);
-  --radius: 0.75rem;
+  /* Cream & marigold. Marigold is a fill colour (buttons, logo, tabs); use --link for text. */
+  --background: #fbf5e9;
+  --foreground: #1d1a16;
+  --card: #fffcf5;
+  --card-foreground: #1d1a16;
+  --popover: #fffcf5;
+  --popover-foreground: #1d1a16;
+  --primary: #e39b00;
+  --primary-foreground: #1d1a16;
+  --secondary: #f3ebda;
+  --secondary-foreground: #2b241b;
+  --muted: #f3ede0;
+  --muted-foreground: #6b6358;
+  --accent: #fcebc2;
+  --accent-foreground: #5c4300;
+  --link: #8a5d00;
+  --destructive: #b4231c;
+  --border: #e8dec8;
+  --input: #d8cdb4;
+  --ring: #c98800;
+  --eat: #3f3d37;
+  --eat-soft: #ece5d6;
+  --maybe: #7a3900;
+  --maybe-soft: #fff1db;
+  --yeet: #9e1b14;
+  --yeet-soft: #fdecea;
+  --radius: 0.875rem;
 }
 
 .dark {
-  --background: oklch(0.105 0 0);
-  --foreground: oklch(0.96 0.01 110);
-  --card: oklch(0.155 0.012 110);
-  --card-foreground: oklch(0.96 0.01 110);
-  --popover: oklch(0.155 0.012 110);
-  --popover-foreground: oklch(0.96 0.01 110);
-  --primary: oklch(0.7 0.13 110);
-  --primary-foreground: oklch(0.12 0.015 110);
-  --secondary: oklch(0.22 0.018 110);
-  --secondary-foreground: oklch(0.95 0.01 110);
-  --muted: oklch(0.2 0.01 110);
-  --muted-foreground: oklch(0.72 0.018 110);
-  --accent: oklch(0.74 0.1 250);
-  --accent-foreground: oklch(0.1 0 0);
-  --destructive: oklch(0.68 0.18 25);
-  --border: oklch(1 0 0 / 14%);
+  /* Charcoal & saffron. */
+  --background: #17171a;
+  --foreground: #f4f1ea;
+  --card: #222226;
+  --card-foreground: #f4f1ea;
+  --popover: #222226;
+  --popover-foreground: #f4f1ea;
+  --primary: #f2a900;
+  --primary-foreground: #17171a;
+  --secondary: #2a2a2f;
+  --secondary-foreground: #f4f1ea;
+  --muted: #222226;
+  --muted-foreground: #a8a49b;
+  --accent: #3a2e12;
+  --accent-foreground: #f8d27a;
+  --link: #f2b733;
+  --destructive: #ff8a80;
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 18%);
-  --ring: oklch(0.7 0.13 110);
-  --eat: oklch(0.69 0.13 140);
-  --eat-soft: oklch(0.22 0.045 140);
-  --maybe: oklch(0.76 0.14 78);
-  --maybe-soft: oklch(0.24 0.045 78);
-  --yeet: oklch(0.7 0.18 25);
-  --yeet-soft: oklch(0.23 0.05 25);
+  --ring: #f2a900;
+  --eat: #d9d4ca;
+  --eat-soft: #2e2e33;
+  --maybe: #ffc266;
+  --maybe-soft: #3a2a12;
+  --yeet: #ffb1a8;
+  --yeet-soft: #3a1a18;
 }
 
 @layer base {
@@ -101,15 +106,15 @@
   html { scrollbar-color: var(--muted-foreground) var(--background); scrollbar-width: thin; }
   h1, h2, h3 { text-wrap: balance; }
   p { text-wrap: pretty; }
-  ::selection { background: oklch(0.82 0.11 110); color: oklch(0.14 0.02 110); }
+  ::selection { background: #fcd77a; color: #1d1a16; }
 }
 
 @layer utilities {
   .page-shell { @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8; }
   .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
-  .tactile { box-shadow: 0 3px 0 oklch(0.25 0.04 110); transition: transform 160ms ease-out, box-shadow 160ms ease-out; }
-  .tactile:hover { transform: translateY(-1px); box-shadow: 0 4px 0 oklch(0.25 0.04 110); }
-  .tactile:active { transform: translateY(2px); box-shadow: 0 1px 0 oklch(0.25 0.04 110); }
+  .tactile { box-shadow: 0 3px 0 #1d1a16; transition: transform 160ms ease-out, box-shadow 160ms ease-out; }
+  .tactile:hover { transform: translateY(-1px); box-shadow: 0 4px 0 #1d1a16; }
+  .tactile:active { transform: translateY(2px); box-shadow: 0 1px 0 #1d1a16; }
   .scan-beam { animation: scan-beam 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate; }
   .verdict-reveal { animation: verdict-reveal 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
   .camera-corners { position: relative; }

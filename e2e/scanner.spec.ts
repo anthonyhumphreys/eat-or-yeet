@@ -170,7 +170,7 @@ test("a failed automatic check retries the same barcode without opening a form",
   expect(checks[1]).toEqual(checks[0]);
 });
 
-test("first scan waits for a region choice and then checks automatically", async ({ page }) => {
+test("first scan waits for a country choice and then checks automatically", async ({ page }) => {
   await installOreoCamera(page);
   const checks: CheckPayload[] = [];
   await page.route("**/api/check", async (route) => {
@@ -178,15 +178,14 @@ test("first scan waits for a region choice and then checks automatically", async
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(checkResult("US")) });
   });
   await page.goto("/scan");
-  await expect(page.getByRole("status").filter({ hasText: "Choose a warning region above" })).toBeVisible();
-  await page.getByLabel("Or type the number").fill(oreoBarcode);
-  await expect(page.getByRole("button", { name: "Check published warnings" })).toBeDisabled();
-  await page.getByLabel("Or type the number").press("Enter");
+  const prompt = page.getByRole("dialog", { name: "Where do you buy your food?" });
+  await expect(prompt).toBeVisible();
   expect(await page.evaluate(() => (window as typeof window & { testCameraStreams: MediaStream[] }).testCameraStreams.length)).toBe(0);
   expect(checks).toHaveLength(0);
-  await page.getByRole("button", { name: "Use US warnings" }).click();
+  await prompt.getByRole("radio", { name: /United States/ }).check();
+  await prompt.getByRole("button", { name: "Show US recalls" }).click();
+  await expect(prompt).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeVisible();
   expect(checks).toHaveLength(1);
   expect(checks[0]).toMatchObject({ region: "US", observation: { barcode: oreoBarcode } });
-  await expect(page.getByRole("complementary", { name: "Choose your warning region" })).toHaveCount(0);
 });

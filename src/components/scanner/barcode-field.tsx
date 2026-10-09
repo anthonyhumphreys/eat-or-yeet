@@ -38,7 +38,7 @@ export function BarcodeField({ id, value, onChange, label = "Barcode number", op
           aria-describedby={hintId}
           className={size === "lg" ? "h-14 pr-12 pl-4 font-mono text-lg tracking-[0.08em] tabular-nums md:text-lg" : "h-11 pr-10 pl-3 font-mono tracking-[0.06em] tabular-nums"}
         />
-        {status.state === "valid" ? <CircleCheck className="pointer-events-none absolute right-4 top-1/2 size-5 -translate-y-1/2 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:fade-in" aria-hidden /> : null}
+        {status.state === "valid" ? <CircleCheck className="pointer-events-none absolute right-4 top-1/2 size-5 -translate-y-1/2 text-link motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:fade-in" aria-hidden /> : null}
       </div>
       <p id={hintId} aria-live="polite" className={`flex items-start gap-1.5 text-sm leading-6 ${status.state === "error" ? "font-semibold text-yeet" : "text-muted-foreground"}`}>
         {status.state === "error" ? <CircleAlert className="mt-1 size-4 shrink-0" aria-hidden /> : null}
