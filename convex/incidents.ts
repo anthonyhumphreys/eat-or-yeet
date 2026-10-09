@@ -587,6 +587,14 @@ function scheduledSources() {
   return sources.filter((source) => source.id !== "fsis" || process.env.FSIS_FETCH_MODE !== "snapshot");
 }
 
+export const refreshScheduledInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ queued: string[] }> => {
+    if (process.env.SCHEDULED_SOURCE_REFRESH === "false") return { queued: [] };
+    return ctx.runAction(internal.incidents.refreshAllInternal, {});
+  },
+});
+
 export const refreshAll = action({
   args: { secret: v.string() },
   handler: async (ctx, args): Promise<{ queued: string[] }> => {

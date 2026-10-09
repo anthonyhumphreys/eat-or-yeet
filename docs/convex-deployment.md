@@ -21,6 +21,8 @@ Deploying code does not import official recall data. After the first successful 
 
 The deployed Convex cron then queues all source refreshes daily at 04:17 UTC. Cleanup runs at 05:17 UTC. No GitHub Actions schedule or Vercel Cron is needed for these jobs. Code deploys on pushes; source refreshes run on the Convex schedule.
 
+Set `SCHEDULED_SOURCE_REFRESH=false` on inactive development/preview deployments to avoid duplicate daily imports. Leave it unset in production. Manual refresh actions remain available regardless of this flag.
+
 The app blocks reassuring negative results until the required source health is available. Queuing a refresh is not evidence that it finished.
 
 ## First rollout verification

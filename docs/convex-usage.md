@@ -26,6 +26,8 @@ All warning mutations must use `bumpDatasetVersions`. Direct dashboard edits or 
 
 Prefer the existing account-free local Convex setup for routine development and browser tests. Cloud development and preview imports consume the same team allowance as production. Keep a cloud preview only while it serves an active review, and avoid importing a full duplicate dataset for a connectivity probe. [Local development](https://docs.convex.dev/cli/local-deployments)
 
+Set `SCHEDULED_SOURCE_REFRESH=false` on cloud development and inactive previews to avoid duplicate daily imports. This only disables the scheduled refresh; `incidents:refreshAllInternal` and individual source actions still work manually. An unset flag preserves daily refreshes in production. Development source health correctly becomes stale after 48 hours without a manual refresh.
+
 Before retiring a preview, confirm its identity and that production uses a separate backend. Export a backup with `pnpm exec convex export --deployment NAME --path BACKUP.zip`. Keep backups private and outside version control; `.local-backups/` is ignored. Never remove production warning records to fit a quota.
 
 ## Verification
@@ -37,3 +39,5 @@ Useful regressions include cached pages across workers, revision changes after p
 The 9 October rollout passed 183 unit tests, 42 browser tests, lint, type checking and a production build. A development USDA sync fetched 101 active notices and updated one changed record. Hosted production checks matched a known recalled barcode, returned no published warning match for Oreo with healthy US coverage, and loaded both regional warning lists. A warm sample of three Oreo checks plus three UK page loads added 18 calls and about 8.8 KB of reported database I/O. These immediate counters may lag or include concurrent traffic; the sample is evidence that warm requests avoid full dataset reads, not a monthly cost forecast.
 
 The unused indexes were removed from production, cloud development and the retained `main` preview. Using the reported document sizes, projected database storage is about 386 MB after the reporting delay. The old preview was backed up privately; its data was retained. Confirm the eventual storage gauge before treating that projection as measured usage.
+
+Scheduled imports were disabled on cloud development and the retained `main` preview. Production's flag remains unset, so the daily official-source cron continues. The independent daily NAS USDA sync is unchanged.
