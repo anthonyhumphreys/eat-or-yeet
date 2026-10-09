@@ -36,6 +36,7 @@ if (!root) throw new Error("App root is missing.");
 
 const app = new App({ name: "eat-or-yeet-view", version: "1.0.0" }, { tools: {} });
 
+let connected = false;
 let region: Region | null = null;
 let draft: ProductDraft = emptyDraft();
 let submittedObservation: SubmittedObservation = emptySubmittedObservation();
@@ -138,6 +139,13 @@ function button(label: string, action: () => void, className = "button button-se
   if (label === "Cancel") element.dataset.cancel = "true";
   element.dataset.focusKey = `button:${focusKey}`;
   element.addEventListener("click", action);
+  return element;
+}
+
+function serverButton(label: string, action: () => void, className = "button button-secondary", focusKey = label): HTMLButtonElement {
+  const element = button(label, action, className, focusKey);
+  element.dataset.requiresConnection = "true";
+  element.disabled = !connected || Boolean(state.pending);
   return element;
 }
 
@@ -252,6 +260,7 @@ function viewForTool(tool: ToolName): View {
 }
 
 async function shareCommittedCheck(result: UnknownResult): Promise<void> {
+  if (!connected) return;
   if (typeof result.label !== "string" || typeof result.qualification !== "string") return;
   const urls: string[] = [];
   if (Array.isArray(result.warnings)) {
@@ -295,6 +304,11 @@ function startRequest(tool: ToolName, args: Record<string, unknown>, origin: "ap
 }
 
 async function callTool(tool: ToolName, args: Record<string, unknown>): Promise<void> {
+  if (!connected) {
+    setStatus("Connected checker tools are unavailable. Try again in the host app or use the website.", "error");
+    renderStatusOnly();
+    return;
+  }
   if (state.pending) return;
   const id = startRequest(tool, args, "app", activeFocusKey());
   const controller = new AbortController();
@@ -392,6 +406,7 @@ function render(focusKey?: string | null, focusStatus = false): void {
   if (state.pending) shell.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button,input,select").forEach((control) => {
     if (control.dataset.cancel !== "true") control.disabled = true;
   });
+  if (!connected) shell.querySelectorAll<HTMLButtonElement>("button[data-requires-connection='true']").forEach((control) => { control.disabled = true; });
   root.append(shell);
   if (focusStatus) status.focus();
   else if (focusKey !== undefined) {
@@ -506,7 +521,8 @@ function renderCheckView(): HTMLElement {
   const submit = node("button", "button button-primary", state.pending ? "Checking…" : "Check product");
   submit.type = "submit";
   submit.dataset.focusKey = "button:Check product";
-  submit.disabled = Boolean(state.pending);
+  submit.dataset.requiresConnection = "true";
+  submit.disabled = !connected || Boolean(state.pending);
   actionRow.append(submit);
   if (state.pending && requestOrigin === "app") actionRow.append(button("Cancel", cancelAppRequest));
   const retained = renderRetainedFacts();
@@ -539,7 +555,8 @@ function renderWarningsView(): HTMLElement {
   const submit = node("button", "button button-primary", "Search warnings");
   submit.type = "submit";
   submit.dataset.focusKey = "button:Search warnings";
-  submit.disabled = Boolean(state.pending);
+  submit.dataset.requiresConnection = "true";
+  submit.disabled = !connected || Boolean(state.pending);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!region) {
@@ -610,7 +627,7 @@ function renderSearchResult(result: UnknownResult, source: ToolInput): HTMLEleme
       const meta = paragraph(item, `${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · ${formatDateTime(warning.updatedAt)}`, "result-meta");
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
-      if (typeof warning.slug === "string") actions.append(button("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button", `warning-details:${warning.slug}`));
+      if (typeof warning.slug === "string") actions.append(serverButton("Warning details", () => void callTool("get_warning", { slug: warning.slug, pageSize: 10 }), "text-button", `warning-details:${warning.slug}`));
       if (links.length) actions.append(...links);
       item.append(title, summary, meta, actions);
       list.append(item);
@@ -638,7 +655,8 @@ function renderDetailView(): HTMLElement {
     render("view-heading");
   }, "text-button back-button"));
   section.append(headingTitle(stringValue(warning.title, "Published warning"), "detail-title"));
-  paragraph(section, `${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · updated ${formatDateTime(warning.updatedAt)}`, "result-meta");
+  const warningRegion = regionFromUnknown(warning.region) ?? "region unavailable";
+  paragraph(section, `${warningRegion} · ${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · updated ${formatDateTime(warning.updatedAt)}`, "result-meta");
   paragraph(section, stringValue(completed.consumerAdvice), "consumer-advice");
   const links = warningLinks(warning);
   if (links.length) {
@@ -696,7 +714,7 @@ function renderCoverageView(): HTMLElement {
   heading.append(headingTitle("Source coverage"));
   paragraph(heading, "See which official warning feeds were current when they last reported.");
   const regionField = renderRegionField("Coverage region");
-  const action = button(state.pending?.tool === "get_coverage" ? "Loading coverage…" : "Check source coverage", () => {
+  const action = serverButton(state.pending?.tool === "get_coverage" ? "Loading coverage…" : "Check source coverage", () => {
     if (!region) {
       setStatus("Choose a warning region before checking coverage.", "error");
       renderStatusOnly();
@@ -705,7 +723,6 @@ function renderCoverageView(): HTMLElement {
     }
     void callTool("get_coverage", { region });
   }, "button button-primary");
-  action.disabled = Boolean(state.pending);
   section.append(heading, regionField, action);
   if (state.pending && requestOrigin === "app") section.append(button("Cancel", cancelAppRequest));
   const result = state.completed?.tool === "get_coverage" ? state.completed.result : null;
@@ -811,7 +828,7 @@ function renderCompletedResult(): HTMLElement {
       const links = warningLinks(warning);
       const actions = node("div", "inline-actions");
       const slug = typeof warning.slug === "string" ? warning.slug : null;
-      if (slug) actions.append(button("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button", `full-warning-details:${slug}`));
+      if (slug) actions.append(serverButton("Full warning details", () => void callTool("get_warning", { slug, pageSize: 10 }), "text-button", `full-warning-details:${slug}`));
       if (links.length) actions.append(...links);
       item.append(actions);
       list.append(item);
@@ -882,7 +899,7 @@ function appendCoverage(parent: Element, coverage: unknown): void {
 function appendNextPage(parent: Element, result: UnknownResult, sourceOverride?: ToolInput): void {
   const source = sourceOverride ?? pagination;
   if (typeof result.nextCursor !== "string" || !result.nextCursor || !source) return;
-  const next = button(source.tool === "get_warning" ? "Load more affected groups" : "Load more warnings", () => {
+  const next = serverButton(source.tool === "get_warning" ? "Load more affected groups" : "Load more warnings", () => {
     const args = { ...source.arguments, cursor: result.nextCursor };
     void callTool(source.tool, args);
   });
@@ -911,7 +928,7 @@ function warningLinks(warning: UnknownResult): HTMLAnchorElement[] {
 
 function attachOpenLinkBridge(link: HTMLAnchorElement, url: string): void {
   link.addEventListener("click", (event) => {
-    if (!app.getHostCapabilities()?.openLinks) return;
+    if (!connected || !app.getHostCapabilities()?.openLinks) return;
     event.preventDefault();
     void app.openLink({ url }).then((result) => {
       if (result.isError) setStatus(`The host could not open this page. Copy ${url}`, "error");
@@ -983,9 +1000,11 @@ function syncHostTheme(): void {
 syncHostTheme();
 render();
 void app.connect(new PostMessageTransport(window.parent, window.parent)).then(() => {
+  connected = true;
   syncHostTheme();
   const tool = app.getHostContext()?.toolInfo?.tool.name;
   if (isToolName(tool)) currentTool = tool;
+  render();
 }).catch(() => {
   setStatus("Connected checker tools are unavailable. Try again in the host app or use the website.", "error");
   render();
