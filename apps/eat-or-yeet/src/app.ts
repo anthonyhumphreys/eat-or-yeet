@@ -445,7 +445,10 @@ function renderRegionField(labelText: string): HTMLLabelElement {
     option.selected = region === code;
     select.append(option);
   }
-  select.addEventListener("change", () => { region = regionFromUnknown(select.value); });
+  select.addEventListener("change", () => {
+    region = regionFromUnknown(select.value);
+    updateWebsiteLinkRegions();
+  });
   label.append(select);
   return label;
 }
@@ -459,13 +462,26 @@ function renderWebsiteLinks(): HTMLElement {
   ];
   for (const [label, url] of links) {
     const link = node("a", "source-link", label);
-    link.href = url;
+    link.href = websiteUrlWithRegion(url);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    attachOpenLinkBridge(link, url);
+    attachOpenLinkBridge(link, () => link.href);
     footer.append(link);
   }
   return footer;
+}
+
+function websiteUrlWithRegion(value: string): string {
+  const url = new URL(value);
+  if (region) url.searchParams.set("region", region);
+  else url.searchParams.delete("region");
+  return url.href;
+}
+
+function updateWebsiteLinkRegions(): void {
+  document.querySelectorAll<HTMLAnchorElement>(".website-links a").forEach((link) => {
+    link.href = websiteUrlWithRegion(link.href);
+  });
 }
 
 function renderTabs(): HTMLElement {
@@ -926,8 +942,9 @@ function warningLinks(warning: UnknownResult): HTMLAnchorElement[] {
   return result;
 }
 
-function attachOpenLinkBridge(link: HTMLAnchorElement, url: string): void {
+function attachOpenLinkBridge(link: HTMLAnchorElement, destination: string | (() => string)): void {
   link.addEventListener("click", (event) => {
+    const url = typeof destination === "function" ? destination() : destination;
     if (!connected || !app.getHostCapabilities()?.openLinks) return;
     event.preventDefault();
     void app.openLink({ url }).then((result) => {
