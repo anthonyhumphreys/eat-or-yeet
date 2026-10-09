@@ -552,6 +552,7 @@ function renderWarningsView(): HTMLElement {
     void callTool("search_warnings", { region, query: query.value.trim(), pageSize: 10 });
   });
   form.append(queryLabel, searchRegion, submit);
+  if (state.pending && requestOrigin === "app") form.append(button("Cancel", cancelAppRequest));
   const committedSearch = lastSearch?.tool === "search_warnings" ? lastSearch : null;
   const current = committedSearch?.result ?? null;
   section.append(heading, form);
@@ -706,6 +707,7 @@ function renderCoverageView(): HTMLElement {
   }, "button button-primary");
   action.disabled = Boolean(state.pending);
   section.append(heading, regionField, action);
+  if (state.pending && requestOrigin === "app") section.append(button("Cancel", cancelAppRequest));
   const result = state.completed?.tool === "get_coverage" ? state.completed.result : null;
   if (isRecord(result)) section.append(renderCoverageResult(result));
   else if (state.pending?.tool === "get_coverage") section.append(emptyMessage("Waiting for source coverage…"));

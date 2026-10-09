@@ -215,3 +215,52 @@ test("a failed detail request restores focus to the selected second warning row"
   await expect(secondDetailButton).toBeFocused();
   await expect.poll(async () => (await host.readCalls()).length).toBe(2);
 });
+
+test("manual cancellation keeps the completed search and coverage results visible", async ({ page }) => {
+  const host = await mountMcpApp(page);
+  const app = frame(page);
+  const navigation = app.getByRole("navigation", { name: "Checker views" });
+
+  await navigation.getByRole("button", { name: "Search warnings" }).click();
+  await app.getByLabel("Search region").selectOption("UK");
+  await app.getByLabel("Product, brand, or warning title").fill("Sample milk");
+  await app.locator("form.search-form").getByRole("button", { name: "Search warnings" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(1);
+  await host.resolveCall(0, toolResult(searchResult("UK")));
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
+
+  await app.getByLabel("Product, brand, or warning title").fill("Other milk");
+  await app.locator("form.search-form").getByRole("button", { name: "Search warnings" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(2);
+  await expect(app.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await app.getByRole("button", { name: "Cancel" }).click();
+  await expect(app.getByRole("status")).toContainText("Request interrupted");
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
+  await host.resolveCall(1, toolResult(searchResult("US")));
+  await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
+
+  await navigation.getByRole("button", { name: "Coverage" }).click();
+  await app.getByLabel("Coverage region").selectOption("US");
+  await app.getByRole("button", { name: "Check source coverage" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(3);
+  await host.resolveCall(2, toolResult(searchResult("US").coverage));
+  await expect(app.getByRole("heading", { name: "Coverage is current" })).toBeVisible();
+  await expect(app.getByText(/For US · checked/)).toBeVisible();
+
+  await app.getByLabel("Coverage region").selectOption("UK");
+  await app.getByRole("button", { name: "Check source coverage" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(4);
+  await expect(app.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(app.getByRole("heading", { name: "Coverage is current" })).toBeVisible();
+  await expect(app.getByText(/For US · checked/)).toBeVisible();
+  await app.getByRole("button", { name: "Cancel" }).click();
+  await expect(app.getByRole("status")).toContainText("Request interrupted");
+  await expect(app.getByRole("heading", { name: "Coverage is current" })).toBeVisible();
+  await expect(app.getByText(/For US · checked/)).toBeVisible();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(4);
+  await host.resolveCall(3, toolResult(searchResult("UK").coverage));
+  await expect(app.getByText(/For US · checked/)).toBeVisible();
+});
