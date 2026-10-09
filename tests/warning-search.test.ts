@@ -63,6 +63,24 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("complete warning search", () => {
+  it("finds a match that exists only on a later backend page", async () => {
+    query.mockImplementation(async (ref, args) => {
+      if (getFunctionName(ref) === "incidents:getDatasetStatus") return { ...status, version: revision };
+      if (getFunctionName(ref) === "incidents:listActivePage") {
+        return args.cursor === null
+          ? { page: rows.slice(0, 20), isDone: false, continueCursor: "backend-page-two" }
+          : { page: [makeRow(20, { title: "Later page unique product" })], isDone: true, continueCursor: "done" };
+      }
+      throw new Error("Unexpected query");
+    });
+    const { searchWarnings } = await import("@/lib/incidents/search");
+    const result = await searchWarnings({ region: "UK", query: "unique product" });
+    expect(result.items.map((item) => item.slug)).toEqual(["chocolate-warning-20"]);
+    expect(result).toMatchObject({ total: 1, complete: true, nextCursor: null });
+    expect(calls("listActivePage").map(([, args]) => args.cursor)).toEqual([null, "backend-page-two"]);
+    expect(calls("getDatasetStatus")).toHaveLength(1);
+  });
+
   it("filters the complete regional snapshot before slicing and continues past page one", async () => {
     const { searchWarnings } = await import("@/lib/incidents/search");
     const first = await searchWarnings({ region: "UK", pageSize: 20 });
@@ -119,6 +137,16 @@ describe("complete warning search", () => {
     vi.setSystemTime(now + 3_000);
     await expect(searchWarnings({ region: "UK", pageSize: 1, cursor: withEndBoundary.nextCursor! }))
       .rejects.toMatchObject({ code: "eligibility_changed", recoverable: true });
+  });
+
+  it("keeps the ten-minute expiry anchored to the initial search time", async () => {
+    const { searchWarnings } = await import("@/lib/incidents/search");
+    const first = await searchWarnings({ region: "UK", pageSize: 1 });
+    vi.setSystemTime(now + 9 * 60 * 1_000);
+    const second = await searchWarnings({ region: "UK", pageSize: 1, cursor: first.nextCursor! });
+    vi.setSystemTime(now + 10 * 60 * 1_000);
+    await expect(searchWarnings({ region: "UK", pageSize: 1, cursor: second.nextCursor! }))
+      .rejects.toMatchObject({ code: "expired", recoverable: true });
   });
 
   it("refreshes source health after a warm snapshot and propagates cold page failures", async () => {
