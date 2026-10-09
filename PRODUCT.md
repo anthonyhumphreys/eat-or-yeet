@@ -6,7 +6,7 @@ web
 
 ## Users
 
-People checking packaged food at home or while shopping, usually on a phone and often with limited time. Their primary task is to capture identifying information from a product, compare it with current official warnings, and understand why a result was returned.
+People checking packaged food at home or while shopping, usually on a phone and often with limited time. Most come to see what is recalled right now, often while writing a shopping list, or arrive on one recall from a link in a group chat, a Discord bot or an AI assistant. Some then check a pack: capture identifying information, compare it with current official warnings, and understand why a result was returned.
 
 ## Product purpose
 
@@ -26,7 +26,8 @@ Avoid generic SaaS dashboards, medical alarmism, novelty meme sites, full-screen
 
 ## Design principles
 
-- Put barcode scanning and manual entry within immediate reach.
+- Lead with current recalls. Keep checking a product one tap away, from the header on every page.
+- Make every recall page work on its own and easy to share to a group chat.
 - Keep the first step short; ask for batch or date details when they matter.
 - Call an unmatched result "No matching warning found" and show its coverage and check time.
 - Make verdicts legible in a cropped screenshot without using a "safe" badge.
