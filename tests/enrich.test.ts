@@ -95,6 +95,74 @@ describe("product lookup evidence", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("does not start lookup, fetch, or cache writes for an already-aborted request", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(enrichObservation(
+      { ...emptyObservation(), barcode: "4006381333931" },
+      { signal: controller.signal },
+    )).rejects.toHaveProperty("name", "AbortError");
+
+    expect(mocks.query).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
+  it("skips external lookup and cache writes if cancellation arrives during the Convex query", async () => {
+    const controller = new AbortController();
+    let finishQuery!: (result: { product: null; metadata: null }) => void;
+    mocks.query.mockImplementationOnce(() => new Promise((resolve) => {
+      finishQuery = resolve;
+    }));
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const pending = enrichObservation(
+      { ...emptyObservation(), barcode: "4006381333931" },
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+    finishQuery({ product: null, metadata: null });
+
+    await expect(pending).rejects.toHaveProperty("name", "AbortError");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
+  it("propagates caller cancellation during the Open Food Facts request without caching", async () => {
+    const controller = new AbortController();
+    mocks.query.mockResolvedValueOnce({ product: null, metadata: null });
+    const fetcher = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetcher);
+
+    const pending = enrichObservation(
+      { ...emptyObservation(), barcode: "4006381333931" },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    const requestSignal = vi.mocked(fetcher).mock.calls[0][1]?.signal;
+    controller.abort();
+
+    await expect(pending).rejects.toHaveProperty("name", "AbortError");
+    expect(requestSignal?.aborted).toBe(true);
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
+  it("keeps timeout failures as best-effort enrichment misses", async () => {
+    mocks.query.mockResolvedValueOnce({ product: null, metadata: null });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("Timed out", "TimeoutError")));
+
+    const result = await enrichObservation({ ...emptyObservation(), barcode: "4006381333931" });
+
+    expect(result).toMatchObject({ barcode: "04006381333931", productName: null, brand: null });
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
   it("treats an expired cache row as a miss", async () => {
     const queryTables: string[] = [];
     const ctx = {

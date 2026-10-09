@@ -19,6 +19,13 @@ const offSchema = z.object({
 });
 
 type Metadata = z.infer<typeof offSchema>["product"];
+export type EnrichObservationOptions = {
+  signal?: AbortSignal;
+};
+
+function throwIfAborted(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
 
 function lookupBarcode(value: string): string {
   const digits = value.replace(/\D/g, "");
@@ -30,37 +37,65 @@ function lookupBarcode(value: string): string {
   return digits;
 }
 
-async function fetchOpenFoodFacts(gtin: string, lookupCode: string): Promise<Metadata | null> {
+async function fetchOpenFoodFacts(
+  gtin: string,
+  lookupCode: string,
+  signal?: AbortSignal,
+): Promise<Metadata | null> {
+  throwIfAborted(signal);
+  const requestSignal = AbortSignal.any([
+    ...(signal ? [signal] : []),
+    AbortSignal.timeout(5_000),
+  ]);
+
   try {
     const response = await fetch(
       `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(lookupCode)}.json?fields=product_name,brands`,
       {
         headers: { "User-Agent": "EatOrYeet/1.0 (food safety metadata lookup)" },
-        signal: AbortSignal.timeout(5_000),
+        signal: requestSignal,
         cache: "no-store",
       },
     );
+    throwIfAborted(signal);
     if (!response.ok && response.status !== 404) return null;
-    const result = offSchema.safeParse(await readResponseJson(response, 64 * 1024));
+    // Fetch associates its signal with the response body, so body reads are covered too.
+    const json = await readResponseJson(response, 64 * 1024);
+    throwIfAborted(signal);
+    const result = offSchema.safeParse(json);
     if (!result.success || ![0, 1].includes(result.data.status)) return null;
     const metadata = result.data.status === 1 ? result.data.product ?? null : null;
     const expiresAt = Date.now() + (metadata ? 7 * 24 : 24) * 60 * 60 * 1000;
+    throwIfAborted(signal);
     await fetchMutation(api.products.cacheMetadata, {
       secret: process.env.CONVEX_SERVER_SECRET ?? "",
       gtin,
       metadata,
       expiresAt,
     });
+    throwIfAborted(signal);
     return metadata;
   } catch {
+    // Convex mutations cannot be cancelled once submitted. If cancellation happens
+    // during one, this prevents the completed result from flowing into a verdict.
+    if (signal?.aborted) throwIfAborted(signal);
     return null;
   }
 }
 
-export async function enrichObservation(observation: ProductObservation): Promise<ProductObservation> {
+export async function enrichObservation(
+  observation: ProductObservation,
+  options: EnrichObservationOptions = {},
+): Promise<ProductObservation> {
+  const { signal } = options;
+  throwIfAborted(signal);
   if (!observation.barcode || !isValidGtin(observation.barcode)) return observation;
   const gtin = normaliseGtin(observation.barcode);
+  throwIfAborted(signal);
+  // Convex queries do not accept an AbortSignal; check after completion and discard
+  // their result if the caller cancelled while the query was in flight.
   const lookup = await fetchQuery(api.products.lookupByGtin, { gtin });
+  throwIfAborted(signal);
   const local = lookup.product;
   if (local) {
     return {
@@ -79,7 +114,9 @@ export async function enrichObservation(observation: ProductObservation): Promis
     const parsed = offSchema.shape.product.safeParse(cached.metadata);
     metadata = parsed.success ? parsed.data ?? null : null;
   } else {
-    metadata = await fetchOpenFoodFacts(gtin, lookupBarcode(observation.barcode));
+    throwIfAborted(signal);
+    metadata = await fetchOpenFoodFacts(gtin, lookupBarcode(observation.barcode), signal);
+    throwIfAborted(signal);
   }
   if (!metadata) return { ...observation, barcode: gtin };
   return {
