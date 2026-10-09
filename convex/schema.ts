@@ -78,11 +78,9 @@ export default defineSchema({
     isDemo: v.boolean(),
     targets: v.array(incidentTarget),
   })
-    .index("by_authority_sourceId", ["authority", "sourceId"])
-    .index("by_sourceKey", ["sourceKey"])
-    .index("by_slug", ["slug"])
-    .index("by_status", ["status"])
-    .index("by_region_status", ["region", "status"]),
+    .index("by_authority_sourceId", ["authority", "sourceId"]),
+
+  datasetVersions: defineTable({ region, revision: v.number() }).index("by_region", ["region"]),
 
   // Matcher reads this bounded, source-data-free projection rather than the
   // full incident documents (which may contain multi-kilobyte source payloads).

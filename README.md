@@ -133,3 +133,5 @@ pnpm convex:deploy
 ```
 
 Deployment is separate from this local implementation. See the revised cost assessment for assumptions and remaining production checks.
+
+See [Convex usage](docs/convex-usage.md) for cache freshness, index storage, unchanged imports and keeping test deployments small.

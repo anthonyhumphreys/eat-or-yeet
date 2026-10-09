@@ -27,4 +27,6 @@ The app blocks reassuring negative results until the required source health is a
 
 Check a known warning and an adequately identified unmatched product in both regions, public sharing, and the ingestion ledger. Verify the new compact matching table has populated. The local test suite does not replace this hosted integration check.
 
+For a legacy deployment that already has incident records but no matching projections, run `incidents:backfillMatchDataInternal` once. The daily cron imports current data without repeating this migration. See [Convex usage](convex-usage.md) for storage, caching and preview cleanup guidance.
+
 This script is prepared but remains inactive until Vercel's Build Command and environment variables are configured. The ordinary Git-connected frontend deployment can still run in the meantime.

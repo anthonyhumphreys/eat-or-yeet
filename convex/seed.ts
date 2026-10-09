@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { TargetType } from "../src/lib/domain/schemas";
 import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
 import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
+import { bumpDatasetVersions } from "./lib/dataset_version";
 import { mutation } from "./_generated/server";
 import { requireServerSecret } from "./security";
 
@@ -86,6 +87,7 @@ export const demo = mutation({
       if (existingMatch) await ctx.db.patch(existingMatch._id, matchRecord);
       else await ctx.db.insert("incidentMatchData", matchRecord);
     }
+    await bumpDatasetVersions(ctx, demos.map((item) => item.region));
     const gtin = normaliseGtin("5000000000005");
     const product = await ctx.db.query("products").withIndex("by_gtin", (q) => q.eq("gtin", gtin)).unique();
     const productRecord = { gtin, name: "Northstar Peanut Bites", brand: "Northstar", category: "Snacks", metadata: { demo: true }, updatedAt: now };

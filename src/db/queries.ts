@@ -12,22 +12,40 @@ const MAX_MATCH_DATA_CACHE_ENTRIES = 4;
 
 type Region = "UK" | "US";
 
-async function activePage(region: Region, cursor: string | null) {
+function deploymentUrl() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is required to load warnings.");
+  return url;
+}
+
+async function activePage(region: Region, cursor: string | null, url: string, includeDemo: boolean) {
   return fetchQuery(api.incidents.getActivePage, {
     region,
-    includeDemo: process.env.ALLOW_DEMO_DATA === "true",
+    includeDemo,
+    snapshot: true,
     cursor,
-  });
+  }, { url });
 }
 
 type ActivePage = Awaited<ReturnType<typeof activePage>>;
 
-async function activeRows(region: Region) {
+// Cache each page separately so a full regional dataset cannot exceed the
+// persistent data cache's 2 MiB entry limit. Revisions change with every write.
+const cachedActivePage = unstable_cache(
+  async (region: Region, cursor: string | null, url: string, includeDemo: boolean, version: string) => {
+    void version; // Part of the cache key, rather than a Convex query argument.
+    return activePage(region, cursor, url, includeDemo);
+  },
+  ["matcher-page-v1"],
+  { revalidate: false },
+);
+
+async function activeRows(region: Region, url: string, includeDemo: boolean, version: string) {
   const rows: ActivePage["page"] = [];
   let cursor: string | null = null;
   let isDone = false;
   while (!isDone) {
-    const page: ActivePage = await activePage(region, cursor);
+    const page: ActivePage = await cachedActivePage(region, cursor, url, includeDemo, version);
     rows.push(...page.page);
     cursor = page.continueCursor;
     isDone = page.isDone;
@@ -36,11 +54,11 @@ async function activeRows(region: Region) {
 }
 
 type IncidentRow = Awaited<ReturnType<typeof activeRows>>[number];
-async function incidentBySlug(slug: string, includeDemo = false) {
-  return fetchQuery(api.incidents.getBySlug, { slug, includeDemo });
+async function incidentBySlug(slug: string, includeDemo: boolean, url: string) {
+  return fetchQuery(api.incidents.getBySlug, { slug, includeDemo }, { url });
 }
 type IncidentDetailsRow = NonNullable<Awaited<ReturnType<typeof incidentBySlug>>>;
-type ActiveDatasetCacheEntry = { expiresAt: number; version: string; promise: Promise<MatchableIncident[]> };
+type ActiveDatasetCacheEntry = { expiresAt: number; version: string; promise: Promise<IncidentRow[]> };
 const activeDatasetCache = new Map<string, ActiveDatasetCacheEntry>();
 
 function mapIncident(row: IncidentRow | IncidentDetailsRow): MatchableIncident {
@@ -78,14 +96,13 @@ function mapIncident(row: IncidentRow | IncidentDetailsRow): MatchableIncident {
   };
 }
 
-function cachedActiveIncidents(region: Region, version: string): Promise<MatchableIncident[]> {
+function cachedActiveIncidents(region: Region, version: string, url: string): Promise<IncidentRow[]> {
   const includeDemo = process.env.ALLOW_DEMO_DATA === "true";
-  const key = `${region}:${includeDemo ? "demo" : "official"}`;
+  const key = `${url}:${region}:${includeDemo ? "demo" : "official"}`;
   const current = activeDatasetCache.get(key);
   if (current && current.version === version && current.expiresAt > Date.now()) return current.promise;
 
-  // This worker-local cache holds only the compact matcher table and is invalidated by each new successful source snapshot.
-  const promise = activeRows(region).then((rows) => rows.map(mapIncident));
+  const promise = activeRows(region, url, includeDemo, version);
   activeDatasetCache.delete(key);
   activeDatasetCache.set(key, { expiresAt: Date.now() + MATCH_DATA_CACHE_TTL_MS, version, promise });
   while (activeDatasetCache.size > MAX_MATCH_DATA_CACHE_ENTRIES) {
@@ -100,9 +117,12 @@ function cachedActiveIncidents(region: Region, version: string): Promise<Matchab
 }
 
 export async function getCheckDataset(region: Region): Promise<{ incidents: MatchableIncident[]; status: DatasetStatus }> {
-  const status = await fetchQuery(api.incidents.getDatasetStatus, { region });
-  const version = status.sources.map((source) => `${source.id}:${source.lastSuccessfulAt ?? "never"}`).join("|");
-  const incidents = await cachedActiveIncidents(region, version);
+  const url = deploymentUrl();
+  // Health stays uncached, including failed/partial imports and the 48-hour gate.
+  const { version, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
+  const rows = await cachedActiveIncidents(region, version, url);
+  const now = Date.now();
+  const incidents = rows.filter((row) => activeAt(row, now)).map(mapIncident);
   return { incidents, status };
 }
 
@@ -110,41 +130,58 @@ export async function getActiveIncidents(region: Region): Promise<MatchableIncid
   return (await getCheckDataset(region)).incidents;
 }
 
+function activeAt(row: { startsAt: number; endsAt?: number }, now: number) {
+  return row.startsAt <= now && (row.endsAt === undefined || row.endsAt > now);
+}
+
+const cachedIncidentBySlug = unstable_cache(
+  async (slug: string, includeDemo: boolean, url: string, version: string) => {
+    void version;
+    return incidentBySlug(slug, includeDemo, url);
+  },
+  ["warning-details-v1"],
+  { revalidate: false },
+);
+
 export const getIncidentBySlug = cache(async (slug: string, includeDemo = false) => {
-  const row = await incidentBySlug(slug, includeDemo);
+  const url = deploymentUrl();
+  const version = await fetchQuery(api.incidents.getDatasetVersion, {}, { url });
+  const row = await cachedIncidentBySlug(slug, includeDemo, url, version);
   return row ? mapIncident(row) : null;
 });
 
-const listPublicRegion = unstable_cache(
-  async (region: Region, url: string) => {
-    const rows: Array<Awaited<ReturnType<typeof publicListPage>>["page"][number]> = [];
-    let cursor: string | null = null;
-    let isDone = false;
-    while (!isDone) {
-      const page = await publicListPage(region, cursor, url);
-      rows.push(...page.page);
-      cursor = page.continueCursor;
-      isDone = page.isDone;
-    }
-    return rows;
+const cachedPublicListPage = unstable_cache(
+  async (region: Region, cursor: string | null, url: string, version: string) => {
+    void version;
+    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true }, { url });
   },
-  ["public-warning-list-v2"],
-  { revalidate: 60 },
+  ["public-warning-page-v3"],
+  { revalidate: false },
 );
+
+async function listPublicRegion(region: Region, url: string) {
+  const version = await fetchQuery(api.incidents.getDatasetVersion, { region }, { url });
+  const rows: Array<Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number]> = [];
+  let cursor: string | null = null;
+  let isDone = false;
+  while (!isDone) {
+    const page = await cachedPublicListPage(region, cursor, url, version);
+    rows.push(...page.page);
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+  }
+  return rows;
+}
 
 // Only public browsing is cached here. Check requests still read source health every time.
 export async function listActivePublicIncidents(region?: Region) {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is required to load warnings.");
+  const url = deploymentUrl();
   const rows = region ? await listPublicRegion(region, url)
     : (await Promise.all([listPublicRegion("UK", url), listPublicRegion("US", url)])).flat();
-  return rows
+  const now = Date.now();
+  return rows.filter((row) => activeAt(row, now))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map((row) => ({ ...row, updatedAt: new Date(row.updatedAt) }));
-}
-
-async function publicListPage(region: Region, cursor: string | null, url: string) {
-  return fetchQuery(api.incidents.listActivePage, { region, cursor }, { url });
 }
 
 export async function getPublicShare(id: string) {

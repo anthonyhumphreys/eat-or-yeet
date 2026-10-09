@@ -14,6 +14,8 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
 import { requireServerSecret } from "./security";
+import { bumpDatasetVersions, datasetVersion } from "./lib/dataset_version";
+import { sameIncidentContent } from "../src/lib/incidents/unchanged";
 
 const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource];
 const UPSERT_BATCH_SIZE = 25;
@@ -129,23 +131,26 @@ export const getActivePage = query({
   args: {
     region: v.union(v.literal("UK"), v.literal("US")),
     includeDemo: v.optional(v.boolean()),
+    snapshot: v.optional(v.boolean()),
     cursor: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    const now = args.snapshot ? 0 : Date.now();
     const page = await ctx.db
       .query("incidentMatchData")
       .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "active"))
-      .paginate({ numItems: DATASET_PAGE_SIZE, cursor: args.cursor });
+      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor: args.cursor });
     return {
       ...page,
       page: page.page
-        .filter((row) => activeMatchData(row, now, args.includeDemo ?? false))
+        .filter((row) => args.snapshot ? (args.includeDemo || !row.isDemo) : activeMatchData(row, now, args.includeDemo ?? false))
         .map((row) => ({
           incidentId: row.incidentId,
           title: row.title,
           slug: row.slug,
           region: row.region,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
           hazard: row.hazard,
           pathogen: row.pathogen,
           summary: row.summary,
@@ -196,20 +201,23 @@ export const listActivePage = query({
   args: {
     region: v.union(v.literal("UK"), v.literal("US")),
     cursor: v.union(v.string(), v.null()),
+    snapshot: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    const now = args.snapshot ? 0 : Date.now();
     const page = await ctx.db
       .query("incidentMatchData")
       .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "active"))
-      .paginate({ numItems: DATASET_PAGE_SIZE, cursor: args.cursor });
+      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor: args.cursor });
     return {
       ...page,
-      page: page.page.filter((row) => activeMatchData(row, now, false)).map((row) => ({
+      page: page.page.filter((row) => args.snapshot ? !row.isDemo : activeMatchData(row, now, false)).map((row) => ({
         id: row.incidentId,
         title: row.title,
         slug: row.slug,
         region: row.region,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
         summary: row.summary,
         hazard: row.hazard?.slice(0, 400) ?? null,
         pathogen: row.pathogen ?? null,
@@ -220,6 +228,11 @@ export const listActivePage = query({
       })),
     };
   },
+});
+
+export const getDatasetVersion = query({
+  args: { region: v.optional(v.union(v.literal("UK"), v.literal("US"))) },
+  handler: (ctx, args) => datasetVersion(ctx, args.region),
 });
 
 export const getDatasetStatus = query({
@@ -245,7 +258,7 @@ export const getDatasetStatus = query({
       return [source.id, { latest: summary(latest), latestSuccessful: summary(latestSuccessful) }] as const;
     }));
 
-    return buildDatasetStatus(args.region, requiredSources, Object.fromEntries(pairs));
+    return { ...buildDatasetStatus(args.region, requiredSources, Object.fromEntries(pairs)), version: await datasetVersion(ctx, args.region) };
   },
 });
 
@@ -294,6 +307,8 @@ export const repairLegacyFdaSourceIdsBatch = internalMutation({
       repaired += 1;
     }
 
+    if (repaired) await bumpDatasetVersions(ctx, ["US"]);
+
     return { repaired, isDone: page.isDone, continueCursor: page.continueCursor };
   },
 });
@@ -340,6 +355,8 @@ export const upsertBatch = internalMutation({
   handler: async (ctx, { items }) => {
     let created = 0;
     let updated = 0;
+    let unchanged = 0;
+    const regions = new Set<"UK" | "US">();
     for (const item of items) {
       const existing = await ctx.db
         .query("incidents")
@@ -348,8 +365,11 @@ export const upsertBatch = internalMutation({
       let incidentId;
       if (existing) {
         incidentId = existing._id;
-        await ctx.db.patch(existing._id, item);
-        updated += 1;
+        if (sameIncidentContent(existing, item)) unchanged += 1;
+        else {
+          await ctx.db.patch(existing._id, item);
+          updated += 1;
+        }
       } else {
         incidentId = await ctx.db.insert("incidents", item);
         created += 1;
@@ -360,10 +380,16 @@ export const upsertBatch = internalMutation({
         .query("incidentMatchData")
         .withIndex("by_incidentId", (q) => q.eq("incidentId", incidentId))
         .unique();
-      if (existingMatch) await ctx.db.patch(existingMatch._id, matchRecord);
-      else await ctx.db.insert("incidentMatchData", matchRecord);
+      if (!existingMatch || !sameIncidentContent(existingMatch, matchRecord)) {
+        if (existingMatch) {
+          regions.add(existingMatch.region);
+          await ctx.db.patch(existingMatch._id, matchRecord);
+        } else await ctx.db.insert("incidentMatchData", matchRecord);
+        regions.add(item.region);
+      }
     }
-    return { created, updated };
+    await bumpDatasetVersions(ctx, regions);
+    return { created, updated, unchanged };
   },
 });
 
@@ -407,6 +433,7 @@ export const backfillMatchDataBatch = internalMutation({
       cursor,
     });
     let inserted = 0;
+    const regions = new Set<"UK" | "US">();
     for (const row of page.page) {
       const existing = await ctx.db
         .query("incidentMatchData")
@@ -414,8 +441,11 @@ export const backfillMatchDataBatch = internalMutation({
         .unique();
       if (existing) continue;
       await ctx.db.insert("incidentMatchData", compactMatchRecord(row._id, row));
+      regions.add(row.region);
       inserted += 1;
     }
+
+    await bumpDatasetVersions(ctx, regions);
 
     return { inserted, isDone: page.isDone, continueCursor: page.continueCursor };
   },
@@ -543,7 +573,6 @@ export const importFsisSnapshotInternal = internalAction({
 export const refreshAllInternal = internalAction({
   args: {},
   handler: async (ctx) => {
-    await ctx.runAction(internal.incidents.backfillMatchDataInternal, {});
     const scheduled = scheduledSources();
     await Promise.all(scheduled.map((source, index) => ctx.scheduler.runAfter(
       index * 30_000,
