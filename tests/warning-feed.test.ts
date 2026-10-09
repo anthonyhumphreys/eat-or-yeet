@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { listWarnings, getNews } = vi.hoisted(() => ({ listWarnings: vi.fn(), getNews: vi.fn() }));
 vi.mock("@/db/queries", () => ({ listActivePublicIncidents: listWarnings }));
@@ -15,11 +15,20 @@ const rows = [
   { id: "3", slug: "us-eggs", title: "US eggs recalled", summary: "Salmonella", hazard: "Salmonella", pathogen: "Salmonella", region: "US", authority: "FDA", categories: ["Dairy & eggs"], stores: [], updatedAt: new Date("2026-10-05T12:00:00Z") },
 ];
 
-const warningLinks = (html: string) => html.match(/href="\/incidents\/[^"]+"/g) ?? [];
+// The recall list itself, after the top alert.
+const list = (html: string) => html.slice(html.indexOf('id="warnings"'));
+const warningLinks = (html: string) => list(html).match(/href="\/incidents\/[^"]+"/g) ?? [];
 
 beforeEach(() => {
+  // The top alert and "x ago" depend on today's date.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
   listWarnings.mockResolvedValue(rows);
   getNews.mockResolvedValue({ articles: [], unavailable: false });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function render(params = {}, region: "UK" | "US" = "UK") {
@@ -43,15 +52,31 @@ describe("warnings landing feed", () => {
     const html = await render();
     expect(html).not.toContain("US eggs recalled");
     expect(warningLinks(html)).toHaveLength(2);
-    expect(html.indexOf("Waitrose recalls milk chocolate")).toBeLessThan(html.indexOf("Bread recall"));
-    expect(html).toContain('label="Fresh &amp; chilled"');
-    expect(html).toContain('label="Cupboard &amp; snacks"');
+    expect(list(html).indexOf("Waitrose recalls milk chocolate")).toBeLessThan(list(html).indexOf("Bread recall"));
+    expect(html).toContain('aria-label="Filter by food type"');
+    expect(html).toContain('href="/?region=UK&amp;category=Bakery+%26+grains"');
+    expect(html).toContain('href="/?region=UK&amp;category=Supplements"');
   });
 
   it("matches search words separately and combines them with category and retailer", async () => {
     const html = await render({ q: "Waitrose chocolate", category: "Snacks & sweets", store: "Waitrose" });
     expect(warningLinks(html)).toEqual(['href="/incidents/chocolate"']);
-    expect(html).not.toContain("Bread recall");
+    expect(list(html)).not.toContain("Bread recall");
+  });
+
+  it("leads with this month's newest food-poisoning recall as the top alert", async () => {
+    const html = await render();
+    const top = html.slice(0, html.indexOf('id="warnings"'));
+    expect(top).toContain("Top alert · Listeria");
+    expect(top).toContain('href="/incidents/bread"');
+    expect(top).toContain("2 days ago");
+  });
+
+  it("shows each recall's date and how long ago it was", async () => {
+    vi.setSystemTime(new Date("2026-10-14T12:00:00Z"));
+    const html = await render();
+    expect(html).toContain("7 Oct 2026");
+    expect(html).toContain("1 week ago");
   });
 
   it("tags each warning with a plain hazard and filters by hazard group", async () => {
