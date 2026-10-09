@@ -97,6 +97,22 @@ describe("shopping review contract", () => {
       region: "UK",
       items: [shoppingItem({ barcode: "400638 1333 932" })],
     }).success).toBe(false);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [{ id: "row-1", name: "Milk", packet: { batchCode: "LOT-42", dates: { useBy: "2026-10-09" } } }],
+    }).success).toBe(true);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [{ id: "row-1", name: "Milk", packet: { dates: { useBy: "09/10/2026" } } }],
+    }).success).toBe(false);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [{ id: "row-1", name: "Milk", packet: { productName: "Milk" } }],
+    }).success).toBe(false);
+    expect(ReviewShoppingInputSchema.safeParse({
+      region: "UK",
+      items: [{ id: "row-1", name: "Milk", packet: { batchCode: "LOT-42", allergens: "milk" } }],
+    }).success).toBe(false);
   });
 });
 
@@ -274,6 +290,27 @@ describe("reviewShoppingItems", () => {
       ["bought", "skipped"],
     ]);
     expect(matcherSpy).toHaveBeenCalledOnce();
+  });
+
+  it("accepts packet facts for later explicit checks but ignores them during discovery", async () => {
+    const milk = incident("milk-warning", "UK", [target("milk-warning", "product", "Milk")]);
+    mocks.dataset.mockResolvedValue({ incidents: [milk], status: healthyStatus("UK") });
+
+    const review = await reviewShoppingItems(ReviewShoppingInputSchema.parse({
+      region: "UK",
+      items: [
+        { id: "with-packet", name: "Milk", packet: { batchCode: "LOT-42", retailer: "Market", dates: { useBy: "2026-10-09" } } },
+        { id: "without-packet", name: "Milk" },
+      ],
+    }));
+    const { id: firstId, ...withPacket } = review.items[0]!;
+    const { id: secondId, ...withoutPacket } = review.items[1]!;
+
+    expect(firstId).toBe("with-packet");
+    expect(secondId).toBe("without-packet");
+    expect(withPacket).toEqual(withoutPacket);
+    expect(matcherSpy).toHaveBeenCalledOnce();
+    expect(JSON.stringify(review)).not.toContain("LOT-42");
   });
 
   it("reads fresh health once for each batch instead of retaining a prior healthy result", async () => {

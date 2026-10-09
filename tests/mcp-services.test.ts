@@ -74,6 +74,24 @@ describe("MCP application boundary", () => {
     ] }, { signal: expect.any(AbortSignal) });
   });
 
+  it("runs an explicit private packet check through the shared checker and scoped quota", async () => {
+    const connection = { id: "notion-shopping", dailyLimit: 40 };
+    const checked = { result: { verdict: "NO_CLUE" }, submittedObservation: {}, enrichedObservation: {} };
+    vi.mocked(checkProduct).mockResolvedValueOnce(checked as never);
+
+    await expect(executeTool("check_product", {
+      region: "US",
+      observation: { productName: "Milk", batchCode: "LOT-42", dates: { useBy: "2026-10-09" } },
+    }, { ...context(), connection })).resolves.toEqual(checked);
+
+    expect(takeIntegrationRateLimits).toHaveBeenCalledWith(context().network, "mcp_shopping", 1, connection);
+    expect(checkProduct).toHaveBeenCalledWith({
+      productName: "Milk", brand: null, barcode: null, batchCode: "LOT-42", lotCode: null, producer: null,
+      farmCode: null, countryOfOrigin: null, establishmentNumber: null, approvalNumber: null, retailer: null,
+      category: null, eggMark: null, dates: { useBy: "2026-10-09", bestBefore: null, productionDate: null },
+    }, "US", { signal: expect.any(AbortSignal) });
+  });
+
   it("does not begin a cancelled check or begin work after cancelled quota consumption", async () => {
     const cancelled = new AbortController();
     cancelled.abort();

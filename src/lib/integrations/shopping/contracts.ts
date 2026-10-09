@@ -2,13 +2,27 @@ import { z } from "zod";
 
 import { isValidGtin } from "@/lib/domain/gtin";
 import { RegionSchema } from "@/lib/domain/schemas";
-import { PublicCoverageSchema, PublicWarningSummarySchema } from "../contracts";
+import { AgentObservationSchema, PublicCoverageSchema, PublicWarningSummarySchema } from "../contracts";
+
+const publicPacketFields = AgentObservationSchema.pick({
+  batchCode: true,
+  lotCode: true,
+  producer: true,
+  countryOfOrigin: true,
+  establishmentNumber: true,
+  approvalNumber: true,
+  retailer: true,
+  dates: true,
+}).partial();
+
+export const ShoppingPacketSchema = publicPacketFields;
 
 const shoppingItemSchema = z.strictObject({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(200),
   brand: z.string().trim().min(1).max(200).optional(),
   barcode: z.string().trim().max(300).refine(isValidGtin, "Enter a valid GTIN barcode.").optional(),
+  packet: ShoppingPacketSchema.optional(),
   bought: z.boolean().default(false),
 });
 
@@ -74,6 +88,7 @@ export const ReviewShoppingResultSchema = z.strictObject({
 
 export type ReviewShoppingInput = z.infer<typeof ReviewShoppingInputSchema>;
 export type ReviewShoppingItem = ReviewShoppingInput["items"][number];
+export type ShoppingPacket = z.infer<typeof ShoppingPacketSchema>;
 export type ShoppingReviewStatus = z.infer<typeof ShoppingReviewStatusSchema>;
 export type ShoppingRelationshipReason = z.infer<typeof ShoppingRelationshipReasonSchema>;
 export type ShoppingRelationship = z.infer<typeof ShoppingRelationshipSchema>;

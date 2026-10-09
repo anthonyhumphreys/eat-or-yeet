@@ -9,8 +9,8 @@ import { classifyMcpToolResultError, createShoppingWebhookWorker, inputFingerpri
 const secret = "test-verification-token";
 const databaseId = "database-1";
 const sourceId = "source-1";
-const ids = { item: "item", brand: "brand", barcode: "barcode", bought: "bought", warnings: "warnings", status: "status", reviewed: "reviewed", fingerprint: "fingerprint" };
-type TestProperty = { id: string; type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; checkbox?: boolean; select?: { name: string } | null; date?: { start: string } | null };
+const ids = { item: "item", brand: "brand", barcode: "barcode", bought: "bought", batchCode: "batch-code", lotCode: "lot-code", producer: "producer", countryOfOrigin: "country-of-origin", establishmentNumber: "establishment-number", approvalNumber: "approval-number", retailer: "retailer", useBy: "use-by", bestBefore: "best-before", productionDate: "production-date", warnings: "warnings", status: "status", reviewed: "reviewed", fingerprint: "fingerprint" };
+type TestProperty = { id: string; type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; checkbox?: boolean; select?: { name: string } | null; date?: { start?: string; end?: string | null } | null };
 type TestPage = { id: string; parent: { database_id: string; data_source_id: string }; properties: Record<string, TestProperty> };
 const property = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, ...extra }) as TestProperty;
 
@@ -67,7 +67,7 @@ class FakeNotion implements NotionClient {
     this.dataSourceCalls += 1;
     if (this.failDataSource) throw this.failDataSource;
     expect(dataSourceId).toBe(sourceId);
-    return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "barcode" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
+    return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "barcode" || name === "batchCode" || name === "lotCode" || name === "producer" || name === "countryOfOrigin" || name === "establishmentNumber" || name === "approvalNumber" || name === "retailer" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
   }
   async getPage(pageId: string, _signal: AbortSignal) { void _signal; this.getPageCalls += 1; if (this.failGet) throw this.failGet; const page = structuredClone(this.page); page.id = pageId; return page; }
   async patchPage(pageId: string, properties: Record<string, unknown>) {
@@ -96,6 +96,11 @@ function makePage(): TestPage {
     id: "page-1", parent: { database_id: databaseId, data_source_id: sourceId }, properties: {
       Item: property(ids.item, "title", { title: [{ plain_text: "Milk" }] }), Brand: property(ids.brand, "rich_text", { rich_text: [] }),
       Barcode: property(ids.barcode, "rich_text", { rich_text: [] }),
+      BatchCode: property(ids.batchCode, "rich_text", { rich_text: [] }), LotCode: property(ids.lotCode, "rich_text", { rich_text: [] }),
+      Producer: property(ids.producer, "rich_text", { rich_text: [] }), CountryOfOrigin: property(ids.countryOfOrigin, "rich_text", { rich_text: [] }),
+      EstablishmentNumber: property(ids.establishmentNumber, "rich_text", { rich_text: [] }), ApprovalNumber: property(ids.approvalNumber, "rich_text", { rich_text: [] }),
+      Retailer: property(ids.retailer, "rich_text", { rich_text: [] }), UseBy: property(ids.useBy, "date", { date: null }),
+      BestBefore: property(ids.bestBefore, "date", { date: null }), ProductionDate: property(ids.productionDate, "date", { date: null }),
       Bought: property(ids.bought, "checkbox", { checkbox: false }), Warnings: property(ids.warnings, "rich_text", { rich_text: [] }),
       Status: property(ids.status, "select", { select: null }), Reviewed: property(ids.reviewed, "date", { date: null }),
       Fingerprint: property(ids.fingerprint, "rich_text", { rich_text: [] }),
@@ -299,6 +304,82 @@ describe("Notion shopping webhook worker", () => {
     await send(url, payload("evt-separated-gtin"));
     await eventually(() => review.items.length === 1);
     expect(review.items[0]?.barcode).toBe(formattedBarcode);
+  });
+
+  it("forwards only configured packet facts and triggers on a configured packet edit", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    config.notionProperties.useBy = { id: ids.useBy, kind: "date" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "  LOT-42  " }] });
+    notion.page.properties.Retailer = property(ids.retailer, "rich_text", { rich_text: [{ plain_text: "Unconfigured Shop" }] });
+    notion.page.properties.UseBy = property(ids.useBy, "date", { date: { start: "2026-11-30", end: null } });
+    const { url, review } = await setup({ config, notion });
+
+    expect((await send(url, payload("evt-packet-trigger", "page.properties_updated", [ids.batchCode]))).status).toBe(202);
+    await eventually(() => review.items.length === 1);
+
+    expect(review.items[0]?.packet).toEqual({ batchCode: "LOT-42", dates: { useBy: "2026-11-30" } });
+    expect(review.items[0]?.packet).not.toHaveProperty("retailer");
+    expect(review.items[0]).not.toHaveProperty("packSize");
+  });
+
+  it.each([
+    ["invalid calendar date", { start: "2026-02-30", end: null }],
+    ["date range", { start: "2026-02-28", end: "2026-03-02" }],
+  ])("refuses %s packet dates without calling MCP", async (_description, date) => {
+    const config = makeConfig(0);
+    config.notionProperties.useBy = { id: ids.useBy, kind: "date" };
+    const notion = new FakeNotion();
+    notion.page.properties.UseBy = property(ids.useBy, "date", { date });
+    const { url, review } = await setup({ config, notion });
+
+    await send(url, payload(`evt-invalid-packet-${String(_description).replaceAll(" ", "-")}`));
+    await eventually(() => notion.patches.length === 1);
+
+    expect(review.items).toHaveLength(0);
+    expect(notion.patches[0]?.[ids.status]).toEqual({ select: { name: config.statusLabels.unable } });
+    expect(notion.patches[0]?.[ids.warnings]).toEqual({ rich_text: [{ type: "text", text: { content: expect.stringContaining("packet detail is invalid") } }] });
+  });
+
+  it("refuses overlong packet text without truncating or calling MCP", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "L".repeat(301) }] });
+    const { url, review } = await setup({ config, notion });
+
+    await send(url, payload("evt-overlong-packet"));
+    await eventually(() => notion.patches.length === 1);
+
+    expect(review.items).toHaveLength(0);
+    expect(notion.patches[0]?.[ids.status]).toEqual({ select: { name: config.statusLabels.unable } });
+  });
+
+  it("discards a review when a configured packet field changes in flight", async () => {
+    let release!: () => void;
+    const review = new FakeReview();
+    review.next = new Promise<void>((resolve) => { release = resolve; });
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-OLD" }] });
+    let currentTime = Date.now();
+    const { url, store } = await setup({ now: () => currentTime, review, config, notion });
+    await send(url, payload("evt-packet-review"));
+    currentTime += 4_000;
+    await eventually(() => review.items.length === 1);
+
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-NEW" }] });
+    release();
+    await eventually(() => store.pages.get("page-1")?.generation === 2 && !store.pages.get("page-1")?.busy);
+    // The fake clock must pass the debounce due time after processPage schedules the changed row.
+    currentTime += 20;
+    await eventually(() => review.items.length === 2 && notion.patches.length === 1);
+
+    expect(review.items.map((item) => item.packet?.batchCode)).toEqual(["LOT-OLD", "LOT-NEW"]);
+    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint(review.items[1]!, false, { batchCode: "LOT-NEW" }) } }] });
+    expect(store.current("page-1")?.fingerprint).not.toBe(inputFingerprint({ id: "page-1", name: "Milk", bought: false }, false, { batchCode: "LOT-OLD" }));
   });
 
   it("fetches and reviews the latest row after debounce; old/out-of-order signals cannot restore old fields", async () => {
@@ -706,24 +787,29 @@ describe("Notion shopping webhook worker", () => {
   it("re-checks inputs before every write retry after a rate limit", async () => {
     let currentTime = Date.now();
     const notion = new FakeNotion();
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-OLD" }] });
     let patchAttempts = 0;
     notion.patchError = () => {
       patchAttempts += 1;
       if (patchAttempts === 1) {
         notion.page.properties.Item.title = [{ plain_text: "Changed during rate limit" }];
+        notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-NEW" }] });
         currentTime += 4_000;
         return new WorkerError("limited", "temporary", 0);
       }
       return undefined;
     };
-    const { url, review } = await setup({ now: () => currentTime, notion });
+    const { url, review } = await setup({ now: () => currentTime, notion, config });
     await send(url, payload("evt-write-retry"));
     currentTime += 4_000;
     await eventually(() => patchAttempts === 1);
     currentTime += 20;
     await eventually(() => review.items.length === 2);
     expect(notion.patches).toHaveLength(1);
-    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: "page-1", name: "Changed during rate limit", bought: false }, false) } }] });
+    expect(review.items.map((item) => item.packet?.batchCode)).toEqual(["LOT-OLD", "LOT-NEW"]);
+    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint(review.items[1]!, false, { batchCode: "LOT-NEW" }) } }] });
   });
 
   it("reserves request start times before waiting so concurrent Notion calls stay paced", async () => {

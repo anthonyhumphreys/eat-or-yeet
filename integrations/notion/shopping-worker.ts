@@ -34,6 +34,16 @@ export type ShoppingWorkerConfig = {
     brand?: PropertyConfig;
     barcode?: PropertyConfig;
     bought?: PropertyConfig;
+    batchCode?: PropertyConfig;
+    lotCode?: PropertyConfig;
+    producer?: PropertyConfig;
+    countryOfOrigin?: PropertyConfig;
+    establishmentNumber?: PropertyConfig;
+    approvalNumber?: PropertyConfig;
+    retailer?: PropertyConfig;
+    useBy?: PropertyConfig;
+    bestBefore?: PropertyConfig;
+    productionDate?: PropertyConfig;
     relatedWarnings: PropertyConfig;
     reviewStatus: PropertyConfig;
     reviewedAt: PropertyConfig;
@@ -56,7 +66,17 @@ export type ReviewResponse = {
   coverageSummary?: string;
   noticeTotal?: number;
 };
-export type ShoppingItem = { id: string; name: string; brand?: string; barcode?: string; bought: boolean };
+export type ShoppingPacket = {
+  batchCode?: string | null;
+  lotCode?: string | null;
+  producer?: string | null;
+  countryOfOrigin?: string | null;
+  establishmentNumber?: string | null;
+  approvalNumber?: string | null;
+  retailer?: string | null;
+  dates?: { useBy?: string | null; bestBefore?: string | null; productionDate?: string | null };
+};
+export type ShoppingItem = { id: string; name: string; brand?: string; barcode?: string; bought: boolean; packet?: ShoppingPacket };
 export interface ReviewClient {
   review(item: ShoppingItem, region: string, signal: AbortSignal): Promise<ReviewResponse>;
   close?(): Promise<void>;
@@ -164,7 +184,7 @@ export class WorkerError extends Error {
 type NotionPage = {
   id: string;
   parent?: { type?: string; database_id?: string; data_source_id?: string };
-  properties?: Record<string, { id?: string; type?: string; title?: Array<{ plain_text?: string }>; rich_text?: Array<{ plain_text?: string }>; checkbox?: boolean; select?: { name?: string } | null; date?: { start?: string } | null }>;
+  properties?: Record<string, { id?: string; type?: string; title?: Array<{ plain_text?: string }>; rich_text?: Array<{ plain_text?: string }>; checkbox?: boolean; select?: { name?: string } | null; date?: { start?: string; end?: string | null } | null }>;
 };
 export interface NotionClient {
   getPage(pageId: string, signal: AbortSignal): Promise<NotionPage>;
@@ -405,9 +425,11 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       const row = parseRow(page, config);
       if (!row || row.bought || !row.item.name.trim()) { store.finish(pageId, generation, claimToken, now()); return; }
       if (store.current(pageId)?.fingerprint === row.fingerprint) { store.finish(pageId, generation, claimToken, now()); return; }
-      const result = canReviewItem(row.item)
-        ? await reviewer.review(row.item, config.region, controller.signal)
-        : { status: "unable_to_review" as const, notices: [], warnings: ["The configured item name, brand, or barcode is outside the review tool's accepted format. Correct the row and try again."] };
+      const result = row.invalidPacket
+        ? { status: "unable_to_review" as const, notices: [], warnings: ["A configured packet detail is invalid or outside the accepted format. Correct the row and try again."] }
+        : canReviewItem(row.item)
+          ? await reviewer.review(row.item, config.region, controller.signal)
+          : { status: "unable_to_review" as const, notices: [], warnings: ["The configured item name, brand, or barcode is outside the review tool's accepted format. Correct the row and try again."] };
       const latest = await notion.getPage(pageId, controller.signal);
       assertSelectedDatabase(latest, config);
       const latestRow = parseRow(latest, config);
@@ -514,8 +536,9 @@ export function verifySignature(rawBody: Uint8Array, signature: string, verifica
   const supplied = Buffer.from(signature, "utf8"), calculated = Buffer.from(expected, "utf8");
   return supplied.length === calculated.length && timingSafeEqual(supplied, calculated);
 }
-export function inputFingerprint(item: ShoppingItem, bought: boolean): string {
-  return createHash("sha256").update(JSON.stringify({ name: item.name.trim(), brand: item.brand?.trim() ?? "", barcode: item.barcode?.trim() ?? "", bought })).digest("hex");
+export function inputFingerprint(item: ShoppingItem, bought: boolean, packetFingerprint?: unknown): string {
+  const input = { name: item.name.trim(), brand: item.brand?.trim() ?? "", barcode: item.barcode?.trim() ?? "", bought };
+  return createHash("sha256").update(JSON.stringify(packetFingerprint === undefined ? input : { ...input, packet: packetFingerprint })).digest("hex");
 }
 /** Classifies an MCP tool result without trusting its content text or payload. */
 export function classifyMcpToolResultError(result: { [key: string]: unknown; isError?: unknown; _meta?: unknown }): WorkerError | undefined {
@@ -550,7 +573,7 @@ function isValidGtin(value: string): boolean {
   return (10 - (sum % 10)) % 10 === expected;
 }
 
-function parseRow(page: NotionPage, config: ShoppingWorkerConfig): { item: ShoppingItem; bought: boolean; fingerprint: string } | undefined {
+function parseRow(page: NotionPage, config: ShoppingWorkerConfig): { item: ShoppingItem; bought: boolean; fingerprint: string; invalidPacket: boolean } | undefined {
   if (!page.properties) throw new WorkerError("Notion page properties are absent", "missing_property");
   const value = (property: PropertyConfig | undefined): NonNullable<NotionPage["properties"]>[string] | undefined => {
     if (!property) return undefined;
@@ -558,21 +581,71 @@ function parseRow(page: NotionPage, config: ShoppingWorkerConfig): { item: Shopp
     if (!entry || entry.type !== property.kind) throw new WorkerError("Configured Notion property is missing or has changed type", "missing_property");
     return entry;
   };
-  const text = (property: PropertyConfig | undefined): string | undefined => {
+  const rawText = (property: PropertyConfig | undefined): string | undefined => {
     if (!property) return undefined;
     const entry = value(property);
-    return (entry?.title ?? entry?.rich_text ?? []).map((part) => part.plain_text ?? "").join("").slice(0, 500);
+    return (entry?.title ?? entry?.rich_text ?? []).map((part) => part.plain_text ?? "").join("");
   };
+  const text = (property: PropertyConfig | undefined): string | undefined => rawText(property)?.slice(0, 500);
   const item: ShoppingItem = { id: page.id, name: text(config.notionProperties.item) ?? "", bought: false };
   const brand = text(config.notionProperties.brand), barcode = text(config.notionProperties.barcode);
   if (brand?.trim()) item.brand = brand.trim();
   if (barcode?.trim()) item.barcode = barcode.trim();
   const boughtProperty = config.notionProperties.bought;
   const bought = boughtProperty ? value(boughtProperty)?.checkbox === true : false;
+  const packet = parsePacket(config.notionProperties, value, rawText);
   const outputProperties = [config.notionProperties.relatedWarnings, config.notionProperties.reviewStatus, config.notionProperties.reviewedAt, config.notionProperties.inputFingerprint];
   outputProperties.forEach((property) => value(property));
   item.bought = bought;
-  return { item, bought, fingerprint: inputFingerprint(item, bought) };
+  if (packet.packet) item.packet = packet.packet;
+  return { item, bought, fingerprint: inputFingerprint(item, bought, packet.fingerprint), invalidPacket: packet.invalid };
+}
+
+function parsePacket(
+  properties: ShoppingWorkerConfig["notionProperties"],
+  value: (property: PropertyConfig | undefined) => NonNullable<NotionPage["properties"]>[string] | undefined,
+  rawText: (property: PropertyConfig | undefined) => string | undefined,
+): { packet?: ShoppingPacket; fingerprint?: unknown; invalid: boolean } {
+  const textFields = ["batchCode", "lotCode", "producer", "countryOfOrigin", "establishmentNumber", "approvalNumber", "retailer"] as const;
+  const dateFields = ["useBy", "bestBefore", "productionDate"] as const;
+  const configuredText = textFields.filter((field) => properties[field]);
+  const configuredDates = dateFields.filter((field) => properties[field]);
+  if (configuredText.length === 0 && configuredDates.length === 0) return { invalid: false };
+
+  const packet: ShoppingPacket = {};
+  const fingerprint: Record<string, unknown> = {};
+  let invalid = false;
+  for (const field of configuredText) {
+    const raw = rawText(properties[field]) ?? "";
+    const trimmed = raw.trim();
+    if (trimmed.length > 300) invalid = true;
+    packet[field] = trimmed || null;
+    fingerprint[field] = trimmed || null;
+  }
+  if (configuredDates.length) {
+    const dates: NonNullable<ShoppingPacket["dates"]> = {};
+    const dateFingerprint: Record<string, unknown> = {};
+    for (const field of configuredDates) {
+      const property = properties[field]!;
+      const entry = value(property);
+      const start = entry?.date?.start ?? null;
+      const end = entry?.date?.end ?? null;
+      if (start !== null && !isCalendarDate(start)) invalid = true;
+      if (end !== null && end !== "") invalid = true;
+      dates[field] = start;
+      dateFingerprint[field] = { start, end };
+    }
+    packet.dates = dates;
+    fingerprint.dates = dateFingerprint;
+  }
+  return { packet, fingerprint, invalid };
+}
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day!));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day;
 }
 function buildWriteProperties(config: ShoppingWorkerConfig, review: ReviewResponse, fingerprint: string, reviewedAt: number): Record<string, unknown> {
   const labels = config.statusLabels;
@@ -710,11 +783,13 @@ function validateConfig(config: ShoppingWorkerConfig): void {
   const properties = Object.values(config.notionProperties).filter((value): value is PropertyConfig => value !== undefined);
   if (properties.some((property) => !property.id) || new Set(properties.map((property) => decodePropertyId(property.id))).size !== properties.length) throw new WorkerError("Property IDs must be present and distinct", "invalid_config");
   const p = config.notionProperties;
-  if (!["title", "rich_text"].includes(p.item.kind) || (p.brand && p.brand.kind !== "rich_text") || (p.barcode && p.barcode.kind !== "rich_text") || p.relatedWarnings.kind !== "rich_text" || p.inputFingerprint.kind !== "rich_text" || p.reviewStatus.kind !== "select" || p.reviewedAt.kind !== "date" || (p.bought && p.bought.kind !== "checkbox")) throw new WorkerError("Configured Notion property types do not match worker operations", "invalid_config");
+  const richTextPacketFields = [p.batchCode, p.lotCode, p.producer, p.countryOfOrigin, p.establishmentNumber, p.approvalNumber, p.retailer];
+  const datePacketFields = [p.useBy, p.bestBefore, p.productionDate];
+  if (!["title", "rich_text"].includes(p.item.kind) || (p.brand && p.brand.kind !== "rich_text") || (p.barcode && p.barcode.kind !== "rich_text") || richTextPacketFields.some((property) => property && property.kind !== "rich_text") || datePacketFields.some((property) => property && property.kind !== "date") || p.relatedWarnings.kind !== "rich_text" || p.inputFingerprint.kind !== "rich_text" || p.reviewStatus.kind !== "select" || p.reviewedAt.kind !== "date" || (p.bought && p.bought.kind !== "checkbox")) throw new WorkerError("Configured Notion property types do not match worker operations", "invalid_config");
 }
 function inputPropertyIds(config: ShoppingWorkerConfig): Set<string> {
   const p = config.notionProperties;
-  return new Set([p.item, p.brand, p.barcode, p.bought].filter((value): value is PropertyConfig => value !== undefined).map((value) => decodePropertyId(value.id)));
+  return new Set([p.item, p.brand, p.barcode, p.bought, p.batchCode, p.lotCode, p.producer, p.countryOfOrigin, p.establishmentNumber, p.approvalNumber, p.retailer, p.useBy, p.bestBefore, p.productionDate].filter((value): value is PropertyConfig => value !== undefined).map((value) => decodePropertyId(value.id)));
 }
 function assertSelectedDatabase(page: NotionPage, config: ShoppingWorkerConfig): void {
   if (page.parent?.data_source_id !== config.notionDataSourceId || (page.parent.database_id && page.parent.database_id !== config.notionDatabaseId)) throw new WorkerError("Page is outside selected Notion data source", "out_of_scope");
