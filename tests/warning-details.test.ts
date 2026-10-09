@@ -123,6 +123,39 @@ describe("warning details service", () => {
       .rejects.toMatchObject({ code: "expired", recoverable: true });
   });
 
+  it("invalidates continuations when any serialized warning details change at the same updatedAt", async () => {
+    const { getWarningDetails } = await import("@/lib/incidents/details");
+    const cursorForOriginal = async () => (await getWarningDetails({ slug: incident.slug, pageSize: 2 }))!.nextCursor!;
+
+    const batchCursor = await cursorForOriginal();
+    incident = {
+      ...incident,
+      targets: incident.targets.map((target, index) => index === 1 ? { ...target, value: "CORRECTED-BATCH-001" } : target),
+    };
+    await expect(getWarningDetails({ slug: incident.slug, pageSize: 2, cursor: batchCursor }))
+      .rejects.toMatchObject({ code: "revision_changed", recoverable: true });
+
+    incident = makeIncident();
+    const orderCursor = await cursorForOriginal();
+    incident = { ...incident, targets: [incident.targets[1], incident.targets[0], ...incident.targets.slice(2)] };
+    await expect(getWarningDetails({ slug: incident.slug, pageSize: 2, cursor: orderCursor }))
+      .rejects.toMatchObject({ code: "revision_changed", recoverable: true });
+
+    incident = makeIncident();
+    const adviceCursor = await cursorForOriginal();
+    incident = { ...incident, consumerAdvice: "Updated advice: do not consume these products." };
+    await expect(getWarningDetails({ slug: incident.slug, pageSize: 2, cursor: adviceCursor }))
+      .rejects.toMatchObject({ code: "revision_changed", recoverable: true });
+  });
+
+  it("continues when the serialized warning content is unchanged", async () => {
+    const { getWarningDetails } = await import("@/lib/incidents/details");
+    const first = await getWarningDetails({ slug: incident.slug, pageSize: 2 });
+    const second = await getWarningDetails({ slug: incident.slug, pageSize: 2, cursor: first!.nextCursor! });
+    expect(second!.affectedGroups[0].targets.map((target) => target.value)).toEqual(["Product 3", "BATCH-003"]);
+    expect(second!.affectedGroups).toHaveLength(2);
+  });
+
   it("rejects a signed cursor created for warning search", async () => {
     const { getWarningDetails } = await import("@/lib/incidents/details");
     await expect(getWarningDetails({ slug: incident.slug, pageSize: 20, cursor: signedSearchCursor() }))

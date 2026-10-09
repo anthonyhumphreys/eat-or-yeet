@@ -1,21 +1,21 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { getIncidentBySlug } from "@/db/queries";
 import type { MatchableIncident } from "@/lib/domain/types";
-import { groupAffectedTargets, serializeWarningDetails } from "@/lib/integrations/serialize";
+import { groupAffectedTargets, serializeWarningDetails, serializeWarningSummary } from "@/lib/integrations/serialize";
 import type { GetWarningInput, PublicWarningDetails } from "@/lib/integrations/contracts";
 import { securitySecret } from "@/lib/security/config";
 
 const MAX_PAGE_SIZE = 20;
 const CURSOR_TTL_MS = 10 * 60 * 1_000;
-const CURSOR_PURPOSE = "eat-or-yeet:warning-details-cursor:v1:";
+const CURSOR_PURPOSE = "eat-or-yeet:warning-details-cursor:v2:";
 
 type CursorPayload = {
-  v: 1;
+  v: 2;
   slug: string;
-  incidentRevision: number;
+  incidentRevision: string;
   pageSize: number;
   offset: number;
   asOf: number;
@@ -54,8 +54,9 @@ function readCursor(value: string): CursorPayload {
     const parsed: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
     if (!parsed || typeof parsed !== "object") throw new Error("payload");
     const payload = parsed as Partial<CursorPayload>;
-    if (payload.v !== 1 || typeof payload.slug !== "string" ||
-        !Number.isSafeInteger(payload.incidentRevision) || !Number.isSafeInteger(payload.pageSize) ||
+    if (payload.v !== 2 || typeof payload.slug !== "string" ||
+        typeof payload.incidentRevision !== "string" || !/^[a-f0-9]{64}$/.test(payload.incidentRevision) ||
+        !Number.isSafeInteger(payload.pageSize) ||
         (payload.pageSize as number) < 1 || (payload.pageSize as number) > MAX_PAGE_SIZE ||
         !Number.isSafeInteger(payload.offset) || (payload.offset as number) < 1 ||
         !Number.isSafeInteger(payload.asOf) || !Number.isSafeInteger(payload.expiresAt)) throw new Error("payload");
@@ -65,8 +66,13 @@ function readCursor(value: string): CursorPayload {
   }
 }
 
-function revisionOf(incident: MatchableIncident) {
-  return incident.updatedAt.valueOf();
+function revisionOf(incident: MatchableIncident, groups: ReturnType<typeof groupAffectedTargets>) {
+  const publicPayload = {
+    warning: serializeWarningSummary(incident),
+    consumerAdvice: incident.consumerAdvice,
+    affectedGroups: groups,
+  };
+  return createHash("sha256").update(JSON.stringify(publicPayload)).digest("hex");
 }
 
 /** Returns complete affected groups a page at a time for any published warning. */
@@ -81,7 +87,7 @@ export async function getWarningDetails(input: GetWarningInput): Promise<PublicW
   if (!incident) return null;
 
   const groups = groupAffectedTargets(incident.targets);
-  const incidentRevision = revisionOf(incident);
+  const incidentRevision = revisionOf(incident, groups);
   const now = Date.now();
   let offset = 0;
   let asOf = now;
@@ -98,7 +104,7 @@ export async function getWarningDetails(input: GetWarningInput): Promise<PublicW
   const page = groups.slice(offset, offset + pageSize);
   const nextOffset = offset + page.length;
   const nextCursor = nextOffset < groups.length
-    ? signCursor({ v: 1, slug: input.slug, incidentRevision, pageSize, offset: nextOffset, asOf, expiresAt })
+    ? signCursor({ v: 2, slug: input.slug, incidentRevision, pageSize, offset: nextOffset, asOf, expiresAt })
     : null;
   return serializeWarningDetails(incident, page, groups.length, nextCursor);
 }
