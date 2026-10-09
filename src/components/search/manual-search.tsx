@@ -64,7 +64,7 @@ export function ManualSearch({ initialMode = "barcode" }: { initialMode?: Search
   }
 
   const tab = (value: SearchMode, Icon: typeof ScanBarcode, label: string) => (
-    <button type="button" aria-pressed={mode === value} onClick={() => setMode(value)} className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-none ${mode === value ? "bg-background text-foreground shadow-[0_1px_3px_oklch(0.17_0.018_110/18%)]" : "text-muted-foreground hover:text-foreground"}`}><Icon className="size-4" aria-hidden />{label}</button>
+    <button type="button" aria-pressed={mode === value} onClick={() => setMode(value)} className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-none ${mode === value ? "bg-background text-foreground shadow-[0_1px_3px_rgb(29_26_22/18%)]" : "text-muted-foreground hover:text-foreground"}`}><Icon className="size-4" aria-hidden />{label}</button>
   );
 
   return (
