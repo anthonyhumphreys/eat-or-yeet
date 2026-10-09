@@ -64,6 +64,26 @@ describe("warning data caches", () => {
     expect(calls("listActivePage")).toHaveLength(1);
   });
 
+  it("uses the status revision for a complete snapshot and retains notice boundaries", async () => {
+    rows = [{ ...row, endsAt: now + 5_000 }, { ...row, incidentId: "future", startsAt: now + 10_000 }];
+    const db = await import("@/db/queries");
+    const snapshot = await db.getPublicWarningSnapshot("UK");
+    expect(snapshot.revision).toBe(revision);
+    expect(snapshot.asOf).toBe(now);
+    expect(snapshot.status.healthy).toBe(true);
+    expect(snapshot.rows.map((item) => [item.startsAt, item.endsAt])).toEqual([[row.startsAt, now + 5_000], [now + 10_000, undefined]]);
+    expect(calls("getDatasetStatus")).toHaveLength(1);
+    expect(calls("getDatasetVersion")).toHaveLength(0);
+    expect(calls("listActivePage")).toHaveLength(1);
+  });
+
+  it("reads regional coverage without loading public dataset pages", async () => {
+    const db = await import("@/db/queries");
+    expect((await db.getRegionCoverage("UK")).healthy).toBe(true);
+    expect(calls("getDatasetStatus")).toHaveLength(1);
+    expect(calls("listActivePage")).toHaveLength(0);
+  });
+
   it("invalidates pages when a warning changes, including a partial import", async () => {
     const db = await import("@/db/queries");
     expect((await db.getCheckDataset("UK")).incidents[0].title).toBe("Biscuit recall");

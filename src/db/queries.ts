@@ -160,12 +160,14 @@ const cachedPublicListPage = unstable_cache(
     void version;
     return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true }, { url });
   },
-  ["public-warning-page-v3"],
+  ["public-warning-page-v4"],
   { revalidate: false },
 );
 
-async function listPublicRegion(region: Region, url: string) {
-  const version = await fetchQuery(api.incidents.getDatasetVersion, { region }, { url });
+type PublicIncidentRow = Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number];
+
+async function listPublicRegion(region: Region, url: string, requestedVersion?: string) {
+  const version = requestedVersion ?? await fetchQuery(api.incidents.getDatasetVersion, { region }, { url });
   const rows: Array<Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number]> = [];
   let cursor: string | null = null;
   let isDone = false;
@@ -178,15 +180,43 @@ async function listPublicRegion(region: Region, url: string) {
   return rows;
 }
 
+/** A complete, revision-keyed public snapshot with eligibility boundaries retained. */
+export async function getPublicWarningSnapshot(region: Region): Promise<{
+  rows: PublicIncidentRow[];
+  revision: string;
+  asOf: number;
+  status: DatasetStatus;
+}> {
+  const url = deploymentUrl();
+  const { version: revision, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
+  const rows = await listPublicRegion(region, url, revision);
+  return { rows, revision, asOf: Date.now(), status };
+}
+
+/** Reads source health without loading or traversing the public warning dataset. */
+export async function getRegionCoverage(region: Region): Promise<DatasetStatus> {
+  const url = deploymentUrl();
+  const { version, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
+  void version;
+  return status;
+}
+
 // Only public browsing is cached here. Check requests still read source health every time.
 export async function listActivePublicIncidents(region?: Region) {
   const url = deploymentUrl();
   const rows = region ? await listPublicRegion(region, url)
     : (await Promise.all([listPublicRegion("UK", url), listPublicRegion("US", url)])).flat();
   const now = Date.now();
-  return rows.filter((row) => activeAt(row, now))
+  return rows
+    .filter((row) => activeAt(row, now))
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map((row) => ({ ...row, updatedAt: new Date(row.updatedAt) }));
+    .map((publicRow) => {
+      const { authorityUrl, sourceId, publishedAt, ...row } = publicRow;
+      void authorityUrl;
+      void sourceId;
+      void publishedAt;
+      return { ...row, updatedAt: new Date(row.updatedAt) };
+    });
 }
 
 export async function getPublicShare(id: string) {

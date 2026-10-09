@@ -6,7 +6,7 @@ import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, 
 
 import { foodCategoryGroups, type FoodCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
-import { normaliseText } from "@/lib/matching/normalise";
+import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
 import { regionNames, type WarningRegion } from "@/lib/location";
 
 export type ExplorerRow = {
@@ -42,10 +42,6 @@ export function filterUrl(path: string, region: WarningRegion, { q, hazard, cate
   if (store) params.set("store", store);
   if (page && page > 1) params.set("page", String(page));
   return `${path}?${params}`;
-}
-
-function searchTerms(query: string) {
-  return query.trim().split(/\s+/).map(normaliseText).filter(Boolean);
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -121,11 +117,11 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const { q, hazard, category, store } = filters;
   const thisYear = yearFormat.format(new Date());
 
-  const index = useMemo(() => (rows ?? []).map((row) => normaliseText(`${row.title} ${row.stores.join(" ")} ${row.hazard.label} ${row.categories.join(" ")}`)), [rows]);
+  const index = useMemo(() => (rows ?? []).map(warningSearchText), [rows]);
 
   const view = useMemo(() => {
-    const terms = searchTerms(q);
-    const searched = (rows ?? []).filter((_, i) => terms.every((term) => index[i].includes(term)));
+    const terms = warningSearchTerms(q);
+    const searched = (rows ?? []).filter((_, i) => warningSearchMatchesText(index[i], terms));
     const hazardCounts = new Map<HazardKind, number>();
     const categoryCounts = new Map<FoodCategory, number>();
     const stores = new Set<string>(store ? [store] : []);
