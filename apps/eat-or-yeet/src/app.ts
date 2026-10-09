@@ -1,5 +1,6 @@
 import { App, PostMessageTransport, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
+import { logoSvg } from "../../../src/lib/brand/logo";
 import { isValidGtin } from "../../../src/lib/domain/gtin";
 import {
   AgentObservationSchema,
@@ -417,7 +418,9 @@ function render(focusKey?: string | null, focusStatus = false): void {
 
 function renderHeader(): HTMLElement {
   const header = node("header", "app-header");
-  const mark = node("span", "brand-mark", "E");
+  const mark = node("span", "brand-mark");
+  // This markup comes only from the shared, static brand asset.
+  mark.innerHTML = logoSvg({ mark: "var(--primary)", cut: "var(--background)", size: 36 });
   mark.setAttribute("aria-hidden", "true");
   const title = node("h1", "brand-name", "Eat or Yeet");
   const line = node("p", "brand-line", "Food warning checker");
