@@ -177,7 +177,7 @@ export function BarcodeCamera({ onDetected }: { onDetected: (value: string) => v
             <span className={`size-2 rounded-full ${cameraState === "scanning" ? "bg-primary motion-safe:animate-pulse" : "bg-white/65"}`} />
             {cameraState === "starting" ? "Starting camera" : cameraState === "scanning" ? "Scanning" : "Barcode found"}
           </div>
-          {cameraState === "scanning" ? <div className="scan-beam absolute inset-x-[12%] top-1/2 h-px bg-primary shadow-[0_0_12px_oklch(0.7_0.13_110)]" /> : null}
+          {cameraState === "scanning" ? <div className="scan-beam absolute inset-x-[12%] top-1/2 h-px bg-primary shadow-[0_0_12px_var(--primary)]" /> : null}
           {cameraState === "starting" ? (
             <div className="absolute inset-0 grid place-items-center p-6 text-center text-white/75">
               <div><div className="mx-auto size-9 rounded-full border-2 border-white/30 border-t-primary motion-safe:animate-spin" aria-hidden /><p className="mt-3 text-sm font-medium">Starting the camera…</p></div>
