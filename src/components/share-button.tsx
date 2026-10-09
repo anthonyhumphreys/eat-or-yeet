@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
  * Shares the current page (with its filters) to a group chat: the phone's share sheet when
  * there is one, otherwise the link is copied.
  */
-export function ShareButton({ title, text, label, className = "" }: { title: string; text?: string; label: string; className?: string }) {
+export function ShareButton({ title, text, label, url, className = "" }: { title: string; text?: string; label: string; url?: string; className?: string }) {
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -17,13 +17,13 @@ export function ShareButton({ title, text, label, className = "" }: { title: str
   }, [status]);
 
   async function share() {
-    const url = window.location.href;
+    const shareUrl = url ? new URL(url, window.location.href).href : window.location.href;
     try {
       if (navigator.share) {
-        await navigator.share({ title, text, url });
+        await navigator.share({ title, text, url: shareUrl });
         return;
       }
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareUrl);
       setStatus("Link copied");
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;

@@ -37,7 +37,6 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
   const related = relatedNews(news.articles, incident);
   const hazard = classifyHazard(incident);
   const hazardText = incident.hazard?.trim() || incident.pathogen;
-  const productCount = new Set(incident.targets.map((target) => target.groupId ?? target.id)).size;
   // The FDA publishes recalling companies' own announcements as its recall notices.
   const companyAnnouncement = incident.authority === FDA && source.label === "Official source";
 
@@ -72,9 +71,8 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
 
           <div className="mt-10 space-y-10">
             <section aria-labelledby="products-heading">
-              <div className="mb-4 flex items-baseline justify-between gap-4">
+              <div className="mb-4">
                 <h2 id="products-heading" className="text-xl font-black tracking-tight">Which products</h2>
-                {productCount ? <p className="text-sm text-muted-foreground">{productCount} {productCount === 1 ? "product" : "products"}</p> : null}
               </div>
               <IncidentTargets targets={incident.targets} />
             </section>
