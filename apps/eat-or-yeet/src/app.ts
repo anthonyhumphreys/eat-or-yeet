@@ -1,5 +1,6 @@
 import { App, PostMessageTransport, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
+import { logoSvg } from "../../../src/lib/brand/logo";
 import { isValidGtin } from "../../../src/lib/domain/gtin";
 import {
   AgentObservationSchema,
@@ -417,7 +418,9 @@ function render(focusKey?: string | null, focusStatus = false): void {
 
 function renderHeader(): HTMLElement {
   const header = node("header", "app-header");
-  const mark = node("span", "brand-mark", "E");
+  const mark = node("span", "brand-mark");
+  // This markup comes only from the shared, static brand asset.
+  mark.innerHTML = logoSvg({ mark: "var(--primary)", cut: "var(--background)", size: 36 });
   mark.setAttribute("aria-hidden", "true");
   const title = node("h1", "brand-name", "Eat or Yeet");
   const line = node("p", "brand-line", "Food warning checker");
@@ -445,7 +448,10 @@ function renderRegionField(labelText: string): HTMLLabelElement {
     option.selected = region === code;
     select.append(option);
   }
-  select.addEventListener("change", () => { region = regionFromUnknown(select.value); });
+  select.addEventListener("change", () => {
+    region = regionFromUnknown(select.value);
+    updateWebsiteLinkRegions();
+  });
   label.append(select);
   return label;
 }
@@ -459,13 +465,26 @@ function renderWebsiteLinks(): HTMLElement {
   ];
   for (const [label, url] of links) {
     const link = node("a", "source-link", label);
-    link.href = url;
+    link.href = websiteUrlWithRegion(url);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    attachOpenLinkBridge(link, url);
+    attachOpenLinkBridge(link, () => link.href);
     footer.append(link);
   }
   return footer;
+}
+
+function websiteUrlWithRegion(value: string): string {
+  const url = new URL(value);
+  if (region) url.searchParams.set("region", region);
+  else url.searchParams.delete("region");
+  return url.href;
+}
+
+function updateWebsiteLinkRegions(): void {
+  document.querySelectorAll<HTMLAnchorElement>(".website-links a").forEach((link) => {
+    link.href = websiteUrlWithRegion(link.href);
+  });
 }
 
 function renderTabs(): HTMLElement {
@@ -926,8 +945,9 @@ function warningLinks(warning: UnknownResult): HTMLAnchorElement[] {
   return result;
 }
 
-function attachOpenLinkBridge(link: HTMLAnchorElement, url: string): void {
+function attachOpenLinkBridge(link: HTMLAnchorElement, destination: string | (() => string)): void {
   link.addEventListener("click", (event) => {
+    const url = typeof destination === "function" ? destination() : destination;
     if (!connected || !app.getHostCapabilities()?.openLinks) return;
     event.preventDefault();
     void app.openLink({ url }).then((result) => {
