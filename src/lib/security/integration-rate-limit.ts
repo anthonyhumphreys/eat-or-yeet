@@ -79,6 +79,7 @@ export async function takeIntegrationRateLimits(
       windowStartedAt: networkStartedAt,
       expiresAt: networkStartedAt + 2 * hourMs,
       cost: units,
+      limit: hourlyNetworkLimits[action],
     },
     {
       key: `integration:${globalHash}:${action}:global:${globalBucket}`,
@@ -87,6 +88,7 @@ export async function takeIntegrationRateLimits(
       windowStartedAt: globalStartedAt,
       expiresAt: globalStartedAt + 2 * dayMs,
       cost: units,
+      limit: dailyGlobalLimits[action],
     },
   ];
 

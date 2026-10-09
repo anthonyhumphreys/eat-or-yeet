@@ -10,6 +10,7 @@ type RateLimitBucket = {
   windowStartedAt: number;
   expiresAt: number;
   cost?: number;
+  limit?: number;
 };
 
 type RateLimitAction = "check" | "share" | "mcp_check" | "mcp_browse" | "mcp_coverage" | "mcp_shopping";
@@ -38,6 +39,52 @@ async function takeBucket(ctx: MutationCtx, bucket: RateLimitBucket) {
     count: cost,
   });
   return cost;
+}
+
+async function takeLimitedBuckets(ctx: MutationCtx, buckets: RateLimitBucket[]) {
+  const keys = new Set<string>();
+  const proposed = [];
+
+  for (const bucket of buckets) {
+    if (keys.has(bucket.key)) throw new Error("Limited rate-limit batches cannot contain duplicate bucket keys.");
+    keys.add(bucket.key);
+
+    const cost = bucket.cost ?? 1;
+    if (!Number.isInteger(cost) || cost < 1 || cost > 20) {
+      throw new Error("Rate-limit cost must be an integer from 1 to 20.");
+    }
+    if (bucket.limit !== undefined && (!Number.isSafeInteger(bucket.limit) || bucket.limit < 1)) {
+      throw new Error("Rate-limit limit must be a positive safe integer.");
+    }
+
+    const existing = await ctx.db.query("rateLimits").withIndex("by_key", (q) => q.eq("key", bucket.key)).unique();
+    const previousCount = existing?.count ?? 0;
+    if (existing && (!Number.isSafeInteger(previousCount) || previousCount < 1)) {
+      throw new Error("The rate-limit datastore contains an invalid count.");
+    }
+    const count = previousCount + cost;
+    if (!Number.isSafeInteger(count)) throw new Error("The rate-limit datastore returned an invalid count.");
+    proposed.push({ bucket, existing, count });
+  }
+
+  const allowed = proposed.every(({ bucket, count }) => bucket.limit === undefined || count <= bucket.limit);
+  if (!allowed) return proposed.map(({ count }) => count);
+
+  for (const { bucket, existing, count } of proposed) {
+    if (existing) {
+      await ctx.db.patch(existing._id, { count });
+    } else {
+      await ctx.db.insert("rateLimits", {
+        key: bucket.key,
+        subjectHash: bucket.subjectHash,
+        action: bucket.action,
+        windowStartedAt: bucket.windowStartedAt,
+        expiresAt: bucket.expiresAt,
+        count,
+      });
+    }
+  }
+  return proposed.map(({ count }) => count);
 }
 
 const rateLimitAction = v.union(
@@ -82,10 +129,14 @@ export const takeMany = mutation({
       windowStartedAt: v.number(),
       expiresAt: v.number(),
       cost: v.optional(v.number()),
+      limit: v.optional(v.number()),
     })),
   },
   handler: async (ctx, args) => {
     requireServerSecret(args.secret);
+    if (args.buckets.some((bucket) => bucket.limit !== undefined)) {
+      return takeLimitedBuckets(ctx, args.buckets);
+    }
     const counts: number[] = [];
     for (const bucket of args.buckets) {
       if (bucket.cost !== undefined && (!Number.isInteger(bucket.cost) || bucket.cost < 1 || bucket.cost > 20)) {

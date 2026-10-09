@@ -46,13 +46,14 @@ describe("integration rate limits", () => {
     ]);
 
     const args = vi.mocked(fetchMutation).mock.calls[0]?.[1] as {
-      buckets: Array<{ key: string; subjectHash: string; action: string; windowStartedAt: number; expiresAt: number; cost: number }>;
+      buckets: Array<{ key: string; subjectHash: string; action: string; windowStartedAt: number; expiresAt: number; cost: number; limit: number }>;
     };
     expect(args.buckets).toHaveLength(2);
     expect(args.buckets.map(({ action, cost }) => ({ action, cost }))).toEqual([
       { action: "mcp_browse", cost: 4 },
       { action: "mcp_browse", cost: 4 },
     ]);
+    expect(args.buckets.map(({ limit }) => limit)).toEqual([900, 3_000]);
     expect(args.buckets[0]?.key).toMatch(/^integration:[0-9a-f]{64}:mcp_browse:network:/);
     expect(args.buckets[1]?.key).toMatch(/^integration:[0-9a-f]{64}:mcp_browse:global:/);
     expect(args.buckets.every(({ key }) => !key.includes("198.51.100.17"))).toBe(true);
@@ -103,6 +104,15 @@ describe("integration rate limits", () => {
     vi.mocked(fetchMutation).mockResolvedValueOnce([1, 0] as never);
     await expect(takeIntegrationRateLimits("trusted-network", "mcp_check")).rejects.toThrow("invalid counts");
     expect(fetchMutation).toHaveBeenCalledOnce();
+  });
+
+  it("maps a denied network bucket to its own result scope", async () => {
+    vi.mocked(fetchMutation).mockResolvedValueOnce([301, 100] as never);
+
+    await expect(takeIntegrationRateLimits("trusted-network", "mcp_check")).resolves.toMatchObject([
+      { scope: "network", allowed: false, limit: 300, remaining: 0 },
+      { scope: "global", allowed: true, limit: 1_000, remaining: 900 },
+    ]);
   });
 
   it("atomically increments backend buckets by each validated cost", async () => {
