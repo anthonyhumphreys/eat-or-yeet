@@ -154,6 +154,8 @@ The public daily quotas permit at most 30,000 checks, 90,000 browse operations a
 
 Keep ordinary tests on local Convex. A cloud pilot should use a deliberately small fixture dataset and disable scheduled source refreshes on its identified preview backend; do not duplicate a full production import per review branch. Production freshness remains enabled. Quotas and read bounds contain admitted work, while rejected requests, cold cache misses and platform ingress still have costs. Measure the steady import baseline and actual active CPU before expanding the pilot.
 
+On 9 October, the five integration preview backends for PRs #2, #3, #4, #5 and #7 were individually identified as previews and configured with `SCHEDULED_SOURCE_REFRESH=false`. Each setting was read back. Production's setting remains unset, preserving its default enabled refresh behaviour. The preview cron still invokes its cheap disabled wrapper, and temporary-record cleanup remains scheduled; this change prevents each review branch from importing its own daily copy of official warnings. Apply the same setting to future verified previews rather than changing production freshness or assuming a new preview inherits it.
+
 ## Source documents
 
 - [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
