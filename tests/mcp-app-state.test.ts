@@ -94,4 +94,26 @@ describe("MCP app state", () => {
       dates: { useBy: "2026-10-31", productionDate: "2026-10-01" },
     });
   });
+
+  it("rejects cleared editable evidence but allows retained producer or production-date facts", () => {
+    const submittedEditable = {
+      ...emptySubmittedObservation(),
+      barcode: "4006381333931",
+      productName: "Soup",
+      brand: "Example",
+    };
+    expect(makeCheckInput(emptyDraft(), "UK", isValidGtin, submittedEditable)).toEqual({
+      ok: false,
+      message: "Add a barcode or a label detail before checking.",
+    });
+
+    const producerOnly = { ...emptySubmittedObservation(), producer: "Example Foods" };
+    expect(makeCheckInput(emptyDraft(), "UK", isValidGtin, producerOnly).ok).toBe(true);
+
+    const productionDateOnly = {
+      ...emptySubmittedObservation(),
+      dates: { useBy: null, bestBefore: null, productionDate: "2026-10-01" },
+    };
+    expect(makeCheckInput(emptyDraft(), "UK", isValidGtin, productionDateOnly).ok).toBe(true);
+  });
 });

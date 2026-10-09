@@ -2,7 +2,7 @@
 
 Updated: 9 October 2026
 
-Status: Implementation in progress. Shared services/contracts are ready for review in [PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2). The default-off MCP endpoint is implemented on the next branch, with local SDK protocol tests. Production MCP access, plugin installation, embedded UI, bot adapters, host connections and marketplace submission are not yet verified. See [MCP pilot controls](./mcp-service.md).
+Status: Shared services/contracts ([PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2)), the bounded default-off MCP pilot ([PR #3](https://github.com/anthonyhumphreys/eat-or-yeet/pull/3)) and the portable plugin/MCP Apps editor ([PR #4](https://github.com/anthonyhumphreys/eat-or-yeet/pull/4)) are implemented and locally verified. Notion shopping review and the owner-hosted worker are implemented on their feature branch. Real host installations, the owner Notion pilot, production enablement and marketplace submission remain release gates. See [MCP pilot controls](./mcp-service.md) and [embedded app verification](./mcp-app.md).
 
 Build one hosted MCP service around the existing deterministic checker. Package it for ChatGPT and Codex, connect compatible agent hosts to the same endpoint, and add messaging bots as small channel adapters when there is demand. Keep the richer ChatGPT experience, Grok and Meta Muse as the proposed coordinated public launch. Broader client compatibility can be tested alongside that work; it does not require a separate backend for each provider.
 
@@ -231,4 +231,4 @@ Prepare complete primary-platform integrations in parallel and retain the propos
 
 Deploy additive Convex changes before Next.js. Confirm live source health, a known fixture/live warning, Oreo checking, trusted proxy behaviour and measured resource use. Enable the MCP pilot independently from the website. Disable it through `MCP_ENABLED` if its quotas, errors or cost exceed the agreed budget; preserve website checks and source refreshes. Give native bot adapters their own enable switches. Keep the canonical submitted MCP URL stable; OpenAI's current update flow does not support self-serve URL changes. [Submission/update flow](https://developers.openai.com/plugins/deploy/submission).
 
-PR 1 is ready for review. PR 2 adds the default-off hosted MCP pilot. The next implementation task is the portable package and MCP Apps result/evidence interface; actual host tests remain a release gate.
+The core service, MCP, plugin and embedded interface implementation is ready for review. Continue with host acceptance and the owner Notion pilot after the relevant permissions and controlled deployment are available. Shopping-agent category watches remain the next independent feature slice; current checking skills already require affected-product exclusion and qualified replacement checks.

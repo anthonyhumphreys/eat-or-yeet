@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { checkResult, mountMcpApp, toolResult } from "./fixtures/mcp-host";
+import { checkResult, mountMcpApp, searchResult, toolResult, warningDetails } from "./fixtures/mcp-host";
 
 const frame = (page: import("@playwright/test").Page) => page.frameLocator('iframe[title="MCP app test frame"]');
 
@@ -140,4 +140,50 @@ test("official packet groups stay together, host theme changes apply, and long c
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
   expect(dimensions.codeRight).toBeLessThanOrEqual(dimensions.width);
+});
+
+test("warning search and paged detail return to the committed search without another tool call", async ({ page }) => {
+  const host = await mountMcpApp(page);
+  const app = frame(page);
+  await app.getByRole("navigation", { name: "Checker views" }).getByRole("button", { name: "Search warnings" }).click();
+  await app.getByLabel("Search region").selectOption("UK");
+  await app.getByLabel("Product, brand, or warning title").fill("Sample milk");
+  await expect.poll(async () => (await host.readCalls()).length).toBe(0);
+  await app.locator("form.search-form").getByRole("button", { name: "Search warnings" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(1);
+  expect((await host.readCalls())[0]).toMatchObject({
+    name: "search_warnings",
+    arguments: { region: "UK", query: "Sample milk", pageSize: 10 },
+  });
+  await host.resolveCall(0, toolResult(searchResult("UK")));
+
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
+  await expect(app.getByRole("button", { name: "Load more warnings" })).toBeVisible();
+
+  // Change only the search draft. Opening a result must still return to its committed UK query.
+  await app.getByLabel("Search region").selectOption("US");
+  await expect.poll(async () => (await host.readCalls()).length).toBe(1);
+  await app.getByRole("button", { name: "Warning details" }).click();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(2);
+  expect((await host.readCalls())[1]).toMatchObject({
+    name: "get_warning",
+    arguments: { slug: "uk-sample-recall", pageSize: 10 },
+  });
+  await host.resolveCall(1, toolResult(warningDetails("UK")));
+
+  await expect(app.getByRole("heading", { name: "UK sample milk recall" })).toBeVisible();
+  await expect(app.getByText("Showing 1 group on this page · 3 total affected groups.")).toBeVisible();
+  await expect(app.locator(".affected-group")).toHaveCount(1);
+  await expect(app.locator(".group-list")).toContainText("product: Sample milk");
+  await expect(app.getByRole("button", { name: "Load more affected groups" })).toBeVisible();
+  await app.getByRole("button", { name: "Back to UK search" }).click();
+
+  await expect(app.getByRole("heading", { name: "Search published warnings" })).toBeVisible();
+  await expect(app.getByLabel("Product, brand, or warning title")).toHaveValue("Sample milk");
+  await expect(app.getByLabel("Search region")).toHaveValue("UK");
+  await expect(app.getByRole("heading", { name: "2 warnings found" })).toBeVisible();
+  await expect(app.getByText('Committed search · UK · “Sample milk”')).toBeVisible();
+  await expect(app.getByRole("button", { name: "Load more warnings" })).toBeVisible();
+  await expect.poll(async () => (await host.readCalls()).length).toBe(2);
 });

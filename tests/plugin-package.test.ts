@@ -85,6 +85,20 @@ describe("portable plugin package", () => {
     await expect(createPluginArchive(fixture)).rejects.toThrow("OpenAI apps metadata is not permitted");
   });
 
+  it("rejects manifest references to source-only files omitted from the final ZIP", async () => {
+    const fixture = await copyPackageFixture();
+    const pluginPath = path.join(fixture, "plugin.json");
+    const plugin = JSON.parse(await readFile(pluginPath, "utf8")) as {
+      extensions: { "com.openai": { onboardingSkill: string } };
+    };
+    plugin.extensions["com.openai"].onboardingSkill = "./schemas/1.0.0/README.md";
+    await writeFile(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
+
+    await expect(createPluginArchive(fixture)).rejects.toThrow(
+      "onboardingSkill references a source file omitted from the plugin archive: ./schemas/1.0.0/README.md",
+    );
+  });
+
   it("rejects symlinks instead of following paths outside the plugin root", async () => {
     const fixture = await copyPackageFixture();
     const outside = path.join(path.dirname(fixture), `${path.basename(fixture)}-outside.txt`);

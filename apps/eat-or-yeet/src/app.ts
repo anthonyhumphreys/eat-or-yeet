@@ -42,6 +42,7 @@ let submittedObservation: SubmittedObservation = emptySubmittedObservation();
 let view: View = "check";
 let state: RequestState = initialRequestState();
 let lastCheck: RequestState["completed"] = null;
+let lastSearch: RequestState["completed"] = null;
 let currentTool: ToolName | null = null;
 let pagination: ToolInput | null = null;
 let pendingInput: ToolInput | null = null;
@@ -197,6 +198,7 @@ function showToolResult(tool: ToolName, args: Record<string, unknown>, result: u
   state = commitRequest(state, id, { tool, input: structuredClone(args), result: structured });
   if (state.pending) return;
   if (tool === "check_product") lastCheck = state.completed;
+  if (tool === "search_warnings") lastSearch = state.completed;
   if (tool === "check_product") {
     const evidence = AgentObservationSchema.safeParse(structured.submittedEvidence);
     if (evidence.success) {
@@ -550,18 +552,47 @@ function renderWarningsView(): HTMLElement {
     void callTool("search_warnings", { region, query: query.value.trim(), pageSize: 10 });
   });
   form.append(queryLabel, searchRegion, submit);
-  const current = state.completed?.tool === "search_warnings" ? state.completed.result : null;
+  const committedSearch = lastSearch?.tool === "search_warnings" ? lastSearch : null;
+  const current = committedSearch?.result ?? null;
   section.append(heading, form);
   if (isRecord(current)) {
-    const completedInput = isRecord(state.completed?.input) ? state.completed.input : {};
-    paragraph(section, `Search results for “${stringValue(completedInput.query, "all warnings")}” · ${coverageRegion(current.coverage)}`, "result-meta");
-    section.append(renderSearchResult(current));
+    const completedInput = committedSearch && isRecord(committedSearch.input) ? committedSearch.input : {};
+    paragraph(section, searchScopeLabel(completedInput), "result-meta");
+    section.append(renderSearchResult(current, { tool: "search_warnings", arguments: completedInput }));
   } else if (state.pending?.tool === "search_warnings") section.append(emptyMessage("Waiting for published warning results…"));
   else section.append(emptyMessage("Search by product, brand, or warning title."));
   return section;
 }
 
-function renderSearchResult(result: UnknownResult): HTMLElement {
+function searchScopeLabel(input: unknown): string {
+  const criteria = isRecord(input) ? input : {};
+  const scope: string[] = [];
+  const searchRegion = regionFromUnknown(criteria.region);
+  if (searchRegion) scope.push(searchRegion);
+  scope.push(typeof criteria.query === "string" && criteria.query.trim() ? `“${criteria.query.trim()}”` : "all warnings");
+  for (const [key, label] of [["hazard", "hazard"], ["category", "category"], ["retailer", "retailer"]] as const) {
+    if (typeof criteria[key] === "string" && criteria[key].trim()) scope.push(`${label}: ${criteria[key].trim()}`);
+  }
+  return `Committed search · ${scope.join(" · ")}`;
+}
+
+function restoreCommittedSearch(): void {
+  if (lastSearch?.tool !== "search_warnings" || !isRecord(lastSearch.input)) return;
+  const input = lastSearch.input;
+  const committedRegion = regionFromUnknown(input.region);
+  if (committedRegion) region = committedRegion;
+  searchQueryDraft = typeof input.query === "string" ? input.query : "";
+}
+
+function backToSearchLabel(): string {
+  if (lastSearch?.tool === "search_warnings" && isRecord(lastSearch.input)) {
+    const committedRegion = regionFromUnknown(lastSearch.input.region);
+    if (committedRegion) return `Back to ${committedRegion} search`;
+  }
+  return "Back to warning search";
+}
+
+function renderSearchResult(result: UnknownResult, source: ToolInput): HTMLElement {
   const section = node("section", "result-section");
   const resultHeading = node("div", "result-heading");
   resultHeading.append(node("h3", undefined, `${numberValue(result.total)} warning${numberValue(result.total) === 1 ? "" : "s"} found`));
@@ -588,7 +619,7 @@ function renderSearchResult(result: UnknownResult): HTMLElement {
     section.append(emptyMessage("No published warnings matched this search."));
   }
   appendCoverage(section, result.coverage);
-  appendNextPage(section, result);
+  appendNextPage(section, result, source);
   return section;
 }
 
@@ -600,7 +631,11 @@ function renderDetailView(): HTMLElement {
     return section;
   }
   const warning = isRecord(completed.warning) ? completed.warning : {};
-  section.append(button("Back to warning search", () => { view = "warnings"; render("view-heading"); }, "text-button back-button"));
+  section.append(button(backToSearchLabel(), () => {
+    restoreCommittedSearch();
+    view = "warnings";
+    render("view-heading");
+  }, "text-button back-button"));
   section.append(headingTitle(stringValue(warning.title, "Published warning"), "detail-title"));
   paragraph(section, `${stringValue(warning.authority)} · ${stringValue(warning.hazardLabel)} · updated ${formatDateTime(warning.updatedAt)}`, "result-meta");
   paragraph(section, stringValue(completed.consumerAdvice), "consumer-advice");
@@ -611,8 +646,9 @@ function renderDetailView(): HTMLElement {
     section.append(linkRow);
   }
   section.append(node("h3", "subheading", "Affected product groups"));
-  const count = numberValue(completed.affectedGroupCount);
-  paragraph(section, `${count} group${count === 1 ? "" : "s"}${completed.affectedGroupsComplete === true ? " listed" : " shown so far"}.`, "result-meta");
+  const totalCount = numberValue(completed.affectedGroupCount);
+  const currentPageCount = Array.isArray(completed.affectedGroups) ? completed.affectedGroups.length : 0;
+  paragraph(section, `Showing ${currentPageCount} group${currentPageCount === 1 ? "" : "s"} on this page · ${totalCount} total affected groups.`, "result-meta");
   if (Array.isArray(completed.affectedGroups) && completed.affectedGroups.length) {
     const groups = node("div", "group-list");
     for (const group of completed.affectedGroups) {
@@ -841,9 +877,9 @@ function appendCoverage(parent: Element, coverage: unknown): void {
   parent.append(note);
 }
 
-function appendNextPage(parent: Element, result: UnknownResult): void {
-  if (typeof result.nextCursor !== "string" || !result.nextCursor || !pagination) return;
-  const source = pagination;
+function appendNextPage(parent: Element, result: UnknownResult, sourceOverride?: ToolInput): void {
+  const source = sourceOverride ?? pagination;
+  if (typeof result.nextCursor !== "string" || !result.nextCursor || !source) return;
   const next = button(source.tool === "get_warning" ? "Load more affected groups" : "Load more warnings", () => {
     const args = { ...source.arguments, cursor: result.nextCursor };
     void callTool(source.tool, args);

@@ -98,15 +98,6 @@ export function makeCheckInput(
   if (barcode && !isValidGtin(barcode)) return { ok: false, message: "Enter a valid GTIN barcode, or clear the field." };
   if (draft.useBy && !validCalendarDate(draft.useBy)) return { ok: false, message: "Use-by must be a real date in YYYY-MM-DD format." };
   if (draft.bestBefore && !validCalendarDate(draft.bestBefore)) return { ok: false, message: "Best-before must be a real date in YYYY-MM-DD format." };
-  const hasEditableFact = [draft.productName, draft.brand, barcode, draft.batchCode, draft.lotCode, draft.useBy, draft.bestBefore]
-    .some((value) => value.trim());
-  const hasRetainedFact = Object.entries(submitted).some(([key, value]) => key === "eggMark" || key === "dates"
-    ? isRecord(value) && Object.values(value).some((fact) => typeof fact === "string" && fact.trim())
-    : typeof value === "string" && value.trim());
-  if (!hasEditableFact && !hasRetainedFact) {
-    return { ok: false, message: "Add a barcode or a label detail before checking." };
-  }
-
   const dates = submitted.dates || draft.useBy || draft.bestBefore ? {
     useBy: draft.useBy || null,
     bestBefore: draft.bestBefore || null,
@@ -121,6 +112,12 @@ export function makeCheckInput(
     lotCode: nullable(draft.lotCode),
     dates,
   };
+  const hasSubmittedFact = Object.entries(observation).some(([key, value]) => key === "eggMark" || key === "dates"
+    ? isRecord(value) && Object.values(value).some((fact) => typeof fact === "string" && fact.trim())
+    : typeof value === "string" && value.trim());
+  if (!hasSubmittedFact) {
+    return { ok: false, message: "Add a barcode or a label detail before checking." };
+  }
   return { ok: true, value: { region, observation } };
 }
 

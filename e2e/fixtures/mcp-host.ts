@@ -200,6 +200,48 @@ export function checkResult(region: "UK" | "US", overrides: Record<string, unkno
   };
 }
 
+export function searchResult(region: "UK" | "US" = "UK") {
+  const checkedAt = "2026-10-09T12:00:00.000Z";
+  const warning = checkResult(region).warnings[0]!.warning;
+  return {
+    contractVersion: "1",
+    qualification: "Search results are for discovery and do not check a product.",
+    asOf: checkedAt,
+    coverage: {
+      contractVersion: "1",
+      region,
+      healthy: true,
+      checkedAt,
+      coveredRegions: [region],
+      sources: [{ id: region === "US" ? "fda" : "fsa", name: region === "US" ? "FDA" : "Food Standards Agency", region, lastSuccessfulAt: checkedAt, status: "healthy", scope: "Food alerts" }],
+    },
+    warnings: [warning],
+    total: 2,
+    nextCursor: "search-page-two",
+    complete: false,
+  };
+}
+
+export function warningDetails(region: "UK" | "US" = "UK") {
+  const warning = checkResult(region).warnings[0]!.warning;
+  return {
+    contractVersion: "1",
+    warning,
+    consumerAdvice: "Check every product code before deciding whether the package is affected.",
+    affectedGroups: [{
+      key: "sample-packet-group",
+      association: "source_group",
+      targets: [
+        { type: "product", value: "Sample milk", matchType: "exact", dateFrom: null, dateTo: null, notes: null },
+        { type: "batch", value: "BATCH-123", matchType: "exact", dateFrom: null, dateTo: null, notes: "Printed beside the use-by date" },
+      ],
+    }],
+    affectedGroupCount: 3,
+    affectedGroupsComplete: false,
+    nextCursor: "detail-page-two",
+  };
+}
+
 export function toolResult(structuredContent: unknown, isError = false) {
   return { content: [{ type: "text" as const, text: isError ? "The test tool failed." : "Completed test result." }], structuredContent, ...(isError ? { isError: true } : {}) };
 }

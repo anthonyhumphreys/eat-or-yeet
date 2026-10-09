@@ -75,7 +75,7 @@ function assertRecord(value: unknown, label: string): JsonObject {
   return asObject(value, label);
 }
 
-function resolvePackageReference(packageDirectory: string, reference: unknown, label: string): string {
+function resolvePackageReference(packageDirectory: string, reference: unknown, label: string): { absolutePath: string; archivePath: string; reference: string } {
   if (typeof reference !== "string" || !reference.startsWith("./")) {
     throw new Error(`${label} must be a ./-prefixed package-relative path`);
   }
@@ -87,7 +87,7 @@ function resolvePackageReference(packageDirectory: string, reference: unknown, l
   if (!resolved.startsWith(`${packageDirectory}${path.sep}`)) {
     throw new Error(`${label} escapes the plugin package: ${reference}`);
   }
-  return resolved;
+  return { absolutePath: resolved, archivePath: parts.join("/"), reference };
 }
 
 function collectReferences(manifest: JsonObject): Array<{ reference: unknown; label: string }> {
@@ -201,10 +201,16 @@ export async function createPluginArchive(packageDirectory = pluginRoot): Promis
   assertSchemaValid("mcp.json", validateMcp, mcpConfiguration);
 
   if (manifest.name !== "eat-or-yeet") throw new Error("Plugin name must remain eat-or-yeet");
+  const resolvedReferences: Array<{ reference: string; label: string; archivePath: string }> = [];
   for (const { reference, label } of collectReferences(manifest)) {
-    const target = resolvePackageReference(absoluteRoot, reference, label);
+    const { absolutePath: target, archivePath, reference: packageReference } = resolvePackageReference(absoluteRoot, reference, label);
     const status = await lstat(target).catch(() => null);
     if (!status?.isFile() || status.isSymbolicLink()) throw new Error(`${label} does not reference a regular file in the package`);
+    resolvedReferences.push({
+      reference: packageReference,
+      label,
+      archivePath,
+    });
   }
 
   const serverEntries = Object.entries(assertRecord(mcpConfiguration.mcpServers, "mcpServers"));
@@ -223,6 +229,13 @@ export async function createPluginArchive(packageDirectory = pluginRoot): Promis
   }
 
   const files = await walkPackage(absoluteRoot);
+  const archivePaths = new Set(files.map((file) => file.archivePath));
+  for (const { reference, label, archivePath } of resolvedReferences) {
+    if (!archivePaths.has(archivePath)) {
+      throw new Error(`${label} references a source file omitted from the plugin archive: ${reference}`);
+    }
+  }
+
   const zippable: Zippable = {};
   for (const file of files) {
     zippable[file.archivePath] = [new Uint8Array(file.bytes), {
