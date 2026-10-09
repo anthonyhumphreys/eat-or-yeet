@@ -4,6 +4,8 @@ Updated: 9 October 2026
 
 Status: Shared services/contracts ([PR #2](https://github.com/anthonyhumphreys/eat-or-yeet/pull/2)), the bounded default-off MCP pilot ([PR #3](https://github.com/anthonyhumphreys/eat-or-yeet/pull/3)) and the portable plugin/MCP Apps editor ([PR #4](https://github.com/anthonyhumphreys/eat-or-yeet/pull/4)) are implemented and locally verified. Notion shopping review and the owner-hosted worker are implemented on their feature branch. Real host installations, the owner Notion pilot, production enablement and marketplace submission remain release gates. See [MCP pilot controls](./mcp-service.md) and [embedded app verification](./mcp-app.md).
 
+The [spec review](./agent-spec-review.md) records remaining implementation gaps and acceptance work. Ready-for-review PRs do not mean the full plan is complete; optional Notion packet support, a usable template/n8n recipe and real host acceptance remain open.
+
 Build one hosted MCP service around the existing deterministic checker. Package it for ChatGPT and Codex, connect compatible agent hosts to the same endpoint, and add messaging bots as small channel adapters when there is demand. Keep the richer ChatGPT experience, Grok and Meta Muse as the proposed coordinated public launch. Broader client compatibility can be tested alongside that work; it does not require a separate backend for each provider.
 
 The initial agent release should expose four read-only tools and a usable ChatGPT result/editor interface. Stage public sharing, Notion shopping-list reviews and native ChatGPT extensions as separate additions. Each has behaviour and compatibility requirements beyond the core checker.
