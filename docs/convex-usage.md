@@ -57,3 +57,23 @@ The unused indexes were removed from production, cloud development and the retai
 Scheduled imports were disabled on cloud development and the retained `main` preview. Production's flag remains unset, so the daily official-source cron continues. The independent daily NAS USDA sync is unchanged.
 
 For the subsequent fingerprint rollout, a hosted development sample imported the same ten existing notices twice. Both imports reported zero creations or updates. The first, which created fingerprint state, used 113,482 bytes of reported database I/O; the repeat used 36,448 bytes, about 68% less. This verifies the hosted fast path, not a monthly forecast. Weekly archive checks, source-ID scans, changed notices and ordinary traffic also consume I/O. Measure a complete production refresh cycle before assigning a free-tier DAU allowance.
+
+The final rollout passed 208 unit tests, 42 browser tests, lint, type checking and a production build. A subsequent warm production sample of three Oreo checks and three UK browse requests used 12 Convex calls and 5,550 bytes of reported database I/O, compared with the earlier 18 calls and 8,757 bytes. This sample covers cached requests to one product; it does not predict distinct-product traffic or cold cache costs.
+
+## Capacity estimate after the 9 October optimisations
+
+Assume three warm barcode checks and one warning browse page per daily active user, every day for a 30-day month. That is ten Convex calls and four dynamic website requests per user per day. Scheduled jobs, cold product lookups, cache fills, sharing, additional navigation and bots add usage.
+
+| Daily active users | Monthly Convex calls | Vercel active CPU at an assumed 50 ms per dynamic request |
+| --- | --- | --- |
+| 1,000 | 300,000 | 1.7 hours |
+| 2,000 | 600,000 | 3.3 hours |
+| 3,000 | 900,000 | 5 hours |
+
+Against Convex's one million monthly calls, the traffic-only ceiling rises from about 2,100 to 3,300 DAU. Budget around 2,500 DAU to retain room for imports, cold requests and development. This is a call budget, not an established fully free capacity. [Convex limits](https://docs.convex.dev/production/state/limits)
+
+Vercel Hobby includes four active CPU hours monthly. At the illustrative 50 ms per dynamic request, the CPU-only ceiling is about 2,400 DAU. At 25–100 ms it ranges from about 4,800 to 1,200 DAU. Actual CPU consumption and the project's Vercel billing plan have not been verified. These calculations also exclude CDN request, transfer and memory limits. Database waiting time is excluded from active CPU billing. [Vercel function pricing](https://vercel.com/docs/functions/usage-and-pricing), [Hobby allowances](https://vercel.com/docs/plans/hobby)
+
+The 9 October team usage snapshot showed 91,695 calls, leaving 90.8% of the monthly call allowance, but already 3.03 GB of database I/O. There is no remaining free I/O allowance this month. The storage gauge still showed about 759 MB; the roughly 386 MB post-cleanup figure remains a projection before fingerprint-state growth.
+
+Keep 1,000–2,000 DAU as a provisional planning range until a full production refresh cycle establishes the new daily import cost. Weekly archive checks and ordinary warning changes also need to fit within Convex's one GB monthly I/O allowance. Do not present this range as guaranteed fully free operation. Measure active CPU, cold product traffic and the steady import baseline before raising it.
