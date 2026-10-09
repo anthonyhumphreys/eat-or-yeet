@@ -3,6 +3,24 @@ import { checkResult, mountMcpApp, searchResult, toolError, toolResult, warningD
 
 const frame = (page: import("@playwright/test").Page) => page.frameLocator('iframe[title="MCP app test frame"]');
 
+test("website handoffs carry the latest explicit region without calling a tool", async ({ page }) => {
+  const host = await mountMcpApp(page);
+  const app = frame(page);
+  const region = app.getByLabel("Warning region");
+  await region.selectOption("UK");
+  await expect(app.getByRole("link", { name: "Scan a barcode", exact: true })).toHaveAttribute("href", "https://eatoryeet.app/scan?region=UK");
+  await region.selectOption("US");
+  for (const [name, path] of [["Scan a barcode", "scan"], ["Type a barcode", "search"]]) {
+    const link = app.getByRole("link", { name, exact: true });
+    await expect(link).toHaveAttribute("href", `https://eatoryeet.app/${path}?region=US`);
+    await link.click();
+  }
+  await expect.poll(() => host.readOpenedLinks()).toEqual([
+    "https://eatoryeet.app/scan?region=US", "https://eatoryeet.app/search?region=US",
+  ]);
+  expect(await host.readCalls()).toEqual([]);
+});
+
 async function submitHostCheck(page: import("@playwright/test").Page, region: "UK" | "US", overrides: Record<string, unknown> = {}) {
   const host = await mountMcpApp(page);
   await host.sendInput({ region, observation: { productName: "Sample milk", brand: "Sample Dairy", producer: "Submitted producer", countryOfOrigin: region === "US" ? "United States" : "United Kingdom", dates: { productionDate: "2026-10-01" } } });

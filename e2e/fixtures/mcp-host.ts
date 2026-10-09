@@ -13,9 +13,10 @@ async function getBridgeBundle(): Promise<string> {
         window.mountMcpHost = async (frame, html, theme, initialization) => {
           const calls = [];
           const modelContexts = [];
+          const openedLinks = [];
           const pendingCalls = [];
           const bridge = new AppBridge(null, { name: "Eat or Yeet browser test host", version: "1.0.0" },
-            { serverTools: {}, updateModelContext: { text: {}, structuredContent: {} } },
+            { serverTools: {}, openLinks: {}, updateModelContext: { text: {}, structuredContent: {} } },
             { hostContext: { toolInfo: { tool: { name: "check_product", inputSchema: { type: "object" } } }, theme } });
           bridge.oncalltool = async (params) => new Promise((resolve) => {
             const call = { params, resolve };
@@ -26,6 +27,7 @@ async function getBridgeBundle(): Promise<string> {
             modelContexts.push(params);
             return {};
           };
+          bridge.onopenlink = async ({ url }) => { openedLinks.push(url); return {}; };
           const transport = new PostMessageTransport(frame.contentWindow, frame.contentWindow);
           const send = transport.send.bind(transport);
           let heldInitializeResponse;
@@ -57,6 +59,7 @@ async function getBridgeBundle(): Promise<string> {
             bridge,
             calls,
             modelContexts,
+            openedLinks,
             async waitUntilConnected() { await connected; },
             hasPendingInitializeResponse() { return Boolean(heldInitializeResponse); },
             async releaseInitialize() {
@@ -90,6 +93,7 @@ async function getBridgeBundle(): Promise<string> {
 }
 
 export type McpBrowserHost = {
+  readOpenedLinks: () => Promise<string[]>;
   readCalls: () => Promise<Array<{ name: string; arguments?: Record<string, unknown> }>>;
   readModelContexts: () => Promise<Array<{ content?: Array<{ type: string; text?: string }> }>>;
   resolveCall: (index: number, result: unknown) => Promise<void>;
@@ -104,6 +108,7 @@ export type McpBrowserHost = {
 };
 
 type BrowserHostObject = {
+  openedLinks: string[];
   calls: Array<{ name: string; arguments?: Record<string, unknown> }>;
   modelContexts: Array<{ content?: Array<{ type: string; text?: string }> }>;
   resolveCall: (index: number, result: unknown) => void;
@@ -119,6 +124,10 @@ type BrowserHostObject = {
 
 class BrowserMcpHost implements McpBrowserHost {
   constructor(private readonly handle: JSHandle<BrowserHostObject>) {}
+
+  async readOpenedLinks(): Promise<string[]> {
+    return this.handle.evaluate((host) => host.openedLinks);
+  }
 
   async readCalls(): Promise<Awaited<ReturnType<McpBrowserHost["readCalls"]>>> {
     return this.handle.evaluate((host) => host.calls);
