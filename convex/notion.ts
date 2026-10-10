@@ -134,7 +134,7 @@ export const authorize = mutation({
       ownerId: args.ownerId, workspaceId: args.workspaceId, botId: args.botId, templatePageId: args.templatePageId,
       region: args.region, status: "setting_up", generation: 1, credentialRevision: 1, credentialEnvelope: args.credentialEnvelope,
       controlBusy: true, controlAction: "setup", disconnectAfterDrain: false, createdAt: args.now, updatedAt: args.now,
-      eventCount: 0, pendingCount: 0,
+      eventCount: 0, pendingCount: 0, fingerprintCount: 0,
     });
     await ctx.scheduler.runAfter(0, notionActions.setup, { installationId, expectedGeneration: 1 });
     return { installationId, generation: 1, status: "setting_up" as const };
@@ -357,7 +357,7 @@ export const ready = internalMutation({
     const slot = await ctx.db.query("notionProcessingSlots").withIndex("by_slot").take(MAX_GLOBAL_LEASES);
     for (const row of slot) if (row.leaseId === args.leaseId) await ctx.db.delete(row._id);
     await ctx.db.patch(installation._id, { leaseId: undefined, leaseUntil: undefined, controlBusy: false, controlAction: undefined });
-    if (pageIds.length) await ctx.scheduler.runAfter(0, notionActions.run, { installationId: installation._id });
+    if (jobs.length + newPages.length > 0) await ctx.scheduler.runAfter(0, notionActions.run, { installationId: installation._id });
     return { installationId: installation._id, generation: installation.generation, status: "active" as const };
   },
 });
@@ -461,12 +461,16 @@ export const completeFingerprint = internalMutation({
     const value = { installationId: installation._id, pageId: job.pageId, region: installation.region, fingerprint: args.fingerprint, completedAt: args.now };
     if (existing) await ctx.db.patch(existing._id, value);
     else {
-      const rows = await ctx.db.query("notionFingerprints").withIndex("by_installation_completed", (q) => q.eq("installationId", installation._id)).take(MAX_FINGERPRINTS + 1);
-      if (rows.length >= MAX_FINGERPRINTS) {
-        const oldest = rows.reduce((left, right) => left.completedAt <= right.completedAt ? left : right);
-        await ctx.db.delete(oldest._id);
+      let fingerprintCount = installation.fingerprintCount;
+      if (fingerprintCount >= MAX_FINGERPRINTS) {
+        const oldest = await ctx.db.query("notionFingerprints").withIndex("by_installation_completed", (q) => q.eq("installationId", installation._id)).first();
+        if (oldest) {
+          await ctx.db.delete(oldest._id);
+          fingerprintCount = Math.max(0, fingerprintCount - 1);
+        }
       }
       await ctx.db.insert("notionFingerprints", value);
+      await ctx.db.patch(installation._id, { fingerprintCount: fingerprintCount + 1 });
     }
     return true;
   },

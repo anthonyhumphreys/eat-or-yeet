@@ -23,7 +23,7 @@ export const notionTables = {
     properties: v.optional(v.record(v.string(), notionProperty)),
     statusLabels: v.optional(v.object({ found: v.string(), none: v.string(), unable: v.string() })),
     controlBusy: v.boolean(), controlAction: v.optional(v.union(v.literal("pause"), v.literal("resume"), v.literal("setup"), v.literal("disconnect"))),
-    disconnectAfterDrain: v.boolean(), eventCount: v.number(), pendingCount: v.number(), leaseId: v.optional(v.string()), leaseUntil: v.optional(v.number()),
+    disconnectAfterDrain: v.boolean(), eventCount: v.number(), pendingCount: v.number(), fingerprintCount: v.number(), leaseId: v.optional(v.string()), leaseUntil: v.optional(v.number()),
     createdAt: v.number(), updatedAt: v.number(), errorCode: v.optional(v.string()),
   })
     .index("by_owner_workspace", ["ownerId", "workspaceId"])

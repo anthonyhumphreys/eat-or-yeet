@@ -148,7 +148,10 @@ describe("managed Notion Convex state", () => {
     expect(accepted.result).toBe("accepted");
     const setup = await t.mutation(internal.notion.claimSetup, { installationId: created.installationId, expectedGeneration: created.generation, now: now + 2 });
     if (setup.result !== "claimed") throw new Error("Setup lease was not claimed");
+    const scheduledBeforeReady = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     await t.mutation(internal.notion.ready, { installationId: created.installationId, expectedGeneration: created.generation, leaseId: setup.leaseId, pageIds: ["seed-row"], now: now + 3 });
+    const scheduledAfterReady = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduledAfterReady.length).toBeGreaterThan(scheduledBeforeReady.length);
     const jobs = await t.run((ctx) => ctx.db.query("notionJobs").withIndex("by_installation_due", (q) => q.eq("installationId", created.installationId)).collect());
     expect(jobs.map((job) => job.pageId)).toEqual(expect.arrayContaining(["created-during-setup", "seed-row"]));
     expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({ eventCount: 1, pendingCount: 2, status: "active" });
