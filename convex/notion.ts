@@ -492,12 +492,15 @@ export const finishJob = internalMutation({
     const slot = await ctx.db.query("notionProcessingSlots").withIndex("by_slot").take(MAX_GLOBAL_LEASES);
     for (const row of slot) if (row.leaseId === args.leaseId) await ctx.db.delete(row._id);
     const newerInputArrived = job.revision > args.claimedRevision;
+    // Resume may arrive before the invalidated review drains; keep its job in either case.
+    const pausedReview = installation.generation !== job.leasedGeneration &&
+      (installation.status === "paused" || installation.controlAction === "resume") && !installation.disconnectAfterDrain;
     const structuralFailure = !newerInputArrived && args.result === "failed" &&
       (args.errorCode === "invalid_config" || args.errorCode === "missing_property") &&
       installation.status === "active" && !installation.controlBusy && installation.generation === job.leasedGeneration &&
       !installation.pendingCredentialEnvelope && !installation.disconnectAfterDrain;
     const retryJob = args.result === "retry" && installation.status === "active";
-    if (newerInputArrived) {
+    if (newerInputArrived || pausedReview) {
       await ctx.db.patch(job._id, { dueAt: Math.min(job.dueAt, args.now), leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, touchedAt: args.now });
     } else if (structuralFailure) {
       await ctx.db.patch(job._id, { leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, touchedAt: args.now });
@@ -513,7 +516,7 @@ export const finishJob = internalMutation({
       leaseId: undefined, leaseUntil: undefined,
       controlBusy: nextStatus === "setting_up" || disconnecting,
       controlAction: disconnecting ? "disconnect" : nextStatus === "setting_up" ? "setup" : undefined,
-      pendingCount: Math.max(0, installation.pendingCount - (newerInputArrived || structuralFailure || retryJob ? 0 : 1)),
+      pendingCount: Math.max(0, installation.pendingCount - (newerInputArrived || pausedReview || structuralFailure || retryJob ? 0 : 1)),
       ...(pendingCredentials ? { credentialEnvelope: pendingCredentials, credentialRevision: installation.credentialRevision + 1, pendingCredentialEnvelope: undefined, status: nextStatus } : {}),
       ...(!pendingCredentials && installation.controlAction ? { status: nextStatus } : {}),
       ...(args.result === "failed" && args.errorCode ? { errorCode: args.errorCode } : {}), updatedAt: args.now,

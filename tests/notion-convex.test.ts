@@ -222,6 +222,57 @@ describe("managed Notion Convex state", () => {
     expect(retried?.claimedRevision).toBe(first!.claimedRevision + 1);
   });
 
+  it.each([
+    ["failed", false], ["failed", true],
+    ["retry", false], ["retry", true],
+    ["success", false], ["success", true],
+  ] as const)("retains a paused review finishing with %s, with resume before drain: %s", async (result, resumeBeforeFinish) => {
+    const t = createBackend();
+    const created = await active(t, "pause-race");
+    const sessionHash = hex("3"), csrfHash = hex("4");
+    await t.mutation(api.notion.createSession, { secret, sessionHash, csrfHash, installationId: created.installationId, expiresAt: now + 86_400_000, now });
+    await enqueue(t, "pause-race", "e", "unfinished-page", now + 1);
+    const lease = await t.mutation(internal.notion.claimJob, { installationId: created.installationId, now: now + 2 });
+    if (!lease) throw new Error("Job lease was not claimed");
+
+    await t.mutation(api.notion.control, { secret, sessionHash, csrfHash, action: "pause", now: now + 3 });
+    expect(await t.query(internal.notion.leaseCurrent, {
+      installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, generation: lease.generation, now: now + 4,
+    })).toBe(false);
+    if (resumeBeforeFinish) await t.mutation(api.notion.control, { secret, sessionHash, csrfHash, action: "resume", now: now + 5 });
+    expect(await t.mutation(internal.notion.claimJob, { installationId: created.installationId, now: now + 6 })).toBeNull();
+
+    await t.mutation(internal.notion.finishJob, {
+      installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId,
+      claimedRevision: lease.claimedRevision, result, now: now + 7,
+    });
+    const retained = await t.run((ctx) => ctx.db.get(lease.jobId));
+    expect(retained).toMatchObject({ pageId: "unfinished-page", revision: lease.claimedRevision });
+    expect(retained?.leaseId).toBeUndefined();
+    expect(retained?.leaseUntil).toBeUndefined();
+    expect(retained?.leasedGeneration).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({
+      status: resumeBeforeFinish ? "active" : "paused", controlBusy: false, pendingCount: 1,
+    });
+    expect(await t.run((ctx) => ctx.db.query("notionProcessingSlots").collect())).toEqual([]);
+
+    if (!resumeBeforeFinish) await t.mutation(api.notion.control, { secret, sessionHash, csrfHash, action: "resume", now: now + 8 });
+    const resumed = await t.mutation(internal.notion.claimJob, { installationId: created.installationId, now: now + 9 });
+    if (!resumed) throw new Error("Paused review was not reclaimed after resume");
+    expect(resumed).toMatchObject({ jobId: lease.jobId, pageId: lease.pageId, generation: created.generation + 2 });
+    expect(await t.mutation(internal.notion.completeFingerprint, {
+      installationId: resumed.installationId, jobId: resumed.jobId, leaseId: resumed.leaseId, generation: resumed.generation,
+      claimedRevision: resumed.claimedRevision, fingerprint: "completed-review", now: now + 10,
+    })).toBe(true);
+    await t.mutation(internal.notion.finishJob, {
+      installationId: resumed.installationId, jobId: resumed.jobId, leaseId: resumed.leaseId,
+      claimedRevision: resumed.claimedRevision, result: "success", now: now + 11,
+    });
+    expect(await t.run((ctx) => ctx.db.get(resumed.jobId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({ status: "active", pendingCount: 0 });
+    expect(await t.query(internal.notion.getFingerprint, { installationId: resumed.installationId, pageId: resumed.pageId, region: "UK" })).toBe("completed-review");
+  });
+
   it("persists refresh CAS before applying pending reauthorization, even when disconnect is requested", async () => {
     const t = createBackend();
     const created = await active(t, "reauth-race");
