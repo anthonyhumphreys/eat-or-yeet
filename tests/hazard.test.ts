@@ -19,4 +19,12 @@ describe("hazard tags", () => {
     expect(classifyHazard({ title: "Supplement recalled", hazard: "Undeclared tadalafil" })).toEqual({ kind: "other", label: "Unapproved ingredient" });
     expect(classifyHazard({ title: "Something recalled", hazard: "The products may cause a burning sensation." })).toEqual({ kind: "other", label: "See notice" });
   });
+
+  it("names veterinary medicine residues rather than calling them an allergen", () => {
+    expect(classifyHazard({
+      title: "Graham’s Family Dairy recalls Graham’s Family Dairy Semi-Skimmed Milk due to the presence of veterinary medicines including antibiotics (penicillin)",
+      hazard: "The presence of antibiotic residues may make the product unsafe to consume and is a possible health risk for anyone with an allergy to penicillin.",
+    })).toEqual({ kind: "other", label: "Medicine residue" });
+    expect(classifyHazard({ title: "Biscuits", hazard: "Undeclared milk, a possible health risk for anyone with an allergy to milk" })).toEqual({ kind: "allergen", label: "Milk" });
+  });
 });

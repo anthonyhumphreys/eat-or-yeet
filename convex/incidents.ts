@@ -10,6 +10,7 @@ import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
 import { buildDatasetStatus, type IngestionRunSummary } from "../src/lib/incidents/dataset-status";
 import { cleanupNeedsContinuation, EPHEMERAL_CLEANUP_BATCH_SIZE } from "../src/lib/incidents/cleanup-batches";
 import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
+import { pendingLookupDue, productCategoryTagsFor } from "../src/lib/products/open-food-facts";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
@@ -58,6 +59,43 @@ function serialiseIncident(item: NormalisedIncident, source: IncidentSource, run
   };
 }
 
+type ImportItem = ReturnType<typeof serialiseIncident> & { productCategoryTags?: Record<string, string[]> };
+const CATEGORY_CACHE_CHUNK = 200;
+
+// Attaches cached Open Food Facts categories and queues unseen barcodes for
+// the hourly lookup. Browse labels are display-only, so a cache failure must
+// never stop official warnings from importing.
+async function attachProductCategoryTags(ctx: ActionCtx, items: ImportItem[]) {
+  try {
+    const newest = new Map<string, number>();
+    for (const item of items) {
+      for (const target of item.targets) {
+        if (target.type === "gtin" && target.valueNormalized) newest.set(target.valueNormalized, Math.max(newest.get(target.valueNormalized) ?? 0, item.publishedAt));
+      }
+    }
+    const gtins = [...newest.keys()];
+    const known = new Set<string>();
+    const cached = new Map<string, string[]>();
+    for (let offset = 0; offset < gtins.length; offset += CATEGORY_CACHE_CHUNK) {
+      const rows = await ctx.runQuery(internal.products.getCategoryTags, { gtins: gtins.slice(offset, offset + CATEGORY_CACHE_CHUNK) });
+      for (const row of rows) {
+        known.add(row.gtin);
+        if (row.tags.length) cached.set(row.gtin, row.tags);
+      }
+    }
+    const unseen = gtins.filter((gtin) => !known.has(gtin)).map((gtin) => ({ gtin, due: pendingLookupDue(newest.get(gtin) ?? 0) }));
+    for (let offset = 0; offset < unseen.length; offset += CATEGORY_CACHE_CHUNK) {
+      await ctx.runMutation(internal.products.queueCategoryLookups, { items: unseen.slice(offset, offset + CATEGORY_CACHE_CHUNK) });
+    }
+    for (const item of items) {
+      const tags = productCategoryTagsFor(item.targets, cached);
+      if (tags) item.productCategoryTags = tags;
+    }
+  } catch (error) {
+    console.warn(`Product categories were not attached: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 type MatchProjectionInput = Pick<Doc<"incidents">,
   | "title"
   | "slug"
@@ -80,6 +118,7 @@ type MatchProjectionInput = Pick<Doc<"incidents">,
   | "targets"
   | "sourceKey"
   | "originalSourceData"
+  | "productCategoryTags"
 >;
 
 function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionInput) {
@@ -87,6 +126,9 @@ function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionIn
     title: item.title,
     targets: item.targets,
     originalSourceData: item.originalSourceData,
+    hazard: item.hazard,
+    summary: item.summary,
+    productCategoryTags: item.productCategoryTags,
   };
 
   return {
@@ -542,7 +584,8 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
     }
     const incoming = await source.fetchIncidents(existingSourceIds);
     found = incoming.length;
-    const items = incoming.map((item) => serialiseIncident(item, source, runId));
+    const items: ImportItem[] = incoming.map((item) => serialiseIncident(item, source, runId));
+    await attachProductCategoryTags(ctx, items);
     for (let offset = 0; offset < items.length; offset += UPSERT_BATCH_SIZE) {
       try {
         const result = await ctx.runMutation(internal.incidents.upsertBatch, {
