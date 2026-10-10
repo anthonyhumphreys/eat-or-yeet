@@ -53,6 +53,22 @@ describe("food types from product names", () => {
 });
 
 describe("Open Food Facts categories", () => {
+  it("uses FDA's explicit supplement classification ahead of drink names and barcode tags", () => {
+    for (const productType of ["Dietary Supplements", "Food & Beverages, Dietary Supplements", "Dietary Supplements, Food & Beverages"]) {
+      expect(browseCategories({
+        title: "Recall",
+        targets: [product("Baby Sleep Gripe Water", "p0"), gtin("5000328657950", "p0")],
+        originalSourceData: { productType },
+        productCategoryTags: { "05000328657950": ["en:beverages"] },
+      })).toEqual(["Supplements"]);
+    }
+    expect(browseCategories({
+      title: "Recall",
+      targets: [product("Spring Water")],
+      originalSourceData: { productType: "Food & Beverages" },
+    })).toEqual(["Drinks"]);
+  });
+
   it("map the taxonomy's broad tags to food types in 'what it is' order", () => {
     expect(foodTypeFromOffTags(["en:snacks", "en:sweet-snacks", "en:biscuits-and-cakes", "en:cakes", "en:doughnuts"])).toBe("Bakery & grains");
     expect(foodTypeFromOffTags(["en:meals", "en:prepared-salads", "en:coleslaw"])).toBe("Prepared foods");
