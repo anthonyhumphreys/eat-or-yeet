@@ -84,6 +84,21 @@ describe("Open Food Facts categories", () => {
     })).toEqual(["Snacks & sweets"]);
   });
 
+  it("keeps categories from each separately listed barcode", () => {
+    expect(browseCategories({
+      title: "Recall",
+      targets: [
+        product("Assorted items, 12 oz", "product-0"),
+        gtin("044000061494", "gtin-0"),
+        gtin("05000328657950", "gtin-1"),
+      ],
+      productCategoryTags: {
+        "00044000061494": ["en:snacks"],
+        "05000328657950": ["en:beverages"],
+      },
+    })).toEqual(["Snacks & sweets", "Drinks"]);
+  });
+
   it("fall back to the name rules when the barcode has no categories", () => {
     expect(browseCategories({ title: "Recall", targets: [product("Doritos Chilli Heatwave", "p0"), gtin("5000328657950", "p0")], productCategoryTags: {} })).toEqual(["Snacks & sweets"]);
   });

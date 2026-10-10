@@ -181,26 +181,37 @@ export function browseCategories(incident: CategorySource): FoodCategory[] {
   const products = incident.targets.filter((target) => target.type === "product" || target.type === "category");
   const productGroups = new Set(products.map((target) => target.groupId).filter(Boolean));
   // Barcodes not tied to a named product (FDA lists UPCs separately) describe the notice as a whole.
-  const looseTags = gtins.filter((target) => !target.groupId || !productGroups.has(target.groupId)).flatMap(gtinTags);
+  const looseGtins = gtins.filter((target) => !target.groupId || !productGroups.has(target.groupId));
+  const looseCategories = [...new Set(looseGtins
+    .map((target) => foodTypeFromOffTags(gtinTags(target)))
+    .filter((category): category is FoodCategory => category !== null))];
   const allTags = gtins.flatMap(gtinTags);
 
   const found = new Set<FoodCategory>();
   if (products.length) {
     for (const product of products) {
       const groupTags = product.groupId ? gtins.filter((target) => target.groupId === product.groupId).flatMap(gtinTags) : [];
-      found.add(
-        foodTypeFromOffTags(groupTags)
-          ?? foodTypeFromOffTags(looseTags)
-          ?? knownFoodType(product.value)
-          ?? genericFoodType(product.value)
-          // The title only lends a known product line ("Krispy Kreme"), never
-          // its generic words, which may describe another product in the notice.
-          ?? knownFoodType(title)
-          ?? "Other foods",
-      );
+      const groupCategory = foodTypeFromOffTags(groupTags);
+      if (groupCategory) {
+        found.add(groupCategory);
+      } else if (looseCategories.length === 0 || groupTags.length > 0) {
+        found.add(
+          knownFoodType(product.value)
+            ?? genericFoodType(product.value)
+            // The title only lends a known product line ("Krispy Kreme"), never
+            // its generic words, which may describe another product in the notice.
+            ?? knownFoodType(title)
+            ?? "Other foods",
+        );
+      }
     }
+    looseCategories.forEach((category) => found.add(category));
   } else {
-    found.add(foodTypeFromOffTags(allTags) ?? knownFoodType(title) ?? genericFoodType(title) ?? "Other foods");
+    const barcodeCategories = [...new Set(gtins
+      .map((target) => foodTypeFromOffTags(gtinTags(target)))
+      .filter((category): category is FoodCategory => category !== null))];
+    if (barcodeCategories.length) barcodeCategories.forEach((category) => found.add(category));
+    else found.add(knownFoodType(title) ?? genericFoodType(title) ?? "Other foods");
   }
 
   const names = [title, ...products.map((product) => product.value)];
