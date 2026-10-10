@@ -1,8 +1,8 @@
-/** Return the configured Notion installation origin when the customer flow is enabled. */
+/** Return the canonical application origin when managed Notion setup is enabled. */
 export function getNotionInstallationOrigin(environment: NodeJS.ProcessEnv = process.env): string | undefined {
   if (environment.NOTION_INSTALL_ENABLED !== "true") return undefined;
 
-  const configuredUrl = environment.NOTION_SERVICE_URL;
+  const configuredUrl = environment.NEXT_PUBLIC_APP_URL;
   if (!configuredUrl) return undefined;
 
   const rawOrigin = /^https?:\/\/[^/?#]+/i.exec(configuredUrl)?.[0];
@@ -16,8 +16,6 @@ export function getNotionInstallationOrigin(environment: NodeJS.ProcessEnv = pro
   }
 
   if (url.username || url.password || url.search || url.hash || url.pathname !== "/") return undefined;
-  // URL.search and URL.hash are empty for a trailing '?' or '#', so check the
-  // normalized URL too to reject those ambiguous origin strings.
   if (url.href.includes("?") || url.href.includes("#")) return undefined;
 
   if (url.protocol === "https:") return url.origin;

@@ -9,8 +9,16 @@ export const metadata: Metadata = {
   description: "Connect a Notion shopping list to review items against published food warnings.",
 };
 
-export default function NotionInstallationPage() {
-  const serviceOrigin = getNotionInstallationOrigin();
+const oauthErrors: Record<string, string> = {
+  cancelled: "Notion access was not approved. You can start again whenever you are ready.",
+  expired: "That setup link expired or was already used. Start again to protect your account.",
+  setup_unavailable: "We could not finish setting up your list. Try again in a moment.",
+};
+
+export default async function NotionInstallationPage({ searchParams }: { searchParams: Promise<{ error?: string | string[] }> }) {
+  const params = await searchParams;
+  const errorCode = typeof params.error === "string" ? params.error : "";
+  const installationOrigin = getNotionInstallationOrigin();
 
   return (
     <div className="page-shell w-full py-8 sm:py-14">
@@ -20,9 +28,10 @@ export default function NotionInstallationPage() {
         <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
           Connect Notion to review shopping-list items against published food warnings for the country you choose.
         </p>
+        {oauthErrors[errorCode] && <p className="mt-5 max-w-2xl rounded-xl border border-destructive/40 bg-destructive/5 p-4 leading-6" role="alert">{oauthErrors[errorCode]}</p>}
 
-        {serviceOrigin ? (
-          <NotionConnectControls serviceOrigin={serviceOrigin} />
+        {installationOrigin ? (
+          <NotionConnectControls />
         ) : (
           <div className="mt-8 rounded-2xl border bg-muted/35 p-5 sm:p-6">
             <h2 className="text-lg font-bold">Notion setup is not available yet</h2>

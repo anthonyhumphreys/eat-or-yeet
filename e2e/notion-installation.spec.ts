@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 const enabled = process.env.NOTION_INSTALL_ENABLED === "true";
-const serviceOrigin = process.env.NOTION_SERVICE_URL?.replace(/\/$/, "");
 
 test("disabled Notion entry explains availability without an install button", async ({ page, context, baseURL }) => {
   test.skip(enabled, "This case runs against the default-off server.");
@@ -14,7 +13,7 @@ test("disabled Notion entry explains availability without an install button", as
 });
 
 test.describe("enabled Notion entry", () => {
-  test.skip(!enabled, "Run with NOTION_INSTALL_ENABLED=true and a configured service origin.");
+  test.skip(!enabled, "Run with NOTION_INSTALL_ENABLED=true and a configured NEXT_PUBLIC_APP_URL.");
 
   test("uses the saved country and follows a header change before installation", async ({ page, context, baseURL }) => {
     const errors: string[] = [];
@@ -22,11 +21,11 @@ test.describe("enabled Notion entry", () => {
     await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
     await page.goto("/integrations/notion");
     const add = page.getByRole("link", { name: "Add to Notion", exact: true });
-    await expect(add).toHaveAttribute("href", `${serviceOrigin}/connect?region=UK`);
+    await expect(add).toHaveAttribute("href", "/api/notion/connect?region=UK");
     await page.getByRole("combobox", { name: "Warning location", exact: true }).selectOption("US");
-    await expect(add).toHaveAttribute("href", `${serviceOrigin}/connect?region=US`);
+    await expect(add).toHaveAttribute("href", "/api/notion/connect?region=US");
     await expect(page.getByText("Warning country: United States", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Manage, reconnect or disconnect a Notion list" })).toHaveAttribute("href", `${serviceOrigin}/`);
+    await expect(page.getByRole("link", { name: "Manage, reconnect or disconnect a Notion list" })).toHaveAttribute("href", "/integrations/notion/manage");
     await expect(page.getByRole("heading", { name: "No Notion AI needed" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
@@ -39,16 +38,16 @@ test.describe("enabled Notion entry", () => {
     await prompt.getByRole("radio", { name: /United States/ }).check();
     await prompt.getByRole("button", { name: "Show US recalls" }).click();
     await expect(prompt).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", `${serviceOrigin}/connect?region=US`);
+    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", "/api/notion/connect?region=US");
     expect((await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-region")?.value).toBe("US");
   });
 
   test("an explicit region link overrides a saved country", async ({ page, context, baseURL }) => {
     await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
     await page.goto("/integrations/notion?region=US");
-    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", `${serviceOrigin}/connect?region=US`);
+    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", "/api/notion/connect?region=US");
     await page.getByRole("combobox", { name: "Warning location", exact: true }).selectOption("UK");
-    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", `${serviceOrigin}/connect?region=UK`);
+    await expect(page.getByRole("link", { name: "Add to Notion", exact: true })).toHaveAttribute("href", "/api/notion/connect?region=UK");
     await expect(page).toHaveURL(/region=UK/);
   });
 });
