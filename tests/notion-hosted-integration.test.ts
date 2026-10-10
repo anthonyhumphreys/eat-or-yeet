@@ -158,9 +158,9 @@ describe("hosted Notion integration with Convex state", () => {
     await manage(connection, "pause");
     expect(await state(t, connection)).toMatchObject({ installation: { status: "paused" }, busy: true });
     expect(await t.query(internal.notion.leaseCurrent, leaseArgs)).toBe(false);
-    expect(await t.mutation(internal.notion.completeFingerprint, { ...leaseArgs, fingerprint: "stale-fingerprint", now: Date.now() })).toBe(false);
+    expect(await t.mutation(internal.notion.completeFingerprint, { ...leaseArgs, claimedRevision: lease.claimedRevision, fingerprint: "stale-fingerprint", now: Date.now() })).toBe(false);
     expect((await webhook(connection.deps, payload(fixture, "paused-event", "other-row"))).status).toBe(200);
-    await t.mutation(internal.notion.finishJob, { installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, result: "success", now: Date.now() });
+    await t.mutation(internal.notion.finishJob, { installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, claimedRevision: lease.claimedRevision, result: "success", now: Date.now() });
     expect(await state(t, connection)).toMatchObject({ installation: { status: "paused" }, busy: false });
     await manage(connection, "region", "US");
     expect(await state(t, connection)).toMatchObject({ installation: { status: "setting_up", region: "US" }, busy: true });
@@ -178,7 +178,7 @@ describe("hosted Notion integration with Convex state", () => {
     const binding = { templatePageId: snapshot!.templatePageId!, databaseId: snapshot!.databaseId!, dataSourceId: snapshot!.dataSourceId!, properties: snapshot!.properties!, statusLabels: snapshot!.statusLabels! };
     const bindingArgs = { installationId: rivalConnection.installation._id, expectedGeneration: rivalConnection.installation.generation, binding, now: Date.now() };
     await expect(t.mutation(internal.notion.bindInstallation, bindingArgs)).rejects.toThrow("already reserved");
-    await t.mutation(internal.notion.finishJob, { installationId: usLease.installationId, jobId: usLease.jobId, leaseId: usLease.leaseId, result: "failed", now: Date.now() });
+    await t.mutation(internal.notion.finishJob, { installationId: usLease.installationId, jobId: usLease.jobId, leaseId: usLease.leaseId, claimedRevision: usLease.claimedRevision, result: "failed", now: Date.now() });
     await t.action(internal.notionActions.disconnect, { installationId: lease.installationId });
     expect(await state(t, connection)).toBeNull();
     expect(await t.query(api.notion.disconnectReceipt, { secret: SECRET, sessionHash: connection.sessionHash, now: Date.now() })).toEqual({ permissionRemoved: true });

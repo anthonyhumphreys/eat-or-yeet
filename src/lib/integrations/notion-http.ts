@@ -120,7 +120,7 @@ async function webhook(request: Request, deps: NotionHttpDependencies): Promise<
   if (payload.type === "page.properties_updated" && (!Array.isArray(updated) || updated.length > 100 || !updated.every(shortString))) return json(400, { error: "invalid_properties" });
   if (!botIds.length) return json(200, { accepted: false });
   const result = await deps.backend.receiveWebhook({ workspaceId: payload.workspace_id, botIds, databaseId: parent.id, ...(typeof parent.data_source_id === "string" ? { dataSourceId: parent.data_source_id } : {}), pageId: payload.entity.id, eventHash: notionHash(payload.id), type: payload.type, updatedProperties: Array.isArray(updated) ? updated as string[] : [], now: Date.now() });
-  if (result.result === "full") return json(503, { error: "queue_unavailable" });
+  if (result.result === "full" || result.result === "setting_up") return json(503, { error: "queue_unavailable" });
   const accepted = result.result === "accepted";
   return json(accepted ? 202 : 200, { accepted });
 }

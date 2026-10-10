@@ -32,21 +32,6 @@ const NOTION_ORIGIN = "https://api.notion.com";
 
 type InstallationId = Id<"notionInstallations">;
 type Scope = { workspaceId: string; ownerId: string };
-type Job = {
-  installationId: InstallationId;
-  workspaceId: string;
-  ownerId: string;
-  jobId: Id<"notionJobs">;
-  leaseId: string;
-  claimedRevision: number;
-  pageId: string;
-  generation: number;
-  credentialRevision: number;
-  credentialEnvelope: string;
-  region: Region;
-  binding: ListBinding | null;
-  attempts: number;
-};
 type SetupClaim = {
   result: "claimed";
   leaseId: string;

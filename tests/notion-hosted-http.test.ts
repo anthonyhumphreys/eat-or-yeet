@@ -317,7 +317,7 @@ describe("hosted Notion HTTP handlers", () => {
     expect(tooLarge.status).toBe(413);
   });
 
-  it("rejects ambiguous webhook parents before backend routing and maps a full queue to 503", async () => {
+  it("rejects ambiguous webhook parents and requests redelivery while setup or queue admission is unavailable", async () => {
     const app = dependencies();
     const send = async (payload: unknown) => {
       const body = JSON.stringify(payload);
@@ -342,10 +342,12 @@ describe("hosted Notion HTTP handlers", () => {
     expect(noBot.status).toBe(200);
     expect(app.calls.filter((call) => call.method === "receiveWebhook")).toHaveLength(0);
 
-    const full = dependencies(backendDouble({ webhookResult: "full" }));
     const body = JSON.stringify(base);
-    const response = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", headers: { "x-notion-signature": webhookSignature(body) }, body }), full.deps);
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "queue_unavailable" });
+    for (const webhookResult of ["full", "setting_up"]) {
+      const unavailable = dependencies(backendDouble({ webhookResult }));
+      const response = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", headers: { "x-notion-signature": webhookSignature(body) }, body }), unavailable.deps);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "queue_unavailable" });
+    }
   });
 });
