@@ -242,6 +242,45 @@ describe("managed Notion Convex state", () => {
     })).rejects.toThrow();
   });
 
+  it("pauses a tenant on structural schema errors while retaining its queued review for retry", async () => {
+    const t = createBackend();
+    const created = await active(t, "structural-error");
+    await enqueue(t, "structural-error", "7", "needs-schema-repair", now + 1);
+    const lease = await t.mutation(internal.notion.claimJob, { installationId: created.installationId, now: now + 2 });
+    if (!lease) throw new Error("Job lease was not claimed");
+    await t.mutation(internal.notion.finishJob, {
+      installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId,
+      claimedRevision: lease.claimedRevision, result: "failed", errorCode: "missing_property", now: now + 3,
+    });
+    expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({ status: "setup_failed", errorCode: "missing_property", controlBusy: false });
+    const retained = await t.run((ctx) => ctx.db.get(lease.jobId));
+    expect(retained).toMatchObject({ pageId: "needs-schema-repair" });
+    expect(retained?.leaseId).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({ pendingCount: 1 });
+  });
+
+  it("keeps management pending and withholds the disconnect receipt until bounded cleanup completes", async () => {
+    const t = createBackend();
+    const at = Date.now();
+    const created = await authorize(t, "receipt-batch", "receipt-batch-workspace", "receipt-batch-bot", at);
+    const sessionHash = hex("8"), csrfHash = hex("9");
+    await t.mutation(api.notion.createSession, { secret, sessionHash, csrfHash, installationId: created.installationId, expiresAt: at + 30 * 86_400_000, now: at });
+    await t.mutation(api.notion.control, { secret, sessionHash, csrfHash, action: "disconnect", now: at + 1 });
+    const claim = await t.mutation(internal.notion.claimDisconnect, { installationId: created.installationId, now: at + 2 });
+    if (!claim) throw new Error("Disconnect lease was not claimed");
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 101; index += 1) {
+        await ctx.db.insert("notionEvents", { installationId: created.installationId, eventHash: index.toString(16).padStart(64, "0"), expiresAt: at + 100_000 });
+      }
+    });
+    await t.mutation(internal.notion.finishDisconnect, { installationId: created.installationId, leaseId: claim.leaseId, permissionRemoved: false, now: at + 3 });
+    expect(await t.query(api.notion.management, { secret, sessionHash, now: at + 4 })).toMatchObject({ installation: { status: "disconnecting" }, busy: true });
+    expect(await t.query(api.notion.disconnectReceipt, { secret, sessionHash, now: at + 4 })).toBeNull();
+    await t.mutation(internal.notion.finishDisconnect, { installationId: created.installationId, leaseId: claim.leaseId, permissionRemoved: false, now: at + 5 });
+    expect(await t.query(api.notion.management, { secret, sessionHash, now: at + 6 })).toBeNull();
+    expect(await t.query(api.notion.disconnectReceipt, { secret, sessionHash, now: at + 6 })).toEqual({ permissionRemoved: false });
+  });
+
   it("recovers expired leases against current pause state and keeps old country fingerprints from suppressing new work", async () => {
     const t = createBackend();
     vi.useFakeTimers();
@@ -256,8 +295,9 @@ describe("managed Notion Convex state", () => {
       installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, generation: lease.generation,
       claimedRevision: lease.claimedRevision, fingerprint: "uk-fingerprint", now: started + 3,
     });
-    await t.mutation(internal.notion.finishJob, { installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, claimedRevision: lease.claimedRevision, result: "success", now: started + 4 });
     await t.mutation(api.notion.control, { secret, sessionHash, csrfHash, action: "region", region: "US", now: started + 5 });
+    expect(await t.run((ctx) => ctx.db.get(created.installationId))).toMatchObject({ status: "setting_up", region: "US", controlBusy: true });
+    await t.mutation(internal.notion.finishJob, { installationId: lease.installationId, jobId: lease.jobId, leaseId: lease.leaseId, claimedRevision: lease.claimedRevision, result: "success", now: started + 6 });
     const setup = await t.mutation(internal.notion.claimSetup, { installationId: created.installationId, expectedGeneration: created.generation + 1, now: started + 6 });
     if (setup.result !== "claimed") throw new Error("Region setup lease was not claimed");
     await t.mutation(internal.notion.ready, { installationId: created.installationId, expectedGeneration: created.generation + 1, leaseId: setup.leaseId, pageIds: [], now: started + 7 });
