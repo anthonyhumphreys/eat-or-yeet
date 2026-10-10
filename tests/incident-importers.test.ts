@@ -4,6 +4,7 @@ import { fdaAnnouncementsSource, parseFdaAnnouncementDetail, parseFdaAnnouncemen
 import { fdaSource, parseFdaRecord } from "@/lib/incidents/fda";
 import { fsaSource, parseFsaDetail } from "@/lib/incidents/fsa";
 import { fsisIncidentsForSync, parseFsisRecords } from "@/lib/incidents/fsis";
+import gripeWaterRow from "./fixtures/fda-gripe-water.json";
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -332,6 +333,58 @@ describe("FDA announcement imports", () => {
     "",
   ];
 
+  it("imports both FDA listings and fetches cross-listed notices only once", async () => {
+    const settings = `<script type="application/json" data-drupal-selector="drupal-settings-json">${JSON.stringify({
+      datatables: { recalls: { ajax: { data: { view_name: "recall_solr_index" } } } },
+    })}</script>`;
+    const crossListed = listingRow(1);
+    crossListed[3] = "Food &amp; Beverages, Dietary Supplements";
+    const calls: URL[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.pathname === INDEX_PATH_FOR_TEST) return new Response(settings);
+      if (url.pathname === "/datatables/views/ajax") {
+        const type = url.searchParams.get("field_regulated_product_field");
+        if (type !== "2323" && type !== "2305") throw new Error(`Unexpected FDA product type ${type}`);
+        const data = type === "2323" ? [listingRow(0), crossListed] : [gripeWaterRow, crossListed];
+        return jsonResponse({ draw: Number(url.searchParams.get("draw")), recordsTotal: data.length, recordsFiltered: data.length, data });
+      }
+      return new Response('<h2 id="recall-announcement">Company Announcement</h2><p>Consumers should stop using the affected lot.</p>');
+    }));
+
+    const incidents = await fdaAnnouncementsSource.fetchIncidents();
+    expect(incidents).toHaveLength(3);
+    expect(incidents).toContainEqual(expect.objectContaining({
+      originalSourceData: expect.objectContaining({ company: "Pacific Health Sciences", productType: "Dietary Supplements" }),
+    }));
+    const listingCalls = calls.filter((url) => url.pathname === "/datatables/views/ajax");
+    expect(listingCalls.map((url) => url.searchParams.get("field_regulated_product_field")).sort()).toEqual(["2305", "2323"]);
+    const detailCalls = calls.filter((url) => url.pathname !== INDEX_PATH_FOR_TEST && url.pathname !== "/datatables/views/ajax");
+    expect(detailCalls).toHaveLength(3);
+    expect(new Set(detailCalls.map((url) => url.pathname)).size).toBe(3);
+  });
+
+  it("rejects an incomplete supplement listing before fetching any detail pages", async () => {
+    const settings = `<script type="application/json" data-drupal-selector="drupal-settings-json">${JSON.stringify({
+      datatables: { recalls: { ajax: { data: { view_name: "recall_solr_index" } } } },
+    })}</script>`;
+    const detailFetch = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === INDEX_PATH_FOR_TEST) return new Response(settings);
+      if (url.pathname === "/datatables/views/ajax") {
+        const supplement = url.searchParams.get("field_regulated_product_field") === "2305";
+        return jsonResponse({ draw: Number(url.searchParams.get("draw")), recordsTotal: supplement ? 2 : 1, recordsFiltered: supplement ? 2 : 1, data: supplement ? [gripeWaterRow] : [listingRow(0)] });
+      }
+      detailFetch();
+      return new Response('<h2 id="recall-announcement">Company Announcement</h2><p>Consumers should stop using the affected lot.</p>');
+    }));
+
+    await expect(fdaAnnouncementsSource.fetchIncidents()).rejects.toThrow(/remained incomplete after 3 attempts/);
+    expect(detailFetch).not.toHaveBeenCalled();
+  });
+
   it("keeps separate GTIN and lot groups and has no synthetic 180-day expiry", () => {
     const [listing] = parseFdaAnnouncementRows({ data: [listingRow(1)] });
     const incident = parseFdaAnnouncementDetail(listing, `
@@ -364,6 +417,7 @@ describe("FDA announcement imports", () => {
       if (url.pathname === INDEX_PATH_FOR_TEST) return new Response(settings, { headers: { "content-type": "text/html" } });
       if (url.pathname === "/datatables/views/ajax") {
         const draw = Number(url.searchParams.get("draw"));
+        if (url.searchParams.get("field_regulated_product_field") === "2305") return jsonResponse({ draw, recordsTotal: 0, recordsFiltered: 0, data: [] });
         return jsonResponse({ draw, recordsTotal: 2, recordsFiltered: 2, data: [listingRow(0), listingRow(1)] });
       }
       return new Response(`
@@ -375,8 +429,8 @@ describe("FDA announcement imports", () => {
     const incidents = await fdaAnnouncementsSource.fetchIncidents();
     expect(incidents).toHaveLength(2);
     const listingCalls = calls.filter((url) => url.pathname === "/datatables/views/ajax");
-    expect(listingCalls).toHaveLength(1);
-    expect(listingCalls[0].searchParams.get("length")).toBe("1000");
+    expect(listingCalls).toHaveLength(2);
+    expect(listingCalls.every((url) => url.searchParams.get("length") === "1000")).toBe(true);
 
     let draw = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -384,6 +438,7 @@ describe("FDA announcement imports", () => {
       if (url.pathname === INDEX_PATH_FOR_TEST) return new Response(settings);
       if (url.pathname === "/datatables/views/ajax") {
         draw = Number(url.searchParams.get("draw"));
+        if (url.searchParams.get("field_regulated_product_field") === "2305") return jsonResponse({ draw, recordsTotal: 0, recordsFiltered: 0, data: [] });
         const length = Number(url.searchParams.get("length"));
         if (length === 1000) {
           return jsonResponse({
@@ -406,7 +461,7 @@ describe("FDA announcement imports", () => {
     expect(expandedError).toMatchObject({ message: expect.stringMatching(/detail import failed/) });
     const expandedCalls = vi.mocked(globalThis.fetch).mock.calls
       .map(([input]) => new URL(String(input)))
-      .filter((url) => url.pathname === "/datatables/views/ajax");
+      .filter((url) => url.pathname === "/datatables/views/ajax" && url.searchParams.get("field_regulated_product_field") === "2323");
     expect(expandedCalls.map((url) => url.searchParams.get("length"))).toEqual(["1000", "1001"]);
 
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
