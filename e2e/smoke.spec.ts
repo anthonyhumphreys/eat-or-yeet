@@ -200,7 +200,7 @@ test("manual label details produce a qualified published-warning result", async 
   await expect(page.getByText("This checks published warnings, not whether food is safe to eat.").first()).toBeVisible();
   await expect(page.getByText("Food Standards Agency")).toBeVisible();
   await expect(page.getByText("UK", { exact: true }).last()).toBeVisible();
-  await page.getByRole("button", { name: "Create public link" }).click();
+  await page.getByRole("button", { name: "Share result" }).click();
   await expect(page.getByLabel("Share link")).toHaveValue("http://localhost:3000/s/shared-check");
   await expect(page.getByRole("link", { name: "Open link" })).toHaveAttribute("href", "http://localhost:3000/s/shared-check");
 });
