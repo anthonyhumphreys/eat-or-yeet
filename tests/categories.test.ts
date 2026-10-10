@@ -54,12 +54,14 @@ describe("food types from product names", () => {
 
 describe("Open Food Facts categories", () => {
   it("uses FDA's explicit supplement classification ahead of drink names and barcode tags", () => {
-    expect(browseCategories({
-      title: "Recall",
-      targets: [product("Baby Sleep Gripe Water", "p0"), gtin("5000328657950", "p0")],
-      originalSourceData: { productType: "Dietary Supplements" },
-      productCategoryTags: { "05000328657950": ["en:beverages"] },
-    })).toEqual(["Supplements"]);
+    for (const productType of ["Dietary Supplements", "Food & Beverages, Dietary Supplements", "Dietary Supplements, Food & Beverages"]) {
+      expect(browseCategories({
+        title: "Recall",
+        targets: [product("Baby Sleep Gripe Water", "p0"), gtin("5000328657950", "p0")],
+        originalSourceData: { productType },
+        productCategoryTags: { "05000328657950": ["en:beverages"] },
+      })).toEqual(["Supplements"]);
+    }
     expect(browseCategories({
       title: "Recall",
       targets: [product("Spring Water")],
