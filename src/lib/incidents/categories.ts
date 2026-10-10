@@ -177,7 +177,8 @@ export function browseCategories(incident: CategorySource): FoodCategory[] {
   const title = titleProducts(incident.title);
   const sourceData = incident.originalSourceData;
   const officialSupplement = typeof sourceData === "object" && sourceData !== null
-    && "productType" in sourceData && sourceData.productType === "Dietary Supplements";
+    && "productType" in sourceData && typeof sourceData.productType === "string"
+    && sourceData.productType.split(",").some((type) => type.trim() === "Dietary Supplements");
   const offTags = incident.productCategoryTags ?? {};
   const gtinTags = (target: CategorySource["targets"][number]) =>
     offTags[target.valueNormalized || normaliseGtin(target.value)] ?? [];
