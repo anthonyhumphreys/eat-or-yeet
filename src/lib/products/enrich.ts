@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 import type { ProductObservation } from "@/lib/domain/schemas";
 import { readResponseJson } from "@/lib/http/bounded-response";
 import { isValidGtin, normaliseGtin } from "@/lib/matching/normalise";
+import { lookupBarcode, OFF_USER_AGENT } from "@/lib/products/open-food-facts";
 
 const offSchema = z.object({
   status: z.number(),
@@ -27,16 +28,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
-function lookupBarcode(value: string): string {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length !== 14) return digits;
-  for (const length of [8, 12, 13]) {
-    const prefixLength = 14 - length;
-    if (digits.startsWith("0".repeat(prefixLength))) return digits.slice(prefixLength);
-  }
-  return digits;
-}
-
 async function fetchOpenFoodFacts(
   gtin: string,
   lookupCode: string,
@@ -52,7 +43,7 @@ async function fetchOpenFoodFacts(
     const response = await fetch(
       `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(lookupCode)}.json?fields=product_name,brands`,
       {
-        headers: { "User-Agent": "EatOrYeet/1.0 (food safety metadata lookup)" },
+        headers: { "User-Agent": OFF_USER_AGENT },
         signal: requestSignal,
         cache: "no-store",
       },

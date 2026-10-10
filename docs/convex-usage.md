@@ -36,11 +36,13 @@ Anonymous and network rate-limit buckets now update in one authenticated, atomic
 
 The existing daily temporary-data cleanup also removes expired barcode metadata in batches of 100, continuing until the expired backlog is gone. It retains live metadata and curated products. This bounds storage as the number of distinct scanned products grows.
 
+Recalled-product categories use a separate `productCategoryCache` table that is never cleaned up, because browse labels should not flip when a cache row expires. Each import reads cached rows for its barcodes in batches of 200 and queues unseen barcodes. An hourly job (`products:lookupProductCategories`, at minute 41) checks up to 60 queued barcodes against Open Food Facts, one about every 1.1 seconds, newest notices first. That is well under Open Food Facts' product rate limit. Found categories are rechecked after 90 days, unknown barcodes after 30, and failed lookups the next day without losing the last answer. Categories found by the job reach the browse feed on the next daily import.
+
 ## Development and previews
 
 Prefer the existing account-free local Convex setup for routine development and browser tests. Cloud development and preview imports consume the same team allowance as production. Keep a cloud preview only while it serves an active review, and avoid importing a full duplicate dataset for a connectivity probe. [Local development](https://docs.convex.dev/cli/local-deployments)
 
-Set `SCHEDULED_SOURCE_REFRESH=false` on cloud development and inactive previews to avoid duplicate daily imports. This only disables the scheduled refresh; `incidents:refreshAllInternal` and individual source actions still work manually. An unset flag preserves daily refreshes in production. Development source health correctly becomes stale after 48 hours without a manual refresh.
+Set `SCHEDULED_SOURCE_REFRESH=false` on cloud development and inactive previews to avoid duplicate daily imports. This only disables the scheduled refresh; `incidents:refreshAllInternal` and individual source actions still work manually. An unset flag preserves daily refreshes in production. Development source health correctly becomes stale after 48 hours without a manual refresh. Set `PRODUCT_CATEGORY_LOOKUPS=false` there too, to stop the hourly Open Food Facts lookups.
 
 Before retiring a preview, confirm its identity and that production uses a separate backend. Export a backup with `pnpm exec convex export --deployment NAME --path BACKUP.zip`. Keep backups private and outside version control; `.local-backups/` is ignored. Never remove production warning records to fit a quota.
 

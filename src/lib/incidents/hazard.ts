@@ -63,6 +63,10 @@ export function classifyHazard({ title, hazard, pathogen }: { title: string; haz
   const text = `${pathogen ?? ""}\n${hazard ?? ""}\n${title}`;
   for (const [pattern, label] of pathogens) if (pattern.test(pathogen ?? "") || pattern.test(text)) return { kind: "pathogen", label };
 
+  // Checked before allergens: these notices warn people allergic to the
+  // medicine, but the hazard is the residue itself (FSA-PRIN-37-2026).
+  if (/veterinary (?:medicine|drug)|(?:antibiotic|drug|medicine) residue|\bantibiotics? \(|penicillin/i.test(text)) return { kind: "other", label: "Medicine residue" };
+
   if (allergenSignal.test(text)) {
     // Product names in titles ("Milk Chocolate") would add false allergens, so prefer the hazard statement.
     const scope = hazard || title;
