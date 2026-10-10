@@ -356,6 +356,7 @@ export type WorkerDependencies = {
   debounceMs?: number;
   /** Includes installation settings, such as region, in durable review fingerprints. */
   fingerprintNamespace?: string;
+  /** Synchronous activation admission; throwing rejects startup before processing queued rows. */
   onReady?: () => void;
   onPaused?: (code: WorkerError["code"]) => void;
   log?: (message: string) => void;
@@ -390,6 +391,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): S
   let active = 0;
   const activeTasks = new Set<Promise<void>>();
   let stopPromise: Promise<void> | undefined;
+  let listenPromise: Promise<void> | undefined;
   const log = dependencies.log ?? (() => undefined);
   const server = createServer(async (request, response) => {
     if (request.method !== "POST" || request.url !== "/webhooks/notion") { respond(response, 404, { error: "not_found" }); return; }
@@ -555,11 +557,6 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): S
     while (!controller.signal.aborted && !paused) {
       try {
         await validateSelectedDataSource(notion, config, controller.signal);
-        if (controller.signal.aborted) return;
-        ready = true;
-        try { dependencies.onReady?.(); }
-        catch { log("Shopping worker ready callback failed."); }
-        return;
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof WorkerError && ["revoked", "missing_property", "invalid_config", "out_of_scope"].includes(error.code)) {
@@ -572,7 +569,18 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): S
         attempt += 1;
         log("Notion startup validation is temporarily unavailable; retrying.");
         try { await delay(waitMs, controller.signal); } catch { return; }
+        continue;
       }
+      if (controller.signal.aborted) return;
+      try { dependencies.onReady?.(); }
+      catch (error) {
+        ready = false;
+        paused = true;
+        throw error;
+      }
+      if (controller.signal.aborted) return;
+      ready = true;
+      return;
     }
   }
   return {
@@ -583,10 +591,11 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): S
       if (started || controller.signal.aborted) return;
       started = true;
       if (options.listen !== false) {
-        await new Promise<void>((resolve, reject) => {
+        listenPromise = new Promise<void>((resolve, reject) => {
           server.once("error", reject);
           server.listen(config.listenPort, config.listenHost, () => { server.removeListener("error", reject); resolve(); });
         });
+        await listenPromise;
       }
       await validateStartup();
       kick(); // Resume durable due work after process restart; no workspace scan/poll is performed.
@@ -599,6 +608,8 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): S
       if (pumpTimer) clearTimeout(pumpTimer);
       pumpTimer = undefined;
       pumpDeadline = undefined;
+      // Host resolution can finish after shutdown begins, so settle the listen attempt first.
+      if (listenPromise) await listenPromise.catch(() => undefined);
       if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
       await Promise.allSettled([...activeTasks]);
       await Promise.allSettled([notion.close?.(), reviewer.close?.()]);

@@ -201,6 +201,8 @@ describe("managed Notion HTTP server", () => {
     const { session, installation } = await install(app.base, app.store);
     const page = await fetch(app.base, { headers: { cookie: session } });
     const html = await page.text();
+    expect(html).toContain("Refresh status");
+    expect(html).not.toContain('http-equiv="refresh"');
     const secondPage = await fetch(app.base, { headers: { cookie: session } });
     const policy = page.headers.get("content-security-policy") ?? "";
     const secondPolicy = secondPage.headers.get("content-security-policy") ?? "";
@@ -241,7 +243,7 @@ describe("managed Notion HTTP server", () => {
     const payload = {
       id: "event-1", type: "page.properties_updated", integration_id: "integration-1", subscription_id: "subscription-1",
       workspace_id: "workspace-1", entity: { type: "page", id: "page-1" }, accessible_by: [{ type: "bot", id: "bot-1" }],
-      data: { parent: { type: "data_source", id: "source-1" }, updated_properties: ["property-1"] },
+      data: { parent: { type: "database", id: "database-1", data_source_id: "source-1" }, updated_properties: ["property-1"] },
     };
     const body = JSON.stringify(payload);
     const post = (text: string, sig = signature(text)) => fetch(`${app.base}/webhooks/notion`, { method: "POST", headers: { "x-notion-signature": sig }, body: text });
@@ -261,6 +263,64 @@ describe("managed Notion HTTP server", () => {
     expect((await post(JSON.stringify({ verification_token: "wrong" }), "")).status).toBe(401);
   });
 
+  it("routes shared-workspace events only when their typed parent matches an installed list", async () => {
+    const app = await start();
+    const first = app.store.authorize(INSTALLATION_AUTH, "UK", Date.now());
+    app.store.bind(first.id, first.generation, binding, Date.now());
+    const second = app.store.authorize({ ...INSTALLATION_AUTH, ownerId: "owner-2" }, "UK", Date.now());
+    app.store.bind(second.id, second.generation, { ...binding, databaseId: "database-2", dataSourceId: "source-2" }, Date.now());
+    const unbound = app.store.authorize({ ...INSTALLATION_AUTH, ownerId: "owner-3" }, "UK", Date.now());
+
+    const basePayload = {
+      id: "event-parent-routing", type: "page.created", integration_id: "integration-1", subscription_id: "subscription-1",
+      workspace_id: "workspace-1", entity: { type: "page", id: "page-1" }, accessible_by: [{ type: "bot", id: "bot-1" }],
+    };
+    const post = async (parent?: unknown) => {
+      const payload = { ...basePayload, data: parent === undefined ? {} : { parent } };
+      const body = JSON.stringify(payload);
+      const response = await fetch(`${app.base}/webhooks/notion`, { method: "POST", headers: { "x-notion-signature": signature(body) }, body });
+      return { response, body: await response.json() as { accepted?: boolean } };
+    };
+
+    const sourceOne = await post({ type: "database", id: "database-1", data_source_id: "source-1" });
+    expect(sourceOne.response.status).toBe(202);
+    expect(sourceOne.body).toEqual({ accepted: true });
+    expect(app.runtime.calls.filter((call) => call.method === "enqueue").map((call) => call.args[0])).toEqual([first.id]);
+
+    const sourceTwo = await post({ type: "database", id: "database-2", data_source_id: "source-2" });
+    expect(sourceTwo.response.status).toBe(202);
+    expect(sourceTwo.body).toEqual({ accepted: true });
+    expect(app.runtime.calls.filter((call) => call.method === "enqueue").map((call) => call.args[0])).toEqual([first.id, second.id]);
+
+    const database = await post({ type: "database", id: "database-2" });
+    expect(database.response.status).toBe(202);
+    expect(database.body).toEqual({ accepted: true });
+    expect(app.runtime.calls.filter((call) => call.method === "enqueue").map((call) => call.args[0])).toEqual([first.id, second.id, second.id]);
+
+    const databaseAndSource = await post({ type: "database", id: "database-2", data_source_id: "source-2" });
+    expect(databaseAndSource.response.status).toBe(202);
+    expect(databaseAndSource.body).toEqual({ accepted: true });
+    expect(app.runtime.calls.filter((call) => call.method === "enqueue").map((call) => call.args[0])).toEqual([first.id, second.id, second.id, second.id]);
+
+    const ignoredParents: Array<{ label: string; parent?: unknown }> = [
+      { label: "page", parent: { type: "page", id: "page-1" } },
+      { label: "workspace", parent: { type: "workspace", id: "workspace-1" } },
+      { label: "unknown", parent: { type: "other", id: "source-1" } },
+      { label: "missing" },
+      { label: "wrong database id", parent: { type: "database", id: "database-3", data_source_id: "source-1" } },
+      { label: "unsupported data source parent type", parent: { type: "data_source", id: "source-1" } },
+      { label: "database type with source id", parent: { type: "database", id: "source-1" } },
+      { label: "database source id mismatch", parent: { type: "database", id: "database-2", data_source_id: "source-1" } },
+    ];
+    for (const { label, parent } of ignoredParents) {
+      const result = await post(parent);
+      expect(result.response.status, label).toBe(200);
+      expect(result.body, label).toEqual({ accepted: false });
+    }
+    expect(app.runtime.calls.filter((call) => call.method === "enqueue").map((call) => call.args[0])).toEqual([first.id, second.id, second.id, second.id]);
+    expect(app.store.get(unbound.id)?.binding).toBeUndefined();
+  });
+
   it("reports paused or full webhook queues and ignores signed events for unknown recipients", async () => {
     const payload = {
       id: "event-1", type: "page.created", integration_id: "integration-1", subscription_id: "subscription-1",
@@ -270,6 +330,7 @@ describe("managed Notion HTTP server", () => {
     for (const enqueueResult of ["full", "paused"] as const) {
       const app = await start({ runtime: { enqueueResult } });
       const installed = app.store.authorize(INSTALLATION_AUTH, "UK", Date.now());
+      app.store.bind(installed.id, installed.generation, binding, Date.now());
       const post = async (event: unknown) => {
         const body = JSON.stringify(event);
         return fetch(`${app.base}/webhooks/notion`, { method: "POST", headers: { "x-notion-signature": signature(body) }, body });

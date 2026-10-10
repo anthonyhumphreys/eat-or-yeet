@@ -223,6 +223,33 @@ describe("managed Notion runtime", () => {
     expect(fixture.calls.some(({ url }) => url.pathname.includes("/search"))).toBe(false);
   });
 
+  it("keeps queued invalid rows stopped when the managed readiness update fails, then retries admission", async () => {
+    const fixture = new NotionFixture("readiness-failure");
+    fixture.row("invalid-ready-row", "x".repeat(201));
+    const context = harness([fixture]);
+    const installation = context.store.authorize(fixture.authorization(), "UK", Date.now());
+    const ready = vi.spyOn(context.store, "ready").mockImplementationOnce(() => { throw new Error("Private installation readiness update failed"); });
+    await context.runtime.activate(installation.id, { reconcile: true });
+    await eventually(() => ready.mock.calls.length === 1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await ioTurn();
+    expect(context.store.get(installation.id)).toMatchObject({ status: "setup_failed", errorCode: "temporarily_unavailable" });
+    expect(context.runtime.state(installation.id)).toEqual({ ready: false, paused: true });
+    expect(context.reviewer.calls).toHaveLength(0);
+    expect(fixture.patches).toHaveLength(0);
+    expect(fixture.calls.filter(({ method }) => method === "PATCH")).toHaveLength(0);
+    expect(queueRows(context, installation.id)).toEqual([expect.objectContaining({ pageId: "invalid-ready-row", pending: 1 })]);
+    expect(context.runtime.enqueue(installation.id, event("failed-ready-event", "invalid-ready-row"))).toBe("ignored");
+    fixture.row("invalid-ready-row", "Milk");
+    await context.runtime.activate(installation.id, { reconcile: true });
+    await eventually(() => context.store.get(installation.id)?.status === "active");
+    await advanceUntil(() => fixture.patches.length === 1);
+    expect(ready).toHaveBeenCalledTimes(2);
+    expect(context.runtime.state(installation.id)).toEqual({ ready: true, paused: false });
+    expect(context.reviewer.calls.map(({ item }) => item.name)).toEqual(["Milk"]);
+    expect(queueRows(context, installation.id)).toEqual([expect.objectContaining({ pageId: "invalid-ready-row", pending: 0 })]);
+  });
+
   it("keeps workspace queues, deduplication, country, and pauses independent", async () => {
     const first = new NotionFixture("first"), second = new NotionFixture("second");
     first.row("first-row", "Milk"); second.row("second-row", "Oreo");

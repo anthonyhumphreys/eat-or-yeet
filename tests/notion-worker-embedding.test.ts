@@ -103,7 +103,7 @@ describe("embedded Notion shopping workers", () => {
     expect(worker.state()).toEqual({ ready: false, paused: false });
     expect(worker.enqueue(event("before-start"))).toBe("accepted");
     expect(notion.getPageCalls).toBe(0);
-    onReady.mockImplementation(() => expect(worker.state()).toEqual({ ready: true, paused: false }));
+    onReady.mockImplementation(() => expect(worker.state()).toEqual({ ready: false, paused: false }));
     await worker.start({ listen: false });
     await worker.start();
     expect(worker.server.listening).toBe(false);
@@ -117,6 +117,98 @@ describe("embedded Notion shopping workers", () => {
     expect(closeStore).toHaveBeenCalledTimes(1);
     expect(worker.state().ready).toBe(false);
     expect(worker.enqueue(event("after-stop"))).toBe("paused");
+  });
+
+  it("pauses queued valid and invalid input rows when installation admission is refused", async () => {
+    vi.useFakeTimers();
+    const notion = new FakeNotion();
+    const valid = structuredClone(notion.page);
+    valid.id = "valid-row";
+    const invalid = structuredClone(notion.page);
+    invalid.id = "invalid-row";
+    invalid.properties!.Item!.title = [{ plain_text: "X".repeat(500) }];
+    const pages = new Map([["valid-row", valid], ["invalid-row", invalid]]);
+    const getPage = vi.spyOn(notion, "getPage").mockImplementation(async (pageId) => structuredClone(pages.get(pageId)!));
+    const getDataSource = vi.spyOn(notion, "getDataSource");
+    const patchPage = vi.spyOn(notion, "patchPage");
+    const reviewer = new FakeReview();
+    const store = new SqliteWorkerStore(":memory:");
+    const delay = vi.fn(async () => undefined);
+    const refusal = new Error("installation admission refused");
+    const admissionStates: Array<{ ready: boolean; paused: boolean }> = [];
+    const onReady = vi.fn(() => { admissionStates.push(worker.state()); throw refusal; });
+    const worker = makeWorker({ notion, reviewer, store, delay, onReady });
+    worker.enqueue(event("valid-before-admission", "page.created", [], "valid-row"));
+    worker.enqueue(event("invalid-before-admission", "page.created", [], "invalid-row"));
+    await expect(worker.start({ listen: false })).rejects.toBe(refusal);
+    await worker.start({ listen: false });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(admissionStates).toEqual([{ ready: false, paused: false }]);
+    expect(worker.state()).toEqual({ ready: false, paused: true });
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(getDataSource).toHaveBeenCalledTimes(1);
+    expect(delay).not.toHaveBeenCalled();
+    expect(getPage).not.toHaveBeenCalled();
+    expect(reviewer.calls).toHaveLength(0);
+    expect(patchPage).not.toHaveBeenCalled();
+    expect(worker.enqueue(event("after-refusal"))).toBe("paused");
+    expect(store.duePages(Date.now(), 2).map(({ pageId }) => pageId).sort()).toEqual(["invalid-row", "valid-row"]);
+  });
+
+  it("stays non-ready if shutdown begins inside the admission callback", async () => {
+    const notion = new FakeNotion();
+    let stopping: Promise<void> | undefined;
+    const onReady = vi.fn(() => { stopping = worker.stop(); });
+    const worker = makeWorker({ notion, onReady });
+    worker.enqueue(event("before-admission-stop"));
+    await worker.start({ listen: false });
+    await stopping;
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(worker.state()).toEqual({ ready: false, paused: false });
+    expect(notion.getPageCalls).toBe(0);
+  });
+
+  it("closes the standalone listener when stop races with host resolution", async () => {
+    const config = makeConfig();
+    config.listenHost = "localhost";
+    const notion = new FakeNotion();
+    const getDataSource = vi.spyOn(notion, "getDataSource");
+    const store = new SqliteWorkerStore(":memory:");
+    const closeStore = vi.spyOn(store, "close");
+    const onReady = vi.fn();
+    const worker = makeWorker({ config, notion, store, onReady });
+    const starting = worker.start();
+    expect(worker.server.listening).toBe(false);
+    const stopping = worker.stop();
+    try {
+      await Promise.all([starting, stopping]);
+      expect(worker.server.listening).toBe(false);
+      expect(worker.server.address()).toBeNull();
+      expect(getDataSource).not.toHaveBeenCalled();
+      expect(onReady).not.toHaveBeenCalled();
+      expect(closeStore).toHaveBeenCalledTimes(1);
+    } finally {
+      // Keep a failing reproduction from leaking the listener into other tests.
+      if (worker.server.listening) await new Promise<void>((resolve) => worker.server.close(() => resolve()));
+    }
+  });
+
+  it("closes its store when shutdown races with a rejected listen attempt", async () => {
+    const owner = makeWorker();
+    await owner.start();
+    const address = owner.server.address();
+    if (!address || typeof address === "string") throw new Error("Expected local listener address");
+    const config = makeConfig();
+    config.listenPort = address.port;
+    const store = new SqliteWorkerStore(":memory:");
+    const closeStore = vi.spyOn(store, "close");
+    const worker = makeWorker({ config, store });
+    const starting = worker.start();
+    const rejected = expect(starting).rejects.toMatchObject({ code: "EADDRINUSE" });
+    await Promise.all([rejected, worker.stop()]);
+    expect(worker.server.listening).toBe(false);
+    expect(worker.state().ready).toBe(false);
+    expect(closeStore).toHaveBeenCalledTimes(1);
   });
 
   it("accepts relevant edits, deduplicates events, ignores output edits, and reports a full installation queue", async () => {
