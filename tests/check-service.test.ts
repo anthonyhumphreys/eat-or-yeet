@@ -9,6 +9,9 @@ import { checkProduct } from "@/lib/checks/service";
 import { emptyObservation } from "@/lib/domain/schemas";
 import type { DatasetStatus, MatchableIncident, MatchableTarget } from "@/lib/domain/types";
 import { normaliseCode, normaliseGtin, normaliseText } from "@/lib/matching/normalise";
+import * as matcher from "@/lib/matching/matcher";
+
+const runMatcher = vi.spyOn(matcher, "runMatcher");
 
 const checkedAt = "2026-10-08T12:00:00.000Z";
 const healthyStatus: DatasetStatus = { healthy: true, checkedAt, regions: ["UK"], sources: [] };
@@ -120,6 +123,21 @@ describe("checkProduct", () => {
 
     expect(checked.result).toMatchObject({ verdict: "NO_CLUE", inconclusiveReason: "incomplete_data" });
     expect(checked.result.datasetStatus?.sources[0]?.status).toBe("stale");
+  });
+
+  it("does not compute a verdict when cancellation arrives during enrichment", async () => {
+    const controller = new AbortController();
+    let finishEnrichment!: (observation: ReturnType<typeof emptyObservation>) => void;
+    mocks.enrich.mockImplementationOnce(() => new Promise((resolve) => {
+      finishEnrichment = resolve;
+    }));
+    const pending = checkProduct(emptyObservation(), "UK", { signal: controller.signal });
+
+    controller.abort();
+    finishEnrichment(emptyObservation());
+
+    await expect(pending).rejects.toHaveProperty("name", "AbortError");
+    expect(runMatcher).not.toHaveBeenCalled();
   });
 
   it.each(["enrichment", "dataset"] as const)("propagates %s failures for the route to handle", async (failure) => {
