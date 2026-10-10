@@ -25,6 +25,9 @@ const installationErrors: Record<string, string> = {
   invalid_template: "The shopping list structure has changed. Retry setup, or reconnect the list if the problem continues.",
   access_revoked: "Notion access has expired or was removed. Reconnect your Notion account to continue.",
   temporarily_unavailable: "We could not reach Notion or the warning service. Retry setup in a moment.",
+  setup_unavailable: "We could not finish setting up your list. Try again in a moment.",
+  cancelled: "Notion access was not approved. You can start again whenever you are ready.",
+  expired: "That setup link expired or was already used. Start again to protect your account.",
 };
 
 const queryMessages: Record<string, string> = {
@@ -33,9 +36,6 @@ const queryMessages: Record<string, string> = {
   paused: "Reviews are paused.",
   resumed: "Reviews have resumed.",
   disconnected: "Your Notion connection is disconnected. Your shopping list stays in Notion.",
-  cancelled: "Notion access was not approved. You can start again whenever you are ready.",
-  expired: "That setup link expired or was already used. Start again to protect your account.",
-  setup_unavailable: "We could not finish setting up your list. Try again in a moment.",
 };
 
 function firstValue(value: string | string[] | undefined) {
@@ -50,7 +50,7 @@ function retryTime(timestamp: number) {
 export default async function NotionManagementPage({ searchParams }: { searchParams: Promise<{ error?: string | string[]; notice?: string | string[] }> }) {
   const [params, management] = await Promise.all([searchParams, getNotionManagement()]);
   const notice = queryMessages[firstValue(params.notice) ?? ""];
-  const queryError = queryMessages[firstValue(params.error) ?? ""];
+  const queryError = installationErrors[firstValue(params.error) ?? ""];
   const enabled = Boolean(getNotionInstallationOrigin());
 
   if (!management) {
@@ -124,7 +124,7 @@ export default async function NotionManagementPage({ searchParams }: { searchPar
           {installation.status === "paused" && <p className="mt-5 leading-7 text-muted-foreground">New reviews are paused. Your Notion list stays connected, and existing results keep their original review time.</p>}
           {pendingStatus && <p className="mt-5 rounded-xl border bg-muted/35 p-4 leading-6" role="status" aria-live="polite">{pendingStatus} Use Refresh status to check again after queued work has drained.</p>}
           {installation.errorCode && <p className="mt-5 rounded-xl border border-destructive/40 bg-destructive/5 p-4 leading-6" role="alert">{installationErrors[installation.errorCode] ?? "This list needs attention. Retry setup or reconnect your Notion account."}</p>}
-          {installation.status === "active" && !budget.allowed && <p className="mt-5 rounded-xl border bg-muted/35 p-4 leading-6">Today&apos;s review limit has been reached. Pending reviews can retry after {retryAt ?? "the limit resets"}{retryAt ? " UTC" : ""}. Earlier results keep their original review time.</p>}
+          {installation.status === "active" && !busy && !budget.allowed && <p className="mt-5 rounded-xl border bg-muted/35 p-4 leading-6">Today&apos;s review limit has been reached. Pending reviews can retry after {retryAt ?? "the limit resets"}{retryAt ? " UTC" : ""}. Earlier results keep their original review time.</p>}
 
           {installation.status !== "disconnecting" && (
             <>

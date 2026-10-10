@@ -114,6 +114,16 @@ describe("managed Notion Convex state", () => {
     expect(await t.query(api.notion.disconnectReceipt, { secret, sessionHash, now: now + 4 })).toEqual({ permissionRemoved: true });
   });
 
+  it("reports reviews unavailable while installation controls are busy", async () => {
+    const t = createBackend();
+    const installation = await active(t, "busy-budget");
+    const sessionHash = hex("a"), csrfHash = hex("b");
+    await t.mutation(api.notion.createSession, { secret, sessionHash, csrfHash, installationId: installation.installationId, expiresAt: now + 86_400_000, now });
+    await t.run((ctx) => ctx.db.patch(installation.installationId, { controlBusy: true }));
+    expect(await t.query(api.notion.management, { secret, sessionHash, now })).toMatchObject({ busy: true, budget: { allowed: false } });
+    expect(await t.mutation(internal.notion.takeReviewQuota, { installationId: installation.installationId, now })).toMatchObject({ allowed: false, used: 0 });
+  });
+
   it("exposes budget without spending quota and spends quota atomically within both limits", async () => {
     const t = createBackend();
     const installation = await authorize(t, "owner-a", "workspace-a", "bot-a");

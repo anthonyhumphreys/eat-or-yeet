@@ -172,7 +172,7 @@ export const management = query({
     return {
       installation: { id: installation._id, region: installation.region, status: installation.status, ...(installation.databaseId ? { binding: { databaseId: installation.databaseId } } : {}), ...(installation.errorCode ? { errorCode: installation.errorCode } : {}) },
       busy: installation.controlBusy,
-      budget: { allowed: installation.status === "active" && (local?.used ?? 0) < PER_INSTALLATION_DAILY && (global?.used ?? 0) < GLOBAL_DAILY, retryAt: (day + 1) * DAY },
+      budget: { allowed: installation.status === "active" && !installation.controlBusy && (local?.used ?? 0) < PER_INSTALLATION_DAILY && (global?.used ?? 0) < GLOBAL_DAILY, retryAt: (day + 1) * DAY },
     };
   },
 });
