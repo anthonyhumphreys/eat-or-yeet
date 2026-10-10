@@ -194,7 +194,7 @@ export function browseCategories(incident: CategorySource): FoodCategory[] {
       const groupCategory = foodTypeFromOffTags(groupTags);
       if (groupCategory) {
         found.add(groupCategory);
-      } else if (looseCategories.length === 0 || groupTags.length > 0) {
+      } else if (products.length > 1 || looseCategories.length === 0 || groupTags.length > 0) {
         found.add(
           knownFoodType(product.value)
             ?? genericFoodType(product.value)
