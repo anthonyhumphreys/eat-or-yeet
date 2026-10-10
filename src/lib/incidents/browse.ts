@@ -1,4 +1,4 @@
-import { normaliseText } from "../matching/normalise";
+export { namedRetailers } from "./retailers";
 
 export const foodCategories = [
   "Produce",
@@ -42,47 +42,6 @@ const categoryRules: Array<[FoodCategory, RegExp]> = [
   ["Pantry", /\b(?:sauce|salsa|dip|paste|oil|olives?|spice|seasoning|pickle|jam|honey|spread|tinned|canned|bean|lentil)\b/i],
 ];
 
-const retailerNames: Record<string, string> = {
-  tesco: "Tesco",
-  waitrose: "Waitrose",
-  waitrosepartners: "Waitrose",
-  sainsburys: "Sainsbury's",
-  sainsburyssupermarketsltd: "Sainsbury's",
-  asda: "Asda",
-  aldi: "Aldi",
-  aldistoreslimited: "Aldi",
-  lidl: "Lidl",
-  lidlustrading: "Lidl",
-  morrisons: "Morrisons",
-  coop: "Co-op",
-  marksandspencer: "Marks & Spencer",
-  ms: "Marks & Spencer",
-  iceland: "Iceland",
-  ocado: "Ocado",
-  walmart: "Walmart",
-  target: "Target",
-  kroger: "Kroger",
-  traderjoes: "Trader Joe's",
-  costco: "Costco",
-  publix: "Publix",
-  safeway: "Safeway",
-  albertsons: "Albertsons",
-  wholefoodsmarket: "Whole Foods Market",
-};
-
-function sourceBusiness(source: unknown): string | null {
-  if (!source || typeof source !== "object") return null;
-  const data = source as Record<string, unknown>;
-  const reporting = data.reportingBusiness;
-  if (reporting && typeof reporting === "object") {
-    const name = (reporting as Record<string, unknown>).commonName;
-    if (typeof name === "string") return name;
-  }
-  if (typeof data.recalling_firm === "string") return data.recalling_firm;
-  if (typeof data.company === "string") return data.company;
-  return null;
-}
-
 export function browseCategories(incident: BrowseSource): FoodCategory[] {
   // These labels organise the feed; they never enter the safety matcher.
   const products = incident.targets.filter((target) => target.type === "product" || target.type === "category").map((target) => target.value);
@@ -92,11 +51,4 @@ export function browseCategories(incident: BrowseSource): FoodCategory[] {
     found.add(categoryRules.find(([, pattern]) => pattern.test(name))?.[0] ?? "Other foods");
   }
   return [...found];
-}
-
-export function namedRetailers(incident: BrowseSource): string[] {
-  const explicit = incident.targets.filter((target) => target.type === "retailer").map((target) => target.value.trim()).filter(Boolean);
-  const business = sourceBusiness(incident.originalSourceData);
-  const namedBusiness = business ? retailerNames[normaliseText(business)] : undefined;
-  return [...new Set([...explicit, ...(namedBusiness ? [namedBusiness] : [])])];
 }

@@ -87,6 +87,8 @@ function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionIn
     title: item.title,
     targets: item.targets,
     originalSourceData: item.originalSourceData,
+    summary: item.summary,
+    consumerAdvice: item.consumerAdvice,
   };
 
   return {

@@ -131,6 +131,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
     const categoryCounts = new Map<FoodCategory, number>();
     const stores = new Set<string>(store ? [store] : []);
     let hazardTotal = 0;
+    let unnamedShop = 0;
     const results: ExplorerRow[] = [];
     for (const row of searched) {
       const inHazard = !hazard || row.hazard.kind === hazard;
@@ -140,8 +141,9 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
       if (inHazard && inStore) for (const item of row.categories) categoryCounts.set(item, (categoryCounts.get(item) ?? 0) + 1);
       if (inHazard && inCategory) for (const item of row.stores) stores.add(item);
       if (inHazard && inCategory && inStore) results.push(row);
+      if (store && inHazard && inCategory && !row.stores.length) unnamedShop++;
     }
-    return { results, hazardCounts, hazardTotal, categoryCounts, stores: [...stores].sort((a, b) => a.localeCompare(b)) };
+    return { results, hazardCounts, hazardTotal, categoryCounts, unnamedShop, stores: [...stores].sort((a, b) => a.localeCompare(b)) };
   }, [rows, index, q, hazard, category, store]);
 
   const { results } = view;
@@ -261,6 +263,13 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
               {rows ? <><span className="tabular-nums">{countLabel}</span>{filtered ? " found" : ` in the ${region}`}</> : `${region} recalls`}
             </h2>
             <p className="text-xs text-muted-foreground">Newest first · {sourceNames[region]}</p>
+            {store && view.unnamedShop ? (
+              // A shop filter must never look like an all-clear: most notices do not say where a product was sold.
+              <p className="mt-1 max-w-[60ch] text-xs leading-5 text-muted-foreground">
+                {view.unnamedShop.toLocaleString("en-GB")} more {view.unnamedShop === 1 ? "recall does" : "recalls do"} not name a shop and could still apply.{" "}
+                <button type="button" onClick={() => update({ store: undefined })} className="rounded-sm font-semibold text-link underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Show all shops</button>
+              </p>
+            ) : null}
           </div>
           <div className="flex items-center gap-3">
             {filtered ? (

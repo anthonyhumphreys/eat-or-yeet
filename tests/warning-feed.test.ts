@@ -64,6 +64,15 @@ describe("warnings landing feed", () => {
     expect(list(html)).not.toContain("Bread recall");
   });
 
+  it("says how many recalls a shop filter leaves out because they name no shop", async () => {
+    listWarnings.mockResolvedValue([...rows, { ...rows[1], id: "4", slug: "unnamed", title: "Maker recalls rolls", stores: [] }]);
+    const filtered = list(await render({ store: "Waitrose" }));
+    expect(filtered).not.toContain("Maker recalls rolls");
+    expect(filtered).toContain("1 more recall does not name a shop and could still apply.");
+    expect(filtered).toContain("Show all shops");
+    expect(list(await render())).not.toContain("could still apply");
+  });
+
   it("leads with this month's newest food-poisoning recall as the top alert", async () => {
     const html = await render();
     const top = html.slice(0, html.indexOf('id="warnings"'));
