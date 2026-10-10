@@ -97,7 +97,15 @@ export interface WorkerStore {
 /** Durable bounded event-ID and work queue state; it never stores item fields or credentials. */
 export class SqliteWorkerStore implements WorkerStore {
   readonly #db: DatabaseSync;
-  constructor(path: string) {
+  readonly #maxDedupeRows: number;
+  readonly #maxPendingPages: number;
+  constructor(path: string, options: { maxPendingPages?: number; maxDedupeRows?: number } = {}) {
+    this.#maxPendingPages = options.maxPendingPages ?? MAX_PENDING_PAGES;
+    this.#maxDedupeRows = options.maxDedupeRows ?? MAX_DEDUPE_ROWS;
+    if (!Number.isInteger(this.#maxPendingPages) || this.#maxPendingPages < 1 || this.#maxPendingPages > MAX_PENDING_PAGES
+      || !Number.isInteger(this.#maxDedupeRows) || this.#maxDedupeRows < 1 || this.#maxDedupeRows > MAX_DEDUPE_ROWS) {
+      throw new WorkerError("Worker queue limits must be positive integers within the configured maximum", "invalid_config");
+    }
     this.#db = new DatabaseSync(path);
     this.#db.exec(`PRAGMA journal_mode=WAL;
       PRAGMA busy_timeout=5000;
@@ -119,7 +127,7 @@ export class SqliteWorkerStore implements WorkerStore {
       const pending = this.#db.prepare("SELECT pending FROM pending_pages WHERE page_id=?").get(pageId) as { pending: number } | undefined;
       const eventCount = this.#db.prepare("SELECT COUNT(*) AS count FROM seen_events").get() as { count: number };
       const pageCount = this.#db.prepare("SELECT COUNT(*) AS count FROM pending_pages WHERE pending=1").get() as { count: number };
-      if (eventCount.count >= MAX_DEDUPE_ROWS || (!pending?.pending && pageCount.count >= MAX_PENDING_PAGES)) {
+      if (eventCount.count >= this.#maxDedupeRows || (!pending?.pending && pageCount.count >= this.#maxPendingPages)) {
         this.#db.exec("ROLLBACK");
         return "full";
       }
@@ -196,12 +204,12 @@ type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 /** Minimal Notion REST client with connection pacing, a shared concurrency ceiling and bounded retries. */
 export class NotionRestClient implements NotionClient {
-  readonly #token: string;
+  readonly #token: string | (() => Promise<string>);
   readonly #fetch: Fetcher;
   #inFlight = 0;
   #lastRequestAt = 0;
   #queue: Array<() => void> = [];
-  constructor(token: string, fetcher: Fetcher = fetch) { this.#token = token; this.#fetch = fetcher; }
+  constructor(token: string | (() => Promise<string>), fetcher: Fetcher = fetch) { this.#token = token; this.#fetch = fetcher; }
   async getPage(pageId: string, signal: AbortSignal): Promise<NotionPage> {
     return await this.#request(`/pages/${encodeURIComponent(pageId)}`, { method: "GET" }, signal) as NotionPage;
   }
@@ -217,12 +225,14 @@ export class NotionRestClient implements NotionClient {
       await this.#acquire(signal);
       let response: Response;
       try {
+        const token = typeof this.#token === "string" ? this.#token : await this.#token();
         response = await this.#fetch(`https://api.notion.com/v1${path}`, {
           ...init,
           signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          headers: { Authorization: `Bearer ${this.#token}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json", ...init.headers },
+          headers: { Authorization: `Bearer ${token}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json", ...init.headers },
         });
       } catch (error) {
+        if (error instanceof WorkerError) throw error;
         if (method === "PATCH") throw new WorkerError("Notion write transport failed", "temporary");
         if (attempt === MAX_RETRIES || signal.aborted) throw error;
         await sleep(retryDelay(undefined, attempt), signal);
@@ -319,10 +329,28 @@ export type WorkerDependencies = {
   delay?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Test seam; production defaults to the fixed 3-second debounce. */
   debounceMs?: number;
+  /** Includes installation settings, such as region, in durable review fingerprints. */
+  fingerprintNamespace?: string;
+  onReady?: () => void;
+  onPaused?: (code: WorkerError["code"]) => void;
   log?: (message: string) => void;
 };
 
-export function createShoppingWebhookWorker(dependencies: WorkerDependencies): { server: Server; start(): Promise<void>; stop(): Promise<void> } {
+export type ShoppingWorkerEvent = {
+  id: string;
+  type: "page.created" | "page.properties_updated";
+  pageId: string;
+  updatedProperties: string[];
+};
+export type ShoppingWorker = {
+  server: Server;
+  start(options?: { listen?: boolean }): Promise<void>;
+  stop(): Promise<void>;
+  enqueue(event: ShoppingWorkerEvent): "accepted" | "duplicate" | "ignored" | "full" | "paused";
+  state(): { ready: boolean; paused: boolean };
+};
+
+export function createShoppingWebhookWorker(dependencies: WorkerDependencies): ShoppingWorker {
   const { config, notion, reviewer, store } = dependencies;
   validateConfig(config);
   const now = dependencies.now ?? Date.now;
@@ -358,22 +386,42 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
     const event = parseWebhook(payload);
     if (!event) { respond(response, 400, { error: "invalid_event" }); return; }
     if (event.type !== "page.created" && event.type !== "page.properties_updated") { respond(response, 200, { accepted: false }); return; }
-    if (event.type === "page.properties_updated" && !event.updatedProperties.some((id) => inputPropertyIds(config).has(id))) {
-      respond(response, 200, { accepted: false }); return;
-    }
-    if (paused) { respond(response, 503, { error: "worker_paused" }); return; }
-    let acceptance: ReturnType<WorkerStore["acceptEvent"]>;
-    try {
-      store.cleanup(now() - DEDUPE_MS);
-      acceptance = store.acceptEvent(event.id, event.pageId, now() + debounceMs, now());
-    } catch {
+    let acceptance: ReturnType<ShoppingWorker["enqueue"]>;
+    try { acceptance = enqueue({ ...event, type: event.type }); }
+    catch {
       respond(response, 503, { error: "queue_unavailable" });
       return;
     }
+    if (acceptance === "ignored") { respond(response, 200, { accepted: false }); return; }
+    if (acceptance === "paused") { respond(response, 503, { error: "worker_paused" }); return; }
     if (acceptance === "full") { respond(response, 503, { error: "queue_full" }); return; }
     respond(response, 202, { accepted: acceptance === "accepted" });
-    if (acceptance === "accepted") kick(debounceMs);
   });
+  function enqueue(event: ShoppingWorkerEvent): ReturnType<ShoppingWorker["enqueue"]> {
+    if (event.type !== "page.created" && event.type !== "page.properties_updated") return "ignored";
+    if (event.type === "page.properties_updated" && !event.updatedProperties.some((id) => inputPropertyIds(config).has(decodePropertyId(id)))) return "ignored";
+    if (paused || controller.signal.aborted) return "paused";
+    const acceptedAt = now();
+    store.cleanup(acceptedAt - DEDUPE_MS);
+    const acceptance = store.acceptEvent(event.id, event.pageId, acceptedAt + debounceMs, acceptedAt);
+    if (acceptance === "accepted") kick(debounceMs);
+    return acceptance;
+  }
+  function parseWorkerRow(page: NotionPage): ReturnType<typeof parseRow> {
+    const row = parseRow(page, config);
+    if (row && dependencies.fingerprintNamespace !== undefined) {
+      row.fingerprint = createHash("sha256").update(JSON.stringify([dependencies.fingerprintNamespace, row.fingerprint])).digest("hex");
+    }
+    return row;
+  }
+  function pause(code: WorkerError["code"], message: string): void {
+    if (paused) return;
+    paused = true;
+    ready = false;
+    log(message);
+    try { dependencies.onPaused?.(code); }
+    catch { log("Shopping worker pause callback failed."); }
+  }
   function kick(waitMs = 150): void {
     schedulePumpAt(now() + waitMs);
   }
@@ -422,7 +470,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
     try {
       const page = await notion.getPage(pageId, controller.signal);
       assertSelectedDatabase(page, config);
-      const row = parseRow(page, config);
+      const row = parseWorkerRow(page);
       if (!row || row.bought || !row.item.name.trim()) { store.finish(pageId, generation, claimToken, now()); return; }
       if (store.current(pageId)?.fingerprint === row.fingerprint) { store.finish(pageId, generation, claimToken, now()); return; }
       const result = row.invalidPacket
@@ -432,7 +480,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
           : { status: "unable_to_review" as const, notices: [], warnings: ["The configured item name, brand, or barcode is outside the review tool's accepted format. Correct the row and try again."] };
       const latest = await notion.getPage(pageId, controller.signal);
       assertSelectedDatabase(latest, config);
-      const latestRow = parseRow(latest, config);
+      const latestRow = parseWorkerRow(latest);
       if (!latestRow || latestRow.bought || latestRow.fingerprint !== row.fingerprint) {
         if (latestRow && !latestRow.bought && latestRow.item.name.trim()) store.schedule(pageId, now() + debounceMs, now());
         store.finish(pageId, generation, claimToken, now());
@@ -443,7 +491,7 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
         const preflight = await notion.getPage(pageId, controller.signal);
         assertSelectedDatabase(preflight, config);
-        const current = parseRow(preflight, config);
+        const current = parseWorkerRow(preflight);
         if (!current || current.bought || current.fingerprint !== row.fingerprint) {
           if (current && !current.bought && current.item.name.trim()) store.schedule(pageId, now() + debounceMs, now());
           store.finish(pageId, generation, claimToken, now());
@@ -464,9 +512,8 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       if (controller.signal.aborted) { store.release(pageId, generation, claimToken, now()); return; }
       if (error instanceof WorkerError && error.code === "out_of_scope") { store.finish(pageId, generation, claimToken, now()); return; }
       if (error instanceof WorkerError && (error.code === "revoked" || error.code === "missing_property" || error.code === "invalid_config")) {
-        paused = true;
-        log(error.code === "revoked" ? "Notion access stopped; worker paused." : "Notion resource or property configuration changed; worker paused.");
         store.release(pageId, generation, claimToken, now());
+        pause(error.code, error.code === "revoked" ? "Notion access stopped; worker paused." : "Notion resource or property configuration changed; worker paused.");
         return;
       } else if (!controller.signal.aborted) {
         log(`Shopping row processing failed (${error instanceof WorkerError ? error.code : "network_or_parse_error"}).`);
@@ -483,13 +530,15 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
     while (!controller.signal.aborted && !paused) {
       try {
         await validateSelectedDataSource(notion, config, controller.signal);
+        if (controller.signal.aborted) return;
         ready = true;
+        try { dependencies.onReady?.(); }
+        catch { log("Shopping worker ready callback failed."); }
         return;
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof WorkerError && ["revoked", "missing_property", "invalid_config", "out_of_scope"].includes(error.code)) {
-          paused = true;
-          log(error.code === "revoked" ? "Notion access stopped; worker paused." : "Selected data source or configured properties are invalid; worker paused.");
+          pause(error.code, error.code === "revoked" ? "Notion access stopped; worker paused." : "Selected data source or configured properties are invalid; worker paused.");
           return;
         }
         const backoff = Math.min(1_000 * (2 ** Math.min(attempt, 6)), 60_000);
@@ -503,13 +552,17 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
   }
   return {
     server,
-    async start() {
-      if (started) return;
+    enqueue,
+    state: () => ({ ready, paused }),
+    async start(options = {}) {
+      if (started || controller.signal.aborted) return;
       started = true;
-      await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(config.listenPort, config.listenHost, () => { server.removeListener("error", reject); resolve(); });
-      });
+      if (options.listen !== false) {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(config.listenPort, config.listenHost, () => { server.removeListener("error", reject); resolve(); });
+        });
+      }
       await validateStartup();
       kick(); // Resume durable due work after process restart; no workspace scan/poll is performed.
     },
@@ -517,10 +570,11 @@ export function createShoppingWebhookWorker(dependencies: WorkerDependencies): {
       if (stopPromise) return await stopPromise;
       stopPromise = (async () => {
       controller.abort(new Error("worker_stopped"));
+      ready = false;
       if (pumpTimer) clearTimeout(pumpTimer);
       pumpTimer = undefined;
       pumpDeadline = undefined;
-      if (started) await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
       await Promise.allSettled([...activeTasks]);
       await Promise.allSettled([notion.close?.(), reviewer.close?.()]);
       store.close();
