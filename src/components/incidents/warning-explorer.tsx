@@ -121,6 +121,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const [announcement, setAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
+  const typesRef = useRef<HTMLDivElement>(null);
   const { q, hazard, type, category, store } = filters;
 
   const index = useMemo(() => (rows ?? []).map((row) => normaliseText(`${row.title} ${row.stores.join(" ")} ${row.hazard.label} ${row.categories.join(" ")}`)), [rows]);
@@ -180,11 +181,12 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   }, [filters, path, region, rows, countLabel]);
 
   useEffect(() => {
-    // Keep the selected food type visible in the horizontally scrolling tab row without moving the page.
-    const row = chipsRef.current;
-    const chip = row?.querySelector<HTMLElement>("[aria-current]");
-    if (row && chip && (chip.offsetLeft < row.scrollLeft || chip.offsetLeft + chip.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = chip.offsetLeft - 16;
-  }, [category]);
+    // Keep the selected tabs visible in the horizontally scrolling rows without moving the page.
+    for (const row of [typesRef.current, chipsRef.current]) {
+      const chip = row?.querySelector<HTMLElement>("[aria-current]");
+      if (row && chip && (chip.offsetLeft < row.scrollLeft || chip.offsetLeft + chip.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = chip.offsetLeft - 16;
+    }
+  }, [type, category]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -215,7 +217,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   return (
     <div id="warnings" className="min-w-0 scroll-mt-4">
       {tabs.types.length > 1 ? (
-        <div className="relative -mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by kind of product">
+        <div ref={typesRef} className="relative -mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by kind of product">
           <div className="flex gap-2 border-b pb-3 sm:flex-wrap">
             <Chip href={filterUrl(path, region, { ...filters, type: undefined, category: undefined })} active={!type} onSelect={() => update({ type: undefined, category: undefined })}>
               Everything <span className="tabular-nums">{view.typeTotal.toLocaleString("en-GB")}</span>

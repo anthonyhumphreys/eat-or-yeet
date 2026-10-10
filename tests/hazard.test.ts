@@ -20,6 +20,14 @@ describe("hazard tags", () => {
     expect(classifyHazard({ title: "Something recalled", hazard: "The products may cause a burning sensation." })).toEqual({ kind: "other", label: "See notice" });
   });
 
+  it("names common medicine recall reasons", () => {
+    expect(classifyHazard({ title: "Example Pharma recall: Infants' Acetaminophen", hazard: "Subpotent drug" })).toEqual({ kind: "other", label: "Wrong strength" });
+    expect(classifyHazard({ title: "Example Pharma recall: Metformin", hazard: "CGMP Deviations: NDMA impurity above the acceptable intake limit" })).toEqual({ kind: "other", label: "Impurity" });
+    expect(classifyHazard({ title: "Example Pharma recall: Saline Nasal Spray", hazard: "Microbial contamination of non-sterile products" })).toEqual({ kind: "spoilage", label: "Contamination" });
+    expect(classifyHazard({ title: "Example Pharma recall: Lidocaine cream", hazard: "Failed child-resistant packaging requirements" })).toEqual({ kind: "other", label: "Not child-resistant" });
+    expect(classifyHazard({ title: "Example Pharma recall: Tablets", hazard: "Failed dissolution specifications" })).toEqual({ kind: "other", label: "Quality failure" });
+  });
+
   it("names veterinary medicine residues rather than calling them an allergen", () => {
     expect(classifyHazard({
       title: "Graham’s Family Dairy recalls Graham’s Family Dairy Semi-Skimmed Milk due to the presence of veterinary medicines including antibiotics (penicillin)",
