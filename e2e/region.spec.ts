@@ -91,3 +91,22 @@ test("request country takes precedence over an uncertain browser suggestion", as
   await expect(countryDialog(page).getByRole("radio", { name: /United Kingdom/ })).toBeChecked();
   expect(errors).toEqual([]);
 });
+
+test("checking a US recall preserves its region despite a saved UK preference", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
+  await page.goto("/?region=US");
+  await page.locator('a[href^="/incidents/"]').first().click();
+  const check = page.getByRole("link", { name: "Check your pack", exact: true });
+  await expect(check).toHaveAttribute("href", "/search?mode=details&region=US");
+  await check.click();
+  await expect(page.getByRole("combobox", { name: "Warning location", exact: true })).toHaveValue("US");
+  let checkedRegion: string | undefined;
+  await page.route("**/api/check", async (route) => {
+    checkedRegion = route.request().postDataJSON().region;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Test response" }) });
+  });
+  await page.getByLabel("Product name").fill("Example recalled food");
+  await page.getByRole("button", { name: "Check published warnings" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Test response" })).toBeVisible();
+  expect(checkedRegion).toBe("US");
+});

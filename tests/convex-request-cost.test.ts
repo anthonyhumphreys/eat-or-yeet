@@ -14,6 +14,15 @@ afterEach(() => {
 });
 
 describe("combined Convex request queries and mutations", () => {
+  it("guards public pages against dataset changes in the same query transaction", async () => {
+    const t = createBackend();
+    const version = await t.query(api.incidents.getDatasetVersion, { region: "UK" });
+    await expect(t.query(api.incidents.listActivePage, { region: "UK", cursor: null, snapshot: true, expectedVersion: version })).resolves.toMatchObject({ page: [], isDone: true });
+    await t.run((ctx) => ctx.db.insert("datasetVersions", { region: "UK", revision: 1 }));
+    await expect(t.query(api.incidents.listActivePage, { region: "UK", cursor: null, snapshot: true, expectedVersion: version })).rejects.toThrow("DATASET_REVISION_CHANGED");
+    // Older deployed callers remain compatible until the frontend rollout.
+    await expect(t.query(api.incidents.listActivePage, { region: "UK", cursor: null })).resolves.toMatchObject({ page: [] });
+  });
   it("uses local product data first and preserves cached unknown and expiry behavior", async () => {
     const t = createBackend();
     await t.run(async (ctx) => {

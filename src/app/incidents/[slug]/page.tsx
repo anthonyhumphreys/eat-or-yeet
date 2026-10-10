@@ -66,7 +66,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
                 <h3 className="font-bold">Have one at home?</h3>
                 <p className="text-sm leading-6">Check your pack’s codes and dates against this recall.</p>
               </div>
-              <Button asChild variant="solid" className="h-11 shrink-0 rounded-full px-5 font-bold"><Link href="/search?mode=details">Check your pack<ArrowRight aria-hidden /></Link></Button>
+              <Button asChild variant="solid" className="h-11 shrink-0 rounded-full px-5 font-bold"><Link href={`/search?mode=details&region=${incident.region}`}>Check your pack<ArrowRight aria-hidden /></Link></Button>
             </div>
           </section>
 
