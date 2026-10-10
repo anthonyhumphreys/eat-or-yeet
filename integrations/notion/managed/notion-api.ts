@@ -79,7 +79,12 @@ export class NotionOAuthApi {
       headers: this.#oauthHeaders(),
       body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }),
     }, signal, "OAuth token refresh");
-    return parseCredentials(asObject(response, "OAuth refresh response"));
+    const body = asObject(response, "OAuth refresh response");
+    const accessToken = requiredString(body.access_token, "OAuth access token", MAX_TOKEN_LENGTH);
+    const nextRefreshToken = body.refresh_token === null
+      ? refreshToken
+      : requiredString(body.refresh_token, "OAuth refresh token", MAX_TOKEN_LENGTH);
+    return { accessToken, refreshToken: nextRefreshToken };
   }
 
   async revoke(accessToken: string, signal: AbortSignal): Promise<void> {

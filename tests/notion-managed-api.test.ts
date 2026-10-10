@@ -114,6 +114,41 @@ describe("Notion managed OAuth API", () => {
     expect(requestBody).toBe(JSON.stringify({ grant_type: "refresh_token", refresh_token: REFRESH_TOKEN }));
   });
 
+  it("keeps the existing refresh token when Notion returns null and uses it on the next refresh", async () => {
+    const requestBodies: string[] = [];
+    const responses = [
+      { access_token: "first-access", refresh_token: null },
+      { access_token: "second-access", refresh_token: "second-refresh" },
+    ];
+    const api = new NotionOAuthApi(CLIENT_ID, CLIENT_SECRET, "https://example.test/callback", async (_input, init = {}) => {
+      requestBodies.push(String(init.body));
+      return jsonResponse(responses.shift());
+    });
+
+    const first = await api.refresh(REFRESH_TOKEN, signal);
+    expect(first).toEqual({ accessToken: "first-access", refreshToken: REFRESH_TOKEN });
+    await expect(api.refresh(first.refreshToken, signal)).resolves.toEqual({
+      accessToken: "second-access",
+      refreshToken: "second-refresh",
+    });
+    expect(requestBodies).toEqual([
+      JSON.stringify({ grant_type: "refresh_token", refresh_token: REFRESH_TOKEN }),
+      JSON.stringify({ grant_type: "refresh_token", refresh_token: REFRESH_TOKEN }),
+    ]);
+  });
+
+  it.each([
+    ["missing", {}],
+    ["empty", { refresh_token: "" }],
+    ["wrong type", { refresh_token: false }],
+    ["oversized", { refresh_token: "x".repeat(4_097) }],
+  ])("rejects a %s refresh token instead of reusing the prior token", async (_label, extra) => {
+    const api = new NotionOAuthApi(CLIENT_ID, CLIENT_SECRET, "https://example.test/callback", async () =>
+      jsonResponse({ access_token: "new-access", ...extra }));
+
+    await expect(api.refresh(REFRESH_TOKEN, signal)).rejects.toMatchObject({ code: "invalid_config" });
+  });
+
   it("revokes the access token with client authentication and does not retry", async () => {
     let requests = 0;
     let requestBody = "";
