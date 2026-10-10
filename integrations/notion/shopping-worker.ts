@@ -165,7 +165,32 @@ export class SqliteWorkerStore implements WorkerStore {
     return row ? { fingerprint: row.fingerprint ?? "", busy: row.busy_until > Date.now() } : undefined;
   }
   schedule(pageId: string, dueAt: number, touchedAt: number): void {
-    this.#db.prepare("INSERT INTO pending_pages(page_id,due_at,busy_until,pending,generation,touched_at) VALUES(?,?,0,1,1,?) ON CONFLICT(page_id) DO UPDATE SET due_at=excluded.due_at,pending=1,generation=pending_pages.generation+1,touched_at=excluded.touched_at").run(pageId, dueAt, touchedAt);
+    const result = this.#db.prepare(`INSERT INTO pending_pages(page_id,due_at,busy_until,pending,generation,touched_at)
+      SELECT ?,?,0,1,1,? WHERE EXISTS (SELECT 1 FROM pending_pages WHERE page_id=? AND pending=1)
+        OR (SELECT COUNT(*) FROM pending_pages WHERE pending=1) < ?
+      ON CONFLICT(page_id) DO UPDATE SET due_at=excluded.due_at,pending=1,generation=pending_pages.generation+1,touched_at=excluded.touched_at`)
+      .run(pageId, dueAt, touchedAt, pageId, this.#maxPendingPages);
+    if (result.changes === 0) throw new WorkerError("Worker pending queue is full", "temporary");
+  }
+  /**
+   * Replaces queued membership with the complete selected unbought-page list.
+   * The caller must stop and drain every worker using this store first: this
+   * operation clears abandoned claims, so it must never run alongside live work.
+   * Event deduplication and previously completed fingerprints remain intact.
+   */
+  reconcilePages(pageIds: readonly string[], dueAt: number, touchedAt: number): void {
+    if (pageIds.length > this.#maxPendingPages || new Set(pageIds).size !== pageIds.length) {
+      throw new WorkerError("Reconciled pages must be unique and within the pending queue limit", "invalid_config");
+    }
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      this.#db.prepare("UPDATE pending_pages SET pending=0,busy_until=0,claimed_generation=NULL,claim_token=NULL,touched_at=? WHERE pending=1 OR busy_until>0 OR claim_token IS NOT NULL").run(touchedAt);
+      for (const pageId of pageIds) this.schedule(pageId, dueAt, touchedAt);
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
   markReviewed(pageId: string, generation: number, claimToken: string, fingerprint: string, reviewedAt: number): void {
     this.#db.prepare("UPDATE pending_pages SET last_fingerprint=?,last_reviewed_at=?,busy_until=0,claimed_generation=NULL,claim_token=NULL,pending=CASE WHEN generation=? THEN 0 ELSE 1 END,touched_at=? WHERE page_id=? AND claimed_generation=? AND claim_token=?").run(fingerprint, reviewedAt, generation, reviewedAt, pageId, generation, claimToken);

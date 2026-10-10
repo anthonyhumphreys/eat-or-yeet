@@ -277,6 +277,122 @@ describe("embedded Notion shopping workers", () => {
   });
 });
 
+describe("bounded installation queue reconciliation", () => {
+  it("replaces a full queue with a disjoint full list and retires abandoned claims", () => {
+    const store = new SqliteWorkerStore(":memory:", { maxPendingPages: 2 });
+    try {
+      store.acceptEvent("old-event-1", "old-page-1", 100, 100);
+      store.acceptEvent("old-event-2", "old-page-2", 100, 100);
+      const abandoned = store.duePages(100, 2);
+      // The previous worker has stopped; its outstanding claims can be retired.
+      store.reconcilePages(["new-page-1", "new-page-2"], 200, 200);
+      expect(store.nextDue()).toBe(200);
+      const seeded = store.duePages(200, 10);
+      expect(seeded.map(({ pageId }) => pageId).sort()).toEqual(["new-page-1", "new-page-2"]);
+      expect(store.acceptEvent("overflow", "page-3", 200, 200)).toBe("full");
+      for (const claim of seeded) store.finish(claim.pageId, claim.generation, claim.claimToken, 201);
+      for (const claim of abandoned) store.release(claim.pageId, claim.generation, claim.claimToken, 202);
+      expect(store.nextDue()).toBeUndefined();
+      expect(store.acceptEvent("clearable-event", "clearable-page", 300, 300)).toBe("accepted");
+      store.reconcilePages([], 300, 300);
+      expect(store.duePages(300, 10)).toEqual([]);
+      expect(store.acceptEvent("clearable-event", "clearable-page", 301, 301)).toBe("duplicate");
+    } finally { store.close(); }
+  });
+
+  it("preserves event deduplication and completed fingerprints while advancing seeded generations", () => {
+    const store = new SqliteWorkerStore(":memory:", { maxPendingPages: 2 });
+    try {
+      store.acceptEvent("completed-event", "kept-page", 100, 100);
+      const completed = store.duePages(100, 1)[0]!;
+      store.markReviewed(completed.pageId, completed.generation, completed.claimToken, "kept-fingerprint", 101);
+      store.acceptEvent("retired-event", "retired-page", 110, 110);
+      const retired = store.duePages(110, 1)[0]!;
+      store.markReviewed(retired.pageId, retired.generation, retired.claimToken, "retired-fingerprint", 111);
+      store.acceptEvent("pending-event", "pending-page", 120, 120);
+      const abandoned = store.duePages(120, 1)[0]!;
+
+      store.reconcilePages(["kept-page", "pending-page"], 200, 200);
+      expect(store.current("kept-page")?.fingerprint).toBe("kept-fingerprint");
+      expect(store.current("retired-page")?.fingerprint).toBe("retired-fingerprint");
+      expect(store.acceptEvent("completed-event", "kept-page", 201, 201)).toBe("duplicate");
+      expect(store.acceptEvent("retired-event", "retired-page", 201, 201)).toBe("duplicate");
+      const seeded = store.duePages(200, 10);
+      expect(seeded.map(({ pageId, generation }) => ({ pageId, generation }))).toEqual([
+        { pageId: "kept-page", generation: completed.generation + 1 },
+        { pageId: "pending-page", generation: abandoned.generation + 1 },
+      ]);
+      store.markReviewed(abandoned.pageId, abandoned.generation, abandoned.claimToken, "stale-fingerprint", 201);
+      expect(store.current("pending-page")?.fingerprint).toBe("");
+      for (const claim of seeded) store.finish(claim.pageId, claim.generation, claim.claimToken, 202);
+      expect(store.nextDue()).toBeUndefined();
+    } finally { store.close(); }
+  });
+
+  it("rejects duplicate or oversized lists before changing queued pages", () => {
+    const store = new SqliteWorkerStore(":memory:", { maxPendingPages: 2 });
+    try {
+      store.acceptEvent("original-event", "original-page", 100, 100);
+      for (const invalid of [["new-page", "new-page"], ["new-page-1", "new-page-2", "new-page-3"]]) {
+        expect(() => store.reconcilePages(invalid, 200, 200)).toThrow(expect.objectContaining({ code: "invalid_config" }));
+        expect(store.nextDue()).toBe(100);
+        expect(store.current("new-page")).toBeUndefined();
+        expect(store.current("new-page-1")).toBeUndefined();
+      }
+      expect(store.duePages(100, 10)).toEqual([expect.objectContaining({ pageId: "original-page", generation: 1 })]);
+      expect(store.acceptEvent("original-event", "original-page", 201, 201)).toBe("duplicate");
+    } finally { store.close(); }
+  });
+
+  it("rolls back membership and partial inserts if reconciliation fails during seeding", () => {
+    class FailingReconciliationStore extends SqliteWorkerStore {
+      failPage?: string;
+      override schedule(pageId: string, dueAt: number, touchedAt: number) {
+        if (pageId === this.failPage) throw new Error("seed failed");
+        super.schedule(pageId, dueAt, touchedAt);
+      }
+    }
+    const store = new FailingReconciliationStore(":memory:", { maxPendingPages: 2 });
+    try {
+      store.acceptEvent("old-event-1", "old-page-1", 100, 100);
+      store.acceptEvent("old-event-2", "old-page-2", 100, 100);
+      store.failPage = "new-page-2";
+      expect(() => store.reconcilePages(["new-page-1", "new-page-2"], 200, 200)).toThrow("seed failed");
+      expect(store.current("new-page-1")).toBeUndefined();
+      expect(store.nextDue()).toBe(100);
+      expect(store.duePages(100, 10).map(({ pageId, generation }) => ({ pageId, generation }))).toEqual([
+        { pageId: "old-page-1", generation: 1 }, { pageId: "old-page-2", generation: 1 },
+      ]);
+      expect(store.acceptEvent("old-event-1", "old-page-1", 201, 201)).toBe("duplicate");
+    } finally { store.close(); }
+  });
+
+  it("caps new and completed-page schedules while allowing retries and edits for a pending row", () => {
+    const store = new SqliteWorkerStore(":memory:", { maxPendingPages: 1 });
+    try {
+      store.schedule("completed-page", 100, 100);
+      const completed = store.duePages(100, 1)[0]!;
+      store.markReviewed(completed.pageId, completed.generation, completed.claimToken, "completed-fingerprint", 101);
+      store.acceptEvent("pending-event", "pending-page", 110, 110);
+      const claimed = store.duePages(110, 1)[0]!;
+      expect(() => store.schedule("new-page", 200, 200)).toThrow(expect.objectContaining({ code: "temporary" }));
+      expect(() => store.schedule("completed-page", 200, 200)).toThrow(expect.objectContaining({ code: "temporary" }));
+      expect(store.current("new-page")).toBeUndefined();
+      expect(store.current("completed-page")?.fingerprint).toBe("completed-fingerprint");
+
+      store.schedule("pending-page", 300, 200);
+      store.finish(claimed.pageId, claimed.generation, claimed.claimToken, 201);
+      expect(store.nextDue()).toBe(300);
+      const retry = store.duePages(300, 1)[0]!;
+      expect(retry.generation).toBe(claimed.generation + 1);
+      store.finish(retry.pageId, retry.generation, retry.claimToken, 301);
+      expect(store.nextDue()).toBeUndefined();
+      store.schedule("completed-page", 400, 400);
+      expect(store.duePages(400, 1)[0]).toMatchObject({ pageId: "completed-page", generation: completed.generation + 1 });
+    } finally { store.close(); }
+  });
+});
+
 describe("request-time Notion credentials", () => {
   it("loads the current access token for each request and retry", async () => {
     let token = "first-token";

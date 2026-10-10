@@ -138,4 +138,4 @@ See [Convex usage](docs/convex-usage.md) for cache freshness, index storage, unc
 
 ## Notion shopping integration
 
-The tested review engine is an operator pilot. The customer release will use Add to Notion, native consent and automatic shopping-list setup, with no Notion AI or developer configuration. See the [customer overview](docs/notion-shopping.md), [managed installation plan](docs/notion-installation-plan.md) and separate [operator runbook](docs/operators/notion-shopping-worker.md). Customer OAuth installation is not available yet.
+The managed Add to Notion flow provides native consent, automatic copied-list setup and hosted reviews, with no Notion AI or customer developer configuration. It is implemented and tested locally, but stays default-off until public connection setup and live multi-workspace acceptance pass. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).

@@ -4,7 +4,7 @@ Updated: 10 October 2026
 
 Decision: an ordinary shopper installs this through **Add to Notion**. Eat or Yeet hosts and operates the automation. The API-token, Docker and n8n instructions remain an optional maintainer/self-hosting runbook. This decision supersedes the earlier plan to offer owner-hosted automation as the normal customer installation.
 
-Status: customer installation requirement captured; OAuth onboarding and managed operation are not implemented. [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) supplies the deterministic review service and tested single-installation engine. It is an internal pilot, not a completed consumer integration.
+Status: OAuth onboarding, managed operation, website entry and management are implemented on `codex/notion-installation` and tested locally. They remain default-off; the public OAuth/template installation and live multi-workspace acceptance gate have not run. [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) supplies the deterministic review service and tested single-installation engine. It is an internal pilot, not a completed consumer integration.
 
 ## Customer flow
 
@@ -26,7 +26,7 @@ Show "Setting up your list" until the copied database, stable property IDs, cred
 
 Keep the main template view to Item, Bought, Review status, Related warnings and Reviewed at. Hide optional packet fields and the technical fingerprint from that view. Do not prefill fake recalls or a reassuring example result. Existing custom lists can follow later with a picker and column mapping.
 
-## One successor implementation PR
+## Successor implementation PR
 
 **Managed Notion installation and shopping-list automation** depends on PR #7. Keep OAuth, automatic list binding, tenant-safe processing, management and customer help in one complete feature PR. Splitting them would produce an installation that cannot review items or disconnect safely. Keep it default-off until the real installation tests pass.
 
@@ -45,19 +45,19 @@ No separate account/password system is required for the first version. The Notio
 
 ## Hosting and cost
 
-Start with one bounded managed pilot on our existing NAS. Run one service and shared signed-webhook endpoint, with installation records and a durable queue in local-disk SQLite on a persistent private volume. Encrypt access/refresh tokens with a key outside the database. Backups must protect credentials too. Customers never operate this service. No polling of whole workspaces, paid model calls, per-customer containers or extra Convex writes for queue transitions.
+Start with one bounded managed pilot on our existing NAS. Run one service and shared signed-webhook endpoint, with an installation metadata SQLite database and one durable SQLite queue per internal installation ID on a persistent private volume. Encrypt access/refresh tokens with a key outside the database. Backups must protect credentials too. Customers never operate this service. No polling of whole workspaces, paid model calls, per-customer containers or extra Convex writes for queue transitions.
 
-The current worker is single-installation: SQLite keys contain only page/event IDs, pause state is process-wide, the Notion client fixes its token at construction, and webhook parsing discards workspace/recipient identities. Refactor those boundaries before accepting a second installation. A bad schema or revoked connection must pause only its own installation.
+The engine now supports embedded operation with per-installation queues and pauses, a credential provider for each Notion request, and readiness callbacks. The shared endpoint validates signed workspace/bot recipients; each worker checks its bound data source before reviewing a row. A bad schema or revoked connection pauses only that installation. Bound lists remain reserved through disconnect until active writes drain and local removal completes.
 
 The current private MCP endpoint supports at most 20 static configured connection keys. Do not generate an environment key entry for every shopper. For the bounded pilot, use one operator service credential with durable per-installation budgets in the managed worker and an explicit shared MCP budget. Keep it server-only. Multi-process scaling needs shared quota enforcement and dynamic installation authentication or an authenticated service endpoint; a caller-supplied installation ID alone is not identity.
 
-Set installation count, per-installation daily item reviews, global daily work, queue size and in-flight work limits before enablement. Use fair scheduling and debounce to keep a busy list from starving others. Reuse regional snapshot caches. Idle installations cause no source queries. When limits are reached, show delayed/paused status and the next retry; never reuse a previous result as if it were a current review.
+Defaults cap the pilot at 20 installations, 100 review admissions per installation per UTC day and 1,000 globally. Each queue holds at most 1,000 pending pages and 5,000 deduplication records. Two shared review slots and paced Notion requests bound in-flight work. Confirm these limits and the private MCP shared budget before enablement. Use fair scheduling and debounce to keep a busy list from starving others. Reuse regional snapshot caches. Idle installations cause no source queries. When limits are reached, show delayed/paused status and the next retry; never reuse a previous result as if it were a current review.
 
 NAS hosting keeps the first pilot inexpensive but makes its availability, updates, private backups and restore testing our responsibility. A health check and operator alert are required. Measure per-review Notion/MCP traffic and remaining Convex/Vercel headroom on the managed pilot before broad enrollment. This change does not claim unlimited free installations.
 
 ## One-time operator setup
 
-These are our release tasks, not customer instructions:
+The [managed service runbook](./operators/notion-managed-service.md) gives configuration, deployment and rollback steps. These are our release tasks, not customer instructions:
 
 - Register a dedicated public Notion OAuth connection with the intended workspace installation scope. Keep the approved private test connection separate. Marketplace listing is optional and has a separate submission process. [Public connections](https://developers.notion.com/guides/get-started/public-connections).
 - Publish a clean shopping template containing no personal test rows or private identifiers. Configure its URL on the public connection.
@@ -73,3 +73,7 @@ Test two separate workspaces and two authorizing users in one workspace. Confirm
 Repeat the already-tested Milk/Oreo/Eggs creation/input-edit flow, bought-row skip and result-write loop check through the managed installer. Verify incomplete coverage stays "Unable to review", and a generic item's result never claims that the packet is safe. The live pilot from 10 October proves the existing engine, not these new OAuth/tenant controls.
 
 Record actual Notion consent steps and API version in acceptance evidence. Only then call this a customer-ready Notion integration. Category watches and future-recall notifications remain a separate opt-in addition.
+
+## Local verification evidence
+
+The implementation tests exercise native OAuth requests and copied-template discovery, encrypted storage and quotas, real HTTP callback/session/webhook routes, and embedded multi-installation processing with real durable queues. Regression cases cover late 401s, token rotation, concurrent binding, completed pause versus delayed country changes, country-dependent fingerprints, and disconnect while a write is in flight. Notion and review responses are controlled fixtures in these tests. They do not prove real public consent, template duplication or webhook delivery. Record those results here before enabling the customer entry.
