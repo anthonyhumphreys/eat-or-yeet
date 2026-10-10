@@ -3,6 +3,8 @@ import { createMcpTransport } from "@/lib/integrations/mcp/server";
 import { untilAborted } from "@/lib/integrations/mcp/services";
 import { readResponseText } from "@/lib/http/bounded-response";
 import { readBoundedJson } from "@/lib/security/request-body";
+import { MCP_APP_RESOURCE_URI } from "@/lib/integrations/mcp/app-resource";
+import { MAX_APP_RESPONSE_BYTES } from "@/lib/integrations/mcp/app-limits";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -46,7 +48,9 @@ async function handle(request: Request) {
     })), signal);
     // Legacy clients receive a finite SSE exchange. Buffer it under the same
     // deadline so concurrency limits cover tool work, not just response headers.
-    const text = await untilAborted(readResponseText(response, 256 * 1024), signal);
+    const envelope = body.value as { method?: unknown; params?: { uri?: unknown } } | null;
+    const staticApp = envelope?.method === "resources/read" && envelope.params?.uri === MCP_APP_RESOURCE_URI;
+    const text = await untilAborted(readResponseText(response, staticApp ? MAX_APP_RESPONSE_BYTES : 256 * 1024), signal);
     const responseHeaders = new Headers(response.headers);
     responseHeaders.set("Cache-Control", "no-store");
     for (const [key, value] of Object.entries(cors)) responseHeaders.set(key, value);

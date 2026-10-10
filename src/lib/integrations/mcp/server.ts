@@ -20,6 +20,7 @@ import {
 import { validatePublicResponse } from "@/lib/integrations/serialize";
 import { executeTool, IntegrationToolError } from "./services";
 import type { z } from "zod";
+import { MCP_APP_RESOURCE_URI, registerResultApp } from "./app-resource";
 
 export const MCP_TOOL_NAMES = [
   "check_product",
@@ -144,7 +145,10 @@ function toolCallback<Name extends McpToolName, InputSchema extends z.ZodType>(
 }
 
 export function createMcpServer(executor: ToolExecutor, network: string): McpServer {
-  const server = new McpServer({ name: "eat-or-yeet", version: "1.0.0" });
+  const server = new McpServer({ name: "eat-or-yeet", version: "1.0.0" }, {
+    instructions: "Ask for an explicit UK or US region before checking. Use facts supplied by the user; leave unknown packet fields empty. A barcode alone can start a check. No matching warning is not a safety guarantee. Search is discovery, not a product verdict. Explain incomplete coverage and unresolved packet restrictions. These tools cannot publish shares or monitor products.",
+  });
+  registerResultApp(server);
 
   server.registerTool("check_product", {
     title: "Check a product",
@@ -152,6 +156,7 @@ export function createMcpServer(executor: ToolExecutor, network: string): McpSer
     inputSchema: CheckProductInputSchema,
     outputSchema: PublicCheckResultSchema,
     annotations: toolAnnotations("check_product"),
+    _meta: { securitySchemes: [{ type: "noauth" }], ui: { resourceUri: MCP_APP_RESOURCE_URI, visibility: ["model", "app"] } },
   }, toolCallback("check_product", CheckProductInputSchema, PublicCheckResultSchema, executor, network));
 
   server.registerTool("search_warnings", {
@@ -160,6 +165,7 @@ export function createMcpServer(executor: ToolExecutor, network: string): McpSer
     inputSchema: SearchWarningsInputSchema,
     outputSchema: PublicSearchResultSchema,
     annotations: toolAnnotations("search_warnings"),
+    _meta: { securitySchemes: [{ type: "noauth" }], ui: { visibility: ["model", "app"] } },
   }, toolCallback("search_warnings", SearchWarningsInputSchema, PublicSearchResultSchema, executor, network));
 
   server.registerTool("get_warning", {
@@ -168,6 +174,7 @@ export function createMcpServer(executor: ToolExecutor, network: string): McpSer
     inputSchema: GetWarningInputSchema,
     outputSchema: PublicWarningDetailsSchema,
     annotations: toolAnnotations("get_warning"),
+    _meta: { securitySchemes: [{ type: "noauth" }], ui: { resourceUri: MCP_APP_RESOURCE_URI, visibility: ["model", "app"] } },
   }, toolCallback("get_warning", GetWarningInputSchema, PublicWarningDetailsSchema, executor, network));
 
   server.registerTool("get_coverage", {
@@ -176,6 +183,7 @@ export function createMcpServer(executor: ToolExecutor, network: string): McpSer
     inputSchema: GetCoverageInputSchema,
     outputSchema: PublicCoverageSchema,
     annotations: toolAnnotations("get_coverage"),
+    _meta: { securitySchemes: [{ type: "noauth" }], ui: { visibility: ["model", "app"] } },
   }, toolCallback("get_coverage", GetCoverageInputSchema, PublicCoverageSchema, executor, network));
 
   return server;
