@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleHelp, ExternalLink, Link2, Pencil, RotateCcw, Share2, TriangleAlert } from "lucide-react";
+import { CircleHelp, ExternalLink, Pencil, RotateCcw, SearchX, Share2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -22,9 +22,9 @@ const presentation: Record<VerdictResult["verdict"], PresentedVerdict> = {
   EAT: {
     headline: "No matching warning found",
     subheading: "No published warning matched these details.",
-    summary: "We did not find a match in the warning data shown below.",
-    className: "bg-secondary text-foreground",
-    Icon: CircleHelp,
+    summary: "We did not find a match in the warning data shown below. This checks published warnings, not whether food is safe to eat.",
+    className: "border bg-card text-foreground",
+    Icon: SearchX,
   },
   YEET: {
     headline: "Warning match found",
@@ -44,7 +44,7 @@ const presentation: Record<VerdictResult["verdict"], PresentedVerdict> = {
     headline: "Not enough details",
     subheading: "We could not make a useful comparison.",
     summary: "Add a barcode, product name, producer, or batch code and check again.",
-    className: "bg-muted text-foreground",
+    className: "border border-dashed bg-muted text-foreground",
     Icon: CircleHelp,
   },
 };
@@ -82,7 +82,12 @@ export function VerdictView({ result, onReset, onEdit, onRetry }: { result: Verd
     summary: unavailableSources.length
       ? `Current data from ${unavailableSources.join(", ")} is unavailable. Try again later.`
       : "Current warning data is unavailable. Try again later.",
+  } : result.verdict === "NO_CLUE" && result.observation.barcode && !result.observation.productName ? {
+    ...presentation.NO_CLUE,
+    subheading: "We couldn't identify this barcode.",
+    summary: "Add the product name or batch code from the label and check again.",
   } : presentation[result.verdict];
+  const needsDetails = result.verdict === "NO_CLUE" && !dataIncomplete;
   const Icon = view.Icon;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const topMatch = result.matches[0];
@@ -137,12 +142,21 @@ export function VerdictView({ result, onReset, onEdit, onRetry }: { result: Verd
     }
   }
 
-  async function createPublicLink() {
-    if (!result.shareToken) {
-      setShareStatus("Run the check again before creating a public link.");
-      return;
+  async function shareResult() {
+    if (!result.shareToken || result.verdict === "NO_CLUE") return shareVerdict();
+    const url = await createPublicLink();
+    if (!url) return;
+    try {
+      if (!navigator.share) return await copyUrl(url, "Public link copied. It expires after 24 hours.");
+      await navigator.share({ title: "Eat or Yeet warning check", text: shareText, url });
+      setShareStatus("Share sheet opened. The link expires after 24 hours.");
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      await copyUrl(url, "Public link copied. It expires after 24 hours.");
     }
+  }
 
+  async function createPublicLink(): Promise<string | null> {
     setShareStatus("Creating a public link…");
     setFallbackUrl(null);
     try {
@@ -154,9 +168,11 @@ export function VerdictView({ result, onReset, onEdit, onRetry }: { result: Verd
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error ?? "Couldn't create the link.");
       if (typeof payload?.url !== "string") throw new Error("Couldn't create the link.");
-      await copyUrl(payload.url, "Public link copied. It expires after 24 hours.");
+      setShareStatus(null);
+      return payload.url;
     } catch (cause) {
       setShareStatus(cause instanceof Error ? cause.message : "Couldn't create the link.");
+      return null;
     }
   }
 
@@ -169,26 +185,27 @@ export function VerdictView({ result, onReset, onEdit, onRetry }: { result: Verd
           <p className="mt-5 text-lg font-bold">{view.subheading}</p>
           <p className="mt-2 max-w-xl leading-7 text-foreground/75 dark:text-foreground/80">{view.summary}</p>
           {result.observation.productName ? <p className="mt-5 text-sm leading-6"><span className="font-semibold">Product: {result.observation.productName}</span>{result.observation.brand ? ` · ${result.observation.brand}` : ""}</p> : null}
+          {topMatch ? (
+            <div className="mt-6 rounded-lg bg-background/70 p-4 text-foreground">
+              <p className="text-xs font-bold uppercase tracking-wide text-yeet">Official consumer advice</p>
+              <p className="mt-2 font-semibold leading-6">{topMatch.incident.consumerAdvice}</p>
+              {officialSource?.url ? <a href={officialSource.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold underline underline-offset-4">{officialSource.label}<ExternalLink className="size-3.5" aria-hidden /></a> : null}
+            </div>
+          ) : null}
           {result.verdict !== "EAT" && result.matchLevel !== "none" ? <Badge variant="outline" className="mt-5 border-current/30 bg-transparent">{matchLevelNames[result.matchLevel]}</Badge> : null}
           <p className="mt-5 text-sm font-medium">{`${dataIncomplete ? "Check attempted for" : "Checked against"} published ${regions.length ? `${regions.join(" + ")} ` : ""}warnings${checkedAt ? ` · ${checkedAt}` : ""}`}</p>
           {onEdit || (dataIncomplete && onRetry) ? <div className="mt-6 flex flex-wrap gap-3 border-t border-current/20 pt-4">
             {dataIncomplete && onRetry ? <Button type="button" size="sm" variant="solid" className="rounded-full" onClick={onRetry}><RotateCcw aria-hidden />Check again</Button> : null}
-            {onEdit ? <Button type="button" size="sm" variant="outline" className="rounded-full border-current/30 bg-transparent hover:bg-background/40" onClick={onEdit}><Pencil aria-hidden />{extraDetails ? "Edit details" : "Add label details"}</Button> : null}
+            {onEdit ? <Button type="button" size="sm" variant={needsDetails ? "solid" : "outline"} className={needsDetails ? "rounded-full" : "rounded-full border-current/30 bg-transparent hover:bg-background/40"} onClick={onEdit}><Pencil aria-hidden />{extraDetails ? "Edit details" : "Add label details"}</Button> : null}
           </div> : null}
         </div>
       </section>
-
-      {result.verdict === "EAT" ? <p className="rounded-xl border p-4 text-sm leading-6"><strong>No matching warning found.</strong> This checks published warnings, not whether food is safe to eat.</p> : null}
 
       {topMatch ? (
         <section className="rounded-xl border p-5 sm:p-7">
           <h2 className="text-xl font-black">Matching warning</h2>
           {result.matchCount !== undefined && result.matchCount > result.matches.length ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{result.matchCount} warnings match; the strongest match is shown here.</p> : null}
           <ul className="mt-4 space-y-3">{topMatch.reasons.map((reason, index) => <li key={`${reason.type}-${index}`} className="flex gap-3 text-sm leading-6"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-current" />{reason.message}</li>)}</ul>
-          <div className="mt-6 rounded-lg bg-yeet-soft p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-yeet">Official consumer advice</p>
-            <p className="mt-2 text-sm font-semibold leading-6">{topMatch.incident.consumerAdvice}</p>
-          </div>
           <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
             <div><dt className="text-muted-foreground">Warning</dt><dd className="font-semibold">{topMatch.incident.title}</dd></div>
             <div><dt className="text-muted-foreground">Hazard</dt><dd className="font-semibold">{topMatch.incident.pathogen ?? topMatch.incident.hazard ?? "See official warning"}</dd></div>
@@ -225,9 +242,8 @@ export function VerdictView({ result, onReset, onEdit, onRetry }: { result: Verd
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Button onClick={() => void shareVerdict()} variant="solid" size="lg" className="h-11 rounded-full font-bold"><Share2 aria-hidden />Share result</Button>
-        {result.shareToken && result.verdict !== "NO_CLUE" ? <Button onClick={() => void createPublicLink()} size="lg" variant="outline" className="rounded-full"><Link2 aria-hidden />Create public link</Button> : null}
-        <Button onClick={onReset} variant="ghost" className="sm:col-span-2"><RotateCcw aria-hidden />Check something else</Button>
+        {needsDetails ? null : <Button onClick={() => void shareResult()} variant="solid" size="lg" className="h-11 rounded-full font-bold"><Share2 aria-hidden />Share result</Button>}
+        <Button onClick={onReset} variant="ghost" className={needsDetails ? "sm:col-span-2" : ""}><RotateCcw aria-hidden />Check something else</Button>
       </div>
       {shareStatus ? <p className="rounded-xl bg-card p-4 text-sm" role="status" aria-live="polite">{shareStatus}</p> : null}
       {fallbackUrl ? <div className="space-y-2 rounded-xl bg-card p-4"><Label htmlFor="share-fallback-url">Share link</Label><textarea id="share-fallback-url" readOnly value={fallbackUrl} onFocus={(event) => event.currentTarget.select()} rows={2} className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-6 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" /><a href={fallbackUrl.split("\n").at(-1) ?? fallbackUrl} className="inline-flex min-h-10 items-center font-semibold underline underline-offset-4">Open link</a></div> : null}
