@@ -99,6 +99,14 @@ describe("Open Food Facts categories", () => {
     })).toEqual(["Snacks & sweets", "Drinks"]);
   });
 
+  it("keeps a single named product's category alongside a loose barcode", () => {
+    expect(browseCategories({
+      title: "Recall",
+      targets: [product("Milk", "product-0"), gtin("044000061494", "gtin-0")],
+      productCategoryTags: { "00044000061494": ["en:snacks"] },
+    })).toEqual(["Dairy & eggs", "Snacks & sweets"]);
+  });
+
   it("keeps named categories when a mixed notice also has loose barcodes", () => {
     expect(browseCategories({
       title: "Recall",

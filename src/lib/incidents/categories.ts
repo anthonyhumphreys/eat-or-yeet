@@ -195,15 +195,14 @@ export function browseCategories(incident: CategorySource): FoodCategory[] {
       const groupCategory = foodTypeFromOffTags(groupTags);
       if (groupCategory) {
         found.add(groupCategory);
-      } else if (products.length > 1 || looseCategories.length === 0 || groupTags.length > 0) {
-        found.add(
-          knownFoodType(product.value)
-            ?? genericFoodType(product.value)
-            // The title only lends a known product line ("Krispy Kreme"), never
-            // its generic words, which may describe another product in the notice.
-            ?? knownFoodType(title)
-            ?? "Other foods",
-        );
+      } else {
+        const namedCategory = knownFoodType(product.value)
+          ?? genericFoodType(product.value)
+          // The title only lends a known product line ("Krispy Kreme"), never
+          // its generic words, which may describe another product in the notice.
+          ?? knownFoodType(title);
+        if (namedCategory) found.add(namedCategory);
+        else if (products.length > 1 || looseCategories.length === 0 || groupTags.length > 0) found.add("Other foods");
       }
     }
     looseCategories.forEach((category) => found.add(category));
