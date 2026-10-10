@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,6 +90,23 @@ afterEach(async () => {
   await Promise.all(workers.splice(0).map((worker) => worker.stop()));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
   vi.useRealTimers();
+});
+
+describe("hosted Notion dependencies", () => {
+  it("loads shared clients and provisioning without SQLite, filesystem, or HTTP server imports", () => {
+    const modules = ["shopping-core.ts", "template-provision.mjs", "managed/notion-api.ts"].map((path) => new URL(`../integrations/notion/${path}`, import.meta.url).href);
+    const script = `
+      import { registerHooks } from "node:module";
+      const forbidden = new Set(["node:sqlite", "node:fs", "node:fs/promises", "node:http", "sqlite", "fs", "fs/promises", "http"]);
+      registerHooks({ resolve(specifier, context, nextResolve) {
+        if (forbidden.has(specifier)) throw new Error("Hosted dependency loaded " + specifier);
+        return nextResolve(specifier, context);
+      } });
+      for (const module of ${JSON.stringify(modules)}) await import(module);
+      process.stdout.write("loaded");
+    `;
+    expect(execFileSync(process.execPath, ["--input-type=module", "--eval", script], { encoding: "utf8" })).toBe("loaded");
+  });
 });
 
 describe("embedded Notion shopping workers", () => {

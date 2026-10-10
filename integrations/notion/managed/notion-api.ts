@@ -1,5 +1,5 @@
-import { WorkerError } from "../shopping-worker.ts";
-import { buildWorkerConfig, NOTION_API_VERSION } from "../template/provision.mjs";
+import { WorkerError } from "../shopping-core.ts";
+import { buildWorkerConfig, NOTION_API_VERSION } from "../template-provision.mjs";
 import type { Authorization, Credentials, ListBinding, Region } from "./types.ts";
 
 const API_ORIGIN = "https://api.notion.com/v1";
