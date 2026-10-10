@@ -45,15 +45,15 @@ No separate account/password system is required for the first version. The Notio
 
 ## Hosting and cost
 
-Start with one bounded managed pilot on our existing NAS. Run one service and shared signed-webhook endpoint, with installation records and a durable queue in local-disk SQLite on a persistent private volume. Encrypt access/refresh tokens with a key outside the database. Backups must protect credentials too. Customers never operate this service. No polling of whole workspaces, paid model calls, per-customer containers or extra Convex writes for queue transitions.
+Run the bounded managed pilot on the existing Vercel API and Convex services. Use the existing HTTPS application hostname for OAuth callbacks, signed webhooks and management. Store installation records and durable queued actions in Convex, with Notion access/refresh tokens encrypted at rest and encryption keys held in the existing server-side secret configuration. Customers never operate this service. No polling of whole workspaces, paid model calls, per-customer containers or a separate NAS deployment.
 
 The current worker is single-installation: SQLite keys contain only page/event IDs, pause state is process-wide, the Notion client fixes its token at construction, and webhook parsing discards workspace/recipient identities. Refactor those boundaries before accepting a second installation. A bad schema or revoked connection must pause only its own installation.
 
-The current private MCP endpoint supports at most 20 static configured connection keys. Do not generate an environment key entry for every shopper. For the bounded pilot, use one operator service credential with durable per-installation budgets in the managed worker and an explicit shared MCP budget. Keep it server-only. Multi-process scaling needs shared quota enforcement and dynamic installation authentication or an authenticated service endpoint; a caller-supplied installation ID alone is not identity.
+The current private MCP endpoint supports at most 20 static configured connection keys. Do not generate an environment key entry for every shopper. For the bounded pilot, use the server-side service credential with durable per-installation budgets and shared MCP limits. Keep it server-only. Multi-instance processing needs shared quota enforcement and dynamic installation authentication or an authenticated service endpoint; a caller-supplied installation ID alone is not identity.
 
 Set installation count, per-installation daily item reviews, global daily work, queue size and in-flight work limits before enablement. Use fair scheduling and debounce to keep a busy list from starving others. Reuse regional snapshot caches. Idle installations cause no source queries. When limits are reached, show delayed/paused status and the next retry; never reuse a previous result as if it were a current review.
 
-NAS hosting keeps the first pilot inexpensive but makes its availability, updates, private backups and restore testing our responsibility. A health check and operator alert are required. Measure per-review Notion/MCP traffic and remaining Convex/Vercel headroom on the managed pilot before broad enrollment. This change does not claim unlimited free installations.
+Using the existing Vercel and Convex services avoids a separate NAS deployment, while making their availability and capacity part of this feature's release decision. Require health checks and operator alerts. Measure per-review Notion/MCP traffic and remaining Convex/Vercel headroom on the managed pilot before broad enrollment. This change does not claim unlimited free installations.
 
 ## One-time operator setup
 
