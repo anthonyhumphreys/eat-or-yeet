@@ -170,19 +170,32 @@ export class NotionRestClient implements NotionClient {
     throw new WorkerError("Notion request retries exhausted");
   }
   async #acquire(signal: AbortSignal): Promise<void> {
-    if (this.#inFlight >= MAX_NOTION_CONCURRENCY) await new Promise<void>((resolve, reject) => {
-      const abort = () => reject(signal.reason);
+    signal.throwIfAborted();
+    if (this.#inFlight < MAX_NOTION_CONCURRENCY) this.#inFlight += 1;
+    else await new Promise<void>((resolve, reject) => {
+      const resume = () => { signal.removeEventListener("abort", abort); resolve(); };
+      const abort = () => {
+        const index = this.#queue.indexOf(resume);
+        if (index !== -1) this.#queue.splice(index, 1);
+        reject(signal.reason);
+      };
       signal.addEventListener("abort", abort, { once: true });
-      this.#queue.push(() => { signal.removeEventListener("abort", abort); resolve(); });
+      this.#queue.push(resume);
     });
-    this.#inFlight += 1;
-    const reservedAt = Math.max(Date.now(), this.#lastRequestAt + NOTION_INTERVAL_MS);
-    this.#lastRequestAt = reservedAt;
-    const spacing = reservedAt - Date.now();
-    try { if (spacing > 0) await sleep(spacing, signal); }
-    catch (error) { this.#release(); throw error; }
+    try {
+      signal.throwIfAborted();
+      const reservedAt = Math.max(Date.now(), this.#lastRequestAt + NOTION_INTERVAL_MS);
+      this.#lastRequestAt = reservedAt;
+      const spacing = reservedAt - Date.now();
+      if (spacing > 0) await sleep(spacing, signal);
+    } catch (error) { this.#release(); throw error; }
   }
-  #release(): void { this.#inFlight = Math.max(0, this.#inFlight - 1); this.#queue.shift()?.(); }
+  #release(): void {
+    const resume = this.#queue.shift();
+    // Transfer the occupied slot before the waiting request's continuation runs.
+    if (resume) resume();
+    else this.#inFlight = Math.max(0, this.#inFlight - 1);
+  }
 }
 
 /** Official MCP SDK 2.3.1 streamable-HTTP adapter. */
