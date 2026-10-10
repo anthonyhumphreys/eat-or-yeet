@@ -78,6 +78,8 @@ There are no model credentials. Remove obsolete OpenRouter variables and revoke 
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
+FDA drug enforcement records are imported for browsing under Medical (and Baby, for infant medicines). Pack checks and their source-health gate cover food sources only. Set `OPENFDA_API_KEY` on the Convex deployment to lift openFDA's shared 1,000-requests-a-day limit.
+
 Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 
 Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. Convex refreshes each source independently every day. Cleanup runs separately in bounded batches.

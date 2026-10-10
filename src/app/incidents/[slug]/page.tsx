@@ -39,6 +39,8 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
   const hazardText = incident.hazard?.trim() || incident.pathogen;
   // The FDA publishes recalling companies' own announcements as its recall notices.
   const companyAnnouncement = incident.authority === FDA && source.label === "Official source";
+  // Pack checks only cover food recalls so far.
+  const checkable = incident.superCategories.includes("Food");
 
   return (
     <article className="page-shell py-6 sm:py-10">
@@ -61,13 +63,15 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
             <h2 id="advice-heading" className="flex items-center gap-2 text-lg font-black text-yeet"><TriangleAlert className="size-5" aria-hidden />What to do</h2>
             <p className="mt-2 max-w-[65ch] font-semibold leading-7">{incident.consumerAdvice}</p>
             <a href={source.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold underline underline-offset-4 lg:hidden">{source.label === "Official source" ? "Read the official notice" : source.label}<ExternalLink className="size-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
-            <div className="mt-5 flex flex-col gap-3 border-t border-yeet/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="font-bold">Have one at home?</h3>
-                <p className="text-sm leading-6">Check your pack’s codes and dates against this recall.</p>
+            {checkable ? (
+              <div className="mt-5 flex flex-col gap-3 border-t border-yeet/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-bold">Have one at home?</h3>
+                  <p className="text-sm leading-6">Check your pack’s codes and dates against this recall.</p>
+                </div>
+                <Button asChild variant="solid" className="h-11 shrink-0 rounded-full px-5 font-bold"><Link href="/search?mode=details">Check your pack<ArrowRight aria-hidden /></Link></Button>
               </div>
-              <Button asChild variant="solid" className="h-11 shrink-0 rounded-full px-5 font-bold"><Link href="/search?mode=details">Check your pack<ArrowRight aria-hidden /></Link></Button>
-            </div>
+            ) : null}
           </section>
 
           <div className="mt-10 space-y-10">

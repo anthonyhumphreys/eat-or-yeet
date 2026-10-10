@@ -5,7 +5,7 @@ import Link from "next/link";
 import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
 
 import { ShareButton } from "@/components/share-button";
-import { foodCategoryGroups, type FoodCategory } from "@/lib/incidents/browse";
+import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { normaliseText } from "@/lib/matching/normalise";
@@ -16,15 +16,15 @@ export type ExplorerRow = {
   slug: string;
   title: string;
   updatedAt: number;
-  categories: FoodCategory[];
+  categories: ProductCategory[];
+  superCategories: SuperCategory[];
   stores: string[];
   hazard: HazardSummary;
 };
 
-export type ExplorerFilters = { q: string; hazard?: HazardKind; category?: FoodCategory; store?: string };
+export type ExplorerFilters = { q: string; hazard?: HazardKind; type?: SuperCategory; category?: ProductCategory; store?: string };
 
 const STEP = 40;
-const foodTabs = foodCategoryGroups.flatMap((group) => group.categories);
 const sourceNames: Record<WarningRegion, string> = { UK: "Food Standards Agency", US: "FDA and USDA FSIS" };
 const officialUrls: Record<WarningRegion, string> = {
   UK: "https://alerts.food.gov.uk/",
@@ -38,10 +38,11 @@ const tagTone: Record<HazardKind, string> = {
   other: "bg-muted text-muted-foreground",
 };
 
-export function filterUrl(path: string, region: WarningRegion, { q, hazard, category, store }: ExplorerFilters, page?: number) {
+export function filterUrl(path: string, region: WarningRegion, { q, hazard, type, category, store }: ExplorerFilters, page?: number) {
   const params = new URLSearchParams({ region });
   if (q) params.set("q", q);
   if (hazard) params.set("hazard", hazard);
+  if (type) params.set("type", type);
   if (category) params.set("category", category);
   if (store) params.set("store", store);
   if (page && page > 1) params.set("page", String(page));
@@ -120,33 +121,53 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const [announcement, setAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
-  const { q, hazard, category, store } = filters;
+  const { q, hazard, type, category, store } = filters;
 
   const index = useMemo(() => (rows ?? []).map((row) => normaliseText(`${row.title} ${row.stores.join(" ")} ${row.hazard.label} ${row.categories.join(" ")}`)), [rows]);
+
+  // Tabs come from the region's recalls, not the search, so they stay put while people type.
+  const tabs = useMemo(() => {
+    const types = new Set<SuperCategory>();
+    const categories = new Set<ProductCategory>();
+    for (const row of rows ?? []) {
+      row.superCategories.forEach((item) => types.add(item));
+      if (!type || row.superCategories.includes(type)) row.categories.forEach((item) => categories.add(item));
+    }
+    return {
+      types: superCategories.filter((item) => types.has(item)),
+      // Every food type stays listed under food; other categories only appear once they have recalls.
+      categories: productCategories.filter((item) => categories.has(item) || item === category
+        || ((!type || type === "Food") && (foodCategories as readonly string[]).includes(item))),
+    };
+  }, [rows, type, category]);
 
   const view = useMemo(() => {
     const terms = searchTerms(q);
     const searched = (rows ?? []).filter((_, i) => terms.every((term) => index[i].includes(term)));
     const hazardCounts = new Map<HazardKind, number>();
-    const categoryCounts = new Map<FoodCategory, number>();
+    const typeCounts = new Map<SuperCategory, number>();
+    const categoryCounts = new Map<ProductCategory, number>();
     const stores = new Set<string>(store ? [store] : []);
     let hazardTotal = 0;
+    let typeTotal = 0;
     const results: ExplorerRow[] = [];
     for (const row of searched) {
       const inHazard = !hazard || row.hazard.kind === hazard;
+      const inType = !type || row.superCategories.includes(type);
       const inCategory = !category || row.categories.includes(category);
       const inStore = !store || row.stores.includes(store);
-      if (inCategory && inStore) { hazardTotal++; hazardCounts.set(row.hazard.kind, (hazardCounts.get(row.hazard.kind) ?? 0) + 1); }
-      if (inHazard && inStore) for (const item of row.categories) categoryCounts.set(item, (categoryCounts.get(item) ?? 0) + 1);
-      if (inHazard && inCategory) for (const item of row.stores) stores.add(item);
-      if (inHazard && inCategory && inStore) results.push(row);
+      if (inType && inCategory && inStore) { hazardTotal++; hazardCounts.set(row.hazard.kind, (hazardCounts.get(row.hazard.kind) ?? 0) + 1); }
+      if (inHazard && inStore) { typeTotal++; for (const item of row.superCategories) typeCounts.set(item, (typeCounts.get(item) ?? 0) + 1); }
+      if (inHazard && inType && inStore) for (const item of row.categories) categoryCounts.set(item, (categoryCounts.get(item) ?? 0) + 1);
+      if (inHazard && inType && inCategory) for (const item of row.stores) stores.add(item);
+      if (inHazard && inType && inCategory && inStore) results.push(row);
     }
-    return { results, hazardCounts, hazardTotal, categoryCounts, stores: [...stores].sort((a, b) => a.localeCompare(b)) };
-  }, [rows, index, q, hazard, category, store]);
+    return { results, hazardCounts, hazardTotal, typeCounts, typeTotal, categoryCounts, stores: [...stores].sort((a, b) => a.localeCompare(b)) };
+  }, [rows, index, q, hazard, type, category, store]);
 
   const { results } = view;
   const visible = results.slice(0, limit);
-  const filtered = Boolean(q || hazard || category || store);
+  const filtered = Boolean(q || hazard || type || category || store);
   const countLabel = `${results.length.toLocaleString("en-GB")} ${results.length === 1 ? "recall" : "recalls"}`;
 
   useEffect(() => {
@@ -186,19 +207,33 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   const removable: Array<[string, Partial<ExplorerFilters>]> = [
     ...(q ? [[`“${q}”`, { q: "" }] as [string, Partial<ExplorerFilters>]] : []),
     ...(hazard ? [[hazardKindNames[hazard], { hazard: undefined }] as [string, Partial<ExplorerFilters>]] : []),
+    ...(type ? [[type, { type: undefined, category: undefined }] as [string, Partial<ExplorerFilters>]] : []),
     ...(category ? [[category, { category: undefined }] as [string, Partial<ExplorerFilters>]] : []),
     ...(store ? [[store, { store: undefined }] as [string, Partial<ExplorerFilters>]] : []),
   ];
 
   return (
     <div id="warnings" className="min-w-0 scroll-mt-4">
-      <div ref={chipsRef} className="relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by food type">
+      {tabs.types.length > 1 ? (
+        <div className="relative -mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by kind of product">
+          <div className="flex gap-2 border-b pb-3 sm:flex-wrap">
+            <Chip href={filterUrl(path, region, { ...filters, type: undefined, category: undefined })} active={!type} onSelect={() => update({ type: undefined, category: undefined })}>
+              Everything <span className="tabular-nums">{view.typeTotal.toLocaleString("en-GB")}</span>
+            </Chip>
+            {tabs.types.map((item) => (
+              <Chip key={item} href={filterUrl(path, region, { ...filters, type: item, category: undefined })} active={type === item} onSelect={() => update({ type: type === item ? undefined : item, category: undefined })}>
+                {item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
+              </Chip>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div ref={chipsRef} className="relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by category">
         <div className="flex gap-2 sm:flex-wrap">
           <Chip href={filterUrl(path, region, { ...filters, category: undefined })} active={!category} onSelect={() => update({ category: undefined })}>
-            All foods
+            {type ? `All ${type.toLowerCase()}` : "All categories"}
           </Chip>
-          {/* Every food type is always shown, so the tabs stay put while people search. */}
-          {foodTabs.map((item) => {
+          {tabs.categories.map((item) => {
             const count = view.categoryCounts.get(item) ?? 0;
             return (
               <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
@@ -264,9 +299,9 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
           </div>
           <div className="flex items-center gap-3">
             {filtered ? (
-              <button type="button" onClick={() => update({ q: "", hazard: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
+              <button type="button" onClick={() => update({ q: "", hazard: undefined, type: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
             ) : null}
-            {rows ? <ShareButton label="Share this list" title={`${region} food recalls`} text={`${region} food recalls right now, from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
+            {rows ? <ShareButton label="Share this list" title={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls`} text={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls right now, from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
           </div>
         </div>
       </ViewTransition>
@@ -299,7 +334,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
                 ))}
               </div>
             ) : null}
-            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a food is safe. Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</p>
+            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a product is safe. Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</p>
           </div>
         </div>
       )}

@@ -152,7 +152,7 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   const url = deploymentUrl();
   const version = await fetchQuery(api.incidents.getDatasetVersion, {}, { url });
   const row = await cachedIncidentBySlug(slug, includeDemo, url, version);
-  return row ? mapIncident(row) : null;
+  return row ? { ...mapIncident(row), superCategories: row.superCategories } : null;
 });
 
 const cachedPublicListPage = unstable_cache(

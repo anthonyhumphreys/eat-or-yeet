@@ -251,6 +251,7 @@ export const fsaSource: IncidentSource = {
   name: "Food Standards Agency",
   url: "https://data.food.gov.uk/food-alerts/",
   region: "UK",
+  superCategory: "Food",
   scope: "All records returned by the FSA Food Alerts API, including allergy alerts and product recall information notices.",
   async fetchIncidents() {
     const notations = await fetchAllNotations();

@@ -1,6 +1,7 @@
 import { normaliseText } from "../matching/normalise";
 
-export { browseCategories, foodCategories, foodCategoryGroups, type CategorySource, type FoodCategory } from "./categories";
+export { browseCategories, foodCategories, foodCategoryGroups, medicineBrowseCategories, productCategories, type CategorySource, type FoodCategory, type ProductCategory } from "./categories";
+export { incidentSuperCategories, isSuperCategory, rowSuperCategories, superCategories, type SuperCategory } from "./super-categories";
 
 type BrowseSource = {
   title: string;

@@ -3,7 +3,8 @@ import { v } from "convex/values";
 
 const region = v.union(v.literal("UK"), v.literal("US"));
 const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"));
-const foodCategory = v.union(
+// Browse categories, grouped under super-categories (src/lib/incidents/super-categories.ts).
+const productCategory = v.union(
   v.literal("Produce"),
   v.literal("Meat & poultry"),
   v.literal("Fish & seafood"),
@@ -17,6 +18,16 @@ const foodCategory = v.union(
   v.literal("Pharmaceutical"),
   v.literal("Supplements"),
   v.literal("Other foods"),
+  v.literal("Prescription medicines"),
+  v.literal("Over-the-counter medicines"),
+  v.literal("Other medicines"),
+);
+const superCategory = v.union(
+  v.literal("Baby"),
+  v.literal("Cosmetics"),
+  v.literal("Food"),
+  v.literal("Medical"),
+  v.literal("Pet"),
 );
 const ingestionStatus = v.union(
   v.literal("running"),
@@ -121,7 +132,9 @@ export default defineSchema({
     confidence: v.number(),
     targets: v.array(incidentTarget),
     sourceKey: v.optional(v.string()),
-    categories: v.array(foodCategory),
+    categories: v.array(productCategory),
+    // Optional only for rows saved before super-categories; those are food recalls.
+    superCategories: v.optional(v.array(superCategory)),
     stores: v.array(v.string()),
   })
     .index("by_incidentId", ["incidentId"])

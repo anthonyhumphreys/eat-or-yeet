@@ -34,6 +34,16 @@ export const foodCategories = [
 
 export type FoodCategory = (typeof foodCategories)[number];
 
+/** Medicine recalls come from drug sources, so they never go through the food rules below. */
+export const medicineCategories = ["Prescription medicines", "Over-the-counter medicines", "Other medicines"] as const;
+
+export type MedicineCategory = (typeof medicineCategories)[number];
+
+/** Every browse category, in display order. */
+export const productCategories = [...foodCategories, ...medicineCategories] as const;
+
+export type ProductCategory = (typeof productCategories)[number];
+
 export const foodCategoryGroups: Array<{ label: string; categories: FoodCategory[] }> = [
   { label: "Fresh & chilled", categories: ["Produce", "Meat & poultry", "Fish & seafood", "Dairy & eggs"] },
   { label: "Cupboard & snacks", categories: ["Bakery & grains", "Pantry", "Snacks & sweets", "Drinks"] },
@@ -172,6 +182,18 @@ export type CategorySource = {
   /** Relevant Open Food Facts category tags by normalised GTIN, attached at import. */
   productCategoryTags?: Record<string, string[]> | null;
 };
+
+// openFDA marks linked drug reports as "HUMAN PRESCRIPTION DRUG" or "HUMAN OTC DRUG".
+export function medicineBrowseCategories(originalSourceData: unknown): MedicineCategory[] {
+  const openfda = typeof originalSourceData === "object" && originalSourceData !== null && "openfda" in originalSourceData
+    ? originalSourceData.openfda : null;
+  const types = typeof openfda === "object" && openfda !== null && "product_type" in openfda && Array.isArray(openfda.product_type)
+    ? openfda.product_type.filter((type): type is string => typeof type === "string").map((type) => type.toUpperCase()) : [];
+  const found: MedicineCategory[] = [];
+  if (types.some((type) => type.includes("PRESCRIPTION"))) found.push("Prescription medicines");
+  if (types.some((type) => type.includes("OTC"))) found.push("Over-the-counter medicines");
+  return found.length ? found : ["Other medicines"];
+}
 
 export function browseCategories(incident: CategorySource): FoodCategory[] {
   const title = titleProducts(incident.title);

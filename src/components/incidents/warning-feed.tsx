@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { WarningExplorer, type ExplorerRow } from "@/components/incidents/warning-explorer";
 import { RegionalNews } from "@/components/news/regional-news";
 import { listActivePublicIncidents } from "@/db/queries";
-import { foodCategories, type FoodCategory } from "@/lib/incidents/browse";
+import { isSuperCategory, productCategories, type ProductCategory } from "@/lib/incidents/browse";
 import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/hazard";
 import { formatRecallDate, pickTopAlert, timeAgo } from "@/lib/incidents/recency";
 import { type WarningRegion } from "@/lib/location";
@@ -30,13 +30,15 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       slug: row.slug,
       title: row.title,
       updatedAt: row.updatedAt.valueOf(),
-      categories: row.categories as FoodCategory[],
+      categories: row.categories as ProductCategory[],
+      superCategories: [...row.superCategories],
       stores: row.stores,
       hazard: classifyHazard(row),
     }))
     : null;
   const top = rows ? pickTopAlert(rows) : undefined;
   const category = param(params, "category");
+  const type = param(params, "type");
   const hazard = param(params, "hazard");
   const page = param(params, "page");
 
@@ -56,7 +58,8 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
             initial={{
               q: (param(params, "q") ?? "").slice(0, 120),
               hazard: hazardKinds.includes(hazard as HazardKind) ? hazard as HazardKind : undefined,
-              category: foodCategories.includes(category as FoodCategory) ? category as FoodCategory : undefined,
+              type: isSuperCategory(type) ? type : undefined,
+              category: productCategories.includes(category as ProductCategory) ? category as ProductCategory : undefined,
               store: param(params, "store")?.slice(0, 120) || undefined,
             }}
           />

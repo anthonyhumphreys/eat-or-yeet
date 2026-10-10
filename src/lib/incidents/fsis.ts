@@ -248,6 +248,7 @@ export const fsisSource: IncidentSource = {
   name: "U.S. Department of Agriculture Food Safety and Inspection Service",
   url: FSIS_API,
   region: "US",
+  superCategory: "Food",
   scope: "English-language records in the full USDA FSIS Recall API archive, covering FSIS-regulated meat, poultry, and egg recalls and public health alerts.",
   async fetchIncidents(existingSourceIds = []) {
     const payload = await fetchOfficialJson(FSIS_API, {
