@@ -12,10 +12,12 @@ vi.mock("@/lib/incidents/search", () => ({
 }));
 vi.mock("@/lib/security/integration-rate-limit", () => ({ takeIntegrationRateLimits: vi.fn() }));
 vi.mock("@/lib/integrations/serialize", () => ({ serializeCoverage: vi.fn((value) => value), serializeCheckResult: vi.fn((value) => value), serializeSearchResult: vi.fn((value) => value), PublicResponseTooLargeError: class extends Error {} }));
+vi.mock("@/lib/integrations/shopping/review", () => ({ reviewShoppingItems: vi.fn() }));
 
 import { getRegionCoverage } from "@/db/queries";
 import { checkProduct } from "@/lib/checks/service";
 import { getWarningDetails } from "@/lib/incidents/details";
+import { reviewShoppingItems } from "@/lib/integrations/shopping/review";
 import { searchWarnings } from "@/lib/incidents/search";
 import { executeTool, untilAborted } from "@/lib/integrations/mcp/services";
 import { takeIntegrationRateLimits } from "@/lib/security/integration-rate-limit";
@@ -56,6 +58,38 @@ describe("MCP application boundary", () => {
     vi.mocked(getWarningDetails).mockResolvedValueOnce(null);
     await expect(executeTool("get_warning", { slug: "missing-warning" }, context())).rejects.toMatchObject({ code: "not_found" });
     expect(checkProduct).not.toHaveBeenCalled();
+  });
+
+  it("charges private shopping quota by item count and requires a connection", async () => {
+    const input = { region: "US", items: [{ id: "one", name: "Milk" }, { id: "two", name: "Bread" }] };
+    await expect(executeTool("review_shopping_items", input, context())).rejects.toMatchObject({ code: "unavailable" });
+    expect(takeIntegrationRateLimits).not.toHaveBeenCalled();
+
+    const connection = { id: "notion-shopping", dailyLimit: 40 };
+    vi.mocked(reviewShoppingItems).mockResolvedValueOnce({ items: [] } as never);
+    await expect(executeTool("review_shopping_items", input, { ...context(), connection })).resolves.toEqual({ items: [] });
+    expect(takeIntegrationRateLimits).toHaveBeenCalledWith(context().network, "mcp_shopping", 2, connection);
+    expect(reviewShoppingItems).toHaveBeenCalledWith({ region: "US", items: [
+      { id: "one", name: "Milk", bought: false }, { id: "two", name: "Bread", bought: false },
+    ] }, { signal: expect.any(AbortSignal) });
+  });
+
+  it("runs an explicit private packet check through the shared checker and scoped quota", async () => {
+    const connection = { id: "notion-shopping", dailyLimit: 40 };
+    const checked = { result: { verdict: "NO_CLUE" }, submittedObservation: {}, enrichedObservation: {} };
+    vi.mocked(checkProduct).mockResolvedValueOnce(checked as never);
+
+    await expect(executeTool("check_product", {
+      region: "US",
+      observation: { productName: "Milk", batchCode: "LOT-42", dates: { useBy: "2026-10-09" } },
+    }, { ...context(), connection })).resolves.toEqual(checked);
+
+    expect(takeIntegrationRateLimits).toHaveBeenCalledWith(context().network, "mcp_shopping", 1, connection);
+    expect(checkProduct).toHaveBeenCalledWith({
+      productName: "Milk", brand: null, barcode: null, batchCode: "LOT-42", lotCode: null, producer: null,
+      farmCode: null, countryOfOrigin: null, establishmentNumber: null, approvalNumber: null, retailer: null,
+      category: null, eggMark: null, dates: { useBy: "2026-10-09", bestBefore: null, productionDate: null },
+    }, "US", { signal: expect.any(AbortSignal) });
   });
 
   it("does not begin a cancelled check or begin work after cancelled quota consumption", async () => {

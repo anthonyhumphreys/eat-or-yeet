@@ -135,3 +135,7 @@ pnpm convex:deploy
 Deployment is separate from this local implementation. See the revised cost assessment for assumptions and remaining production checks.
 
 See [Convex usage](docs/convex-usage.md) for cache freshness, index storage, unchanged imports and keeping test deployments small.
+
+## Notion shopping integration
+
+The tested review engine is an operator pilot. The customer release will use Add to Notion, native consent and automatic shopping-list setup, with no Notion AI or developer configuration. See the [customer overview](docs/notion-shopping.md), [managed installation plan](docs/notion-installation-plan.md) and separate [operator runbook](docs/operators/notion-shopping-worker.md). Customer OAuth installation is not available yet.

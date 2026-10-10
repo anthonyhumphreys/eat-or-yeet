@@ -1,0 +1,75 @@
+# Managed Notion installation
+
+Updated: 10 October 2026
+
+Decision: an ordinary shopper installs this through **Add to Notion**. Eat or Yeet hosts and operates the automation. The API-token, Docker and n8n instructions remain an optional maintainer/self-hosting runbook. This decision supersedes the earlier plan to offer owner-hosted automation as the normal customer installation.
+
+Status: customer installation requirement captured; OAuth onboarding and managed operation are not implemented. [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) supplies the deterministic review service and tested single-installation engine. It is an internal pilot, not a completed consumer integration.
+
+## Customer flow
+
+```mermaid
+flowchart LR
+    Add[Add to Notion] --> Consent[Approve in Notion and copy shopping list]
+    Consent --> Setup[Automatic setup]
+    Setup --> List[Open list and add groceries]
+    List --> Reviews[Related warnings appear beside items]
+```
+
+Show the explicitly selected UK/US warning country beside the entry button. Ask once if none is selected. Carry that choice through OAuth; browser locale can suggest it but cannot silently decide it. Do not ask where the shopper bought the food again. Retain country controls on the management screen.
+
+The first release supports our supplied template. Notion's public OAuth flow can duplicate a public page, grant access to that copy and return `duplicated_template_id`. It also lets people choose existing pages instead. When no template was duplicated, show a helpful return to template installation; never scan the workspace or choose an arbitrary database. [Notion authorization and template installation](https://developers.notion.com/guides/get-started/authorization).
+
+Use template duplication initially. It preserves the compact tested view and needs read/update capabilities for ongoing operation. Notion also documents automatic workspace-level database/view creation, which could remove the template choice, but adds insert capability and a newer API/version acceptance test. That is an alternative if real consent testing shows duplication causes friction. Do not implement both routes in the first release. [Programmatic onboarding](https://developers.notion.com/guides/get-started/preparing-for-users).
+
+Show "Setting up your list" until the copied database, stable property IDs, credentials and durable processing are validated. Show "Reviews active" only after activation. On partial failure, resume the existing installation; a retry must not create a second list. The success screen opens the copied Notion list and links to management. It explains that item changes trigger reviews and that future-recall alerts are not yet included.
+
+Keep the main template view to Item, Bought, Review status, Related warnings and Reviewed at. Hide optional packet fields and the technical fingerprint from that view. Do not prefill fake recalls or a reassuring example result. Existing custom lists can follow later with a picker and column mapping.
+
+## One successor implementation PR
+
+**Managed Notion installation and shopping-list automation** depends on PR #7. Keep OAuth, automatic list binding, tenant-safe processing, management and customer help in one complete feature PR. Splitting them would produce an installation that cannot review items or disconnect safely. Keep it default-off until the real installation tests pass.
+
+| Part | Reviewable behaviour |
+| --- | --- |
+| Website entry and OAuth | Add to Notion, country summary, native consent, fixed callback URL, cancel/error handling and automatic return. Short-lived, single-use state is bound to a secure browser cookie; the country and intended operation are stored server-side. No tokens in browser storage, URLs, telemetry or logs. |
+| Installation record | Store an internal installation ID, authorizing Notion user, workspace, bot, copied template page, database/data source, property mapping, region, lifecycle/generation and encrypted access/refresh tokens. Discover only beneath the copied page with bounded traversal. Validate actual types/IDs and the data-source/database relationship. Activation is atomic. |
+| Managed processing | Verify the raw webhook once. Route using registered workspace and `accessible_by` bot recipients, then enforce the configured data source when fetching the row. Queue, deduplication, fingerprints, pauses and budgets belong to an installation. One active writer per data source prevents competing reviews. Keep existing bought/blank skips, result-edit filtering and fresh-input checks before each write attempt. |
+| Credentials and recovery | Serialize refresh per installation and atomically replace the rotating access/refresh pair. Reauthorization verifies the original authorizing identity and updates credentials safely. Do not invent an expiry schedule when Notion supplies none. A revoked installation pauses without affecting others. |
+| Management and disconnect | Use a scoped secure browser session for status, country, pause, reconnect and disconnect. Recover lost sessions through fresh Notion authorization; knowledge of a page/workspace ID does not confer control. Protect writes against CSRF. Disconnect disables the installation first, cancels work and removes retained credentials/state; revoke the Notion token where supported. Fence in-flight writes against disconnect/reconnect and wait for existing writes to finish before reporting disconnection complete. Preserve the shopper's list. |
+| Customer documentation | Publish a short help page alongside the actual enabled entry button. Explain consent/access, fields reviewed, qualified results, delays/quota status and disconnect. Update privacy/support copy for service-held credentials. Show a clear unavailable state while the feature is disabled, without a nonfunctional install button. |
+
+[Notion webhook recipients and delivery](https://developers.notion.com/reference/webhooks-events-delivery), [rotating token refresh](https://developers.notion.com/reference/refresh-a-token), [token revocation](https://developers.notion.com/reference/revoke-token).
+
+No separate account/password system is required for the first version. The Notion authorization establishes ownership, and the service issues a browser management session scoped to that installation. Cross-device access requires a fresh authorization. Support one list per authorizing installation initially; reconnect should restore it without duplicating the template. Test Notion's repeated-authorization/template behaviour and provide an explicit recovery path before launch.
+
+## Hosting and cost
+
+Run the bounded managed pilot on the existing Vercel API and Convex services. Use the existing HTTPS application hostname for OAuth callbacks, signed webhooks and management. Store installation records and durable queued actions in Convex, with Notion access/refresh tokens encrypted at rest and encryption keys held in the existing server-side secret configuration. Customers never operate this service. No polling of whole workspaces, paid model calls, per-customer containers or a separate NAS deployment.
+
+The current worker is single-installation: SQLite keys contain only page/event IDs, pause state is process-wide, the Notion client fixes its token at construction, and webhook parsing discards workspace/recipient identities. Refactor those boundaries before accepting a second installation. A bad schema or revoked connection must pause only its own installation.
+
+The current private MCP endpoint supports at most 20 static configured connection keys. Do not generate an environment key entry for every shopper. For the bounded pilot, use the server-side service credential with durable per-installation budgets and shared MCP limits. Keep it server-only. Multi-instance processing needs shared quota enforcement and dynamic installation authentication or an authenticated service endpoint; a caller-supplied installation ID alone is not identity.
+
+Set installation count, per-installation daily item reviews, global daily work, queue size and in-flight work limits before enablement. Use fair scheduling and debounce to keep a busy list from starving others. Reuse regional snapshot caches. Idle installations cause no source queries. When limits are reached, show delayed/paused status and the next retry; never reuse a previous result as if it were a current review.
+
+Using the existing Vercel and Convex services avoids a separate NAS deployment, while making their availability and capacity part of this feature's release decision. Require health checks and operator alerts. Measure per-review Notion/MCP traffic and remaining Convex/Vercel headroom on the managed pilot before broad enrollment. This change does not claim unlimited free installations.
+
+## One-time operator setup
+
+These are our release tasks, not customer instructions:
+
+- Register a dedicated public Notion OAuth connection with the intended workspace installation scope. Keep the approved private test connection separate. Marketplace listing is optional and has a separate submission process. [Public connections](https://developers.notion.com/guides/get-started/public-connections).
+- Publish a clean shopping template containing no personal test rows or private identifiers. Configure its URL on the public connection.
+- Configure the callback hostname, credentials, encryption key and private persistent storage. Set up one signed webhook subscription and HTTPS ingress. Customers do not register subscriptions or copy its verification token.
+- Install the service, confirm quotas, private backups/restore and failure alerts, then run the acceptance tests. Enable the website entry only after this gate. No live public connection or template is created merely by merging the implementation.
+
+## Acceptance and release gate
+
+A shopper with an ordinary Notion account must finish installation and get their first real review using the website and native Notion consent screens alone. No developer portal, AI subscription, terminal, IDs or secrets in the customer flow.
+
+Test two separate workspaces and two authorizing users in one workspace. Confirm token/row/event isolation, one active writer per list and that revoking one installation leaves the others working. Cover missing/altered templates, delayed readiness, consent cancellation, expired/replayed/mismatched OAuth state, duplicate callbacks, token refresh/rotation, reconnect, lost management sessions, country changes, failed sources, rate limits, restarts and disconnect during a review. A management-country change must invalidate pending generations and offer a bounded re-review of unbought items; old-country results must remain visibly dated until replaced.
+
+Repeat the already-tested Milk/Oreo/Eggs creation/input-edit flow, bought-row skip and result-write loop check through the managed installer. Verify incomplete coverage stays "Unable to review", and a generic item's result never claims that the packet is safe. The live pilot from 10 October proves the existing engine, not these new OAuth/tenant controls.
+
+Record actual Notion consent steps and API version in acceptance evidence. Only then call this a customer-ready Notion integration. Category watches and future-recall notifications remain a separate opt-in addition.

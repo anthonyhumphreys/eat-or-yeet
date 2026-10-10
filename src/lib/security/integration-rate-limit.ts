@@ -8,7 +8,7 @@ import { api } from "@convex/_generated/api";
 import { securitySecret } from "./config";
 
 export type IntegrationRateLimitAction = "mcp_check" | "mcp_browse" | "mcp_coverage" | "mcp_shopping";
-export type IntegrationRateLimitScope = "network" | "global";
+export type IntegrationRateLimitScope = "network" | "global" | "connection";
 
 export type IntegrationRateLimitResult = {
   scope: IntegrationRateLimitScope;
@@ -54,6 +54,7 @@ export async function takeIntegrationRateLimits(
   network: string,
   action: IntegrationRateLimitAction,
   units = 1,
+  connection?: { id: string; dailyLimit: number },
 ): Promise<IntegrationRateLimitResult[]> {
   if (typeof network !== "string" || network.trim().length === 0 || network.length > 256) {
     throw new Error("A trusted integration network identity is required.");
@@ -61,36 +62,55 @@ export async function takeIntegrationRateLimits(
   if (!Number.isInteger(units) || units < 1 || units > 20) {
     throw new Error("Integration rate-limit units must be an integer from 1 to 20.");
   }
+  if (connection && (!/^[A-Za-z0-9_-]{1,64}$/.test(connection.id) || !Number.isSafeInteger(connection.dailyLimit) || connection.dailyLimit < 1 || connection.dailyLimit > 1_000)) {
+    throw new Error("A valid private integration connection quota is required.");
+  }
 
   const now = Date.now();
+  const quotaAction = connection ? "mcp_shopping" : action;
   const networkBucket = Math.floor(now / hourMs);
   const globalBucket = Math.floor(now / dayMs);
-  const networkStartedAt = networkBucket * hourMs;
+  const networkWindowMs = hourMs;
+  const networkStartedAt = networkBucket * networkWindowMs;
   const globalStartedAt = globalBucket * dayMs;
   const salt = securitySecret();
   const networkHash = hashIdentity(salt, `network:${network}`);
   const globalHash = hashIdentity(salt, "global");
   const secret = process.env.CONVEX_SERVER_SECRET ?? "";
+  const connectionHash = connection ? hashIdentity(salt, `connection:${connection.id}`) : null;
   const buckets = [
     {
-      key: `integration:${networkHash}:${action}:network:${networkBucket}`,
+      key: connection
+        ? `integration:${networkHash}:${quotaAction}:network:${networkBucket}`
+        : `integration:${networkHash}:${action}:network:${networkBucket}`,
       subjectHash: networkHash,
-      action,
+      action: quotaAction,
       windowStartedAt: networkStartedAt,
-      expiresAt: networkStartedAt + 2 * hourMs,
+      expiresAt: networkStartedAt + 2 * networkWindowMs,
       cost: units,
-      limit: hourlyNetworkLimits[action],
+      limit: hourlyNetworkLimits[quotaAction],
     },
     {
-      key: `integration:${globalHash}:${action}:global:${globalBucket}`,
+      key: `integration:${globalHash}:${quotaAction}:global:${globalBucket}`,
       subjectHash: globalHash,
-      action,
+      action: quotaAction,
       windowStartedAt: globalStartedAt,
       expiresAt: globalStartedAt + 2 * dayMs,
       cost: units,
-      limit: dailyGlobalLimits[action],
+      limit: dailyGlobalLimits[quotaAction],
     },
   ];
+  if (connection && connectionHash) {
+    buckets.push({
+      key: `integration:${connectionHash}:mcp_shopping:connection:${globalBucket}`,
+      subjectHash: connectionHash,
+      action: "mcp_shopping",
+      windowStartedAt: globalStartedAt,
+      expiresAt: globalStartedAt + 2 * dayMs,
+      cost: units,
+      limit: connection.dailyLimit,
+    });
+  }
 
   const counts: unknown = await fetchMutation(api.rateLimits.takeMany, { secret, buckets });
   if (!validCounts(counts, buckets.length)) {
@@ -98,15 +118,15 @@ export async function takeIntegrationRateLimits(
   }
 
   const [networkCount, globalCount] = counts;
-  const networkLimit = hourlyNetworkLimits[action];
-  const globalLimit = dailyGlobalLimits[action];
-  return [
+  const networkLimit = hourlyNetworkLimits[connection ? quotaAction : action];
+  const globalLimit = dailyGlobalLimits[quotaAction];
+  const results: IntegrationRateLimitResult[] = [
     {
       scope: "network",
       allowed: networkCount <= networkLimit,
       limit: networkLimit,
       remaining: Math.max(0, networkLimit - networkCount),
-      resetAt: new Date(networkStartedAt + hourMs),
+      resetAt: new Date(networkStartedAt + networkWindowMs),
     },
     {
       scope: "global",
@@ -116,4 +136,9 @@ export async function takeIntegrationRateLimits(
       resetAt: new Date(globalStartedAt + dayMs),
     },
   ];
+  if (connection && counts.length === 3) {
+    results.push({ scope: "connection", allowed: counts[2]! <= connection.dailyLimit, limit: connection.dailyLimit,
+      remaining: Math.max(0, connection.dailyLimit - counts[2]!), resetAt: new Date(globalStartedAt + dayMs) });
+  }
+  return results;
 }

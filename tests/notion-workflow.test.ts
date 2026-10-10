@@ -1,0 +1,911 @@
+import { createHmac } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { afterEach, describe, expect, it } from "vitest";
+import { classifyMcpToolResultError, createShoppingWebhookWorker, inputFingerprint, NotionRestClient, parseReviewResponse, SqliteWorkerStore, verifySignature, WorkerError, type NotionClient, type ReviewClient, type ReviewResponse, type ShoppingItem, type ShoppingWorkerConfig, type WorkerStore } from "../integrations/notion/shopping-worker";
+
+const secret = "test-verification-token";
+const databaseId = "database-1";
+const sourceId = "source-1";
+const ids = { item: "item", brand: "brand", barcode: "barcode", bought: "bought", batchCode: "batch-code", lotCode: "lot-code", producer: "producer", countryOfOrigin: "country-of-origin", establishmentNumber: "establishment-number", approvalNumber: "approval-number", retailer: "retailer", useBy: "use-by", bestBefore: "best-before", productionDate: "production-date", warnings: "warnings", status: "status", reviewed: "reviewed", fingerprint: "fingerprint" };
+type TestProperty = { id: string; type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; checkbox?: boolean; select?: { name: string } | null; date?: { start?: string; end?: string | null } | null };
+type TestPage = { id: string; parent: { database_id: string; data_source_id: string }; properties: Record<string, TestProperty> };
+const property = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, ...extra }) as TestProperty;
+
+function makeConfig(port: number): ShoppingWorkerConfig {
+  return {
+    listenHost: "127.0.0.1", listenPort: port, statePath: ":memory:", notionApiToken: "notion-token", notionWebhookVerificationToken: secret,
+    notionDataSourceId: sourceId, notionDatabaseId: databaseId,
+    notionProperties: {
+      item: { id: ids.item, kind: "title" }, brand: { id: ids.brand, kind: "rich_text" }, bought: { id: ids.bought, kind: "checkbox" },
+      relatedWarnings: { id: ids.warnings, kind: "rich_text" }, reviewStatus: { id: ids.status, kind: "select" }, reviewedAt: { id: ids.reviewed, kind: "date" }, inputFingerprint: { id: ids.fingerprint, kind: "rich_text" },
+    },
+    reviewMcpUrl: "https://mcp.example.test/mcp", reviewConnectionKey: "connection-key", region: "UK", statusLabels: { found: "Related warnings found", none: "No related warnings found in covered data", unable: "Unable to review" },
+  };
+}
+
+class MemoryStore implements WorkerStore {
+  closed = false;
+  readonly events = new Set<string>();
+  readonly pages = new Map<string, { due: number; fingerprint: string; reviewedAt?: number; busy: boolean; generation: number; claimedGeneration?: number; claimToken?: string }>();
+  private claimCount = 0;
+  acceptEvent(eventId: string, pageId: string, dueAt: number, _now: number): "accepted" | "duplicate" | "full" {
+    void _now;
+    if (this.events.has(eventId)) return "duplicate";
+    this.events.add(eventId); this.schedule(pageId, dueAt, dueAt); return "accepted";
+  }
+  duePages(now: number, limit: number) {
+    const due = [...this.pages].filter(([, value]) => value.due <= now && !value.busy).slice(0, limit);
+    return due.map(([pageId, value]) => {
+      value.busy = true; value.claimedGeneration = value.generation; value.claimToken = `claim-${++this.claimCount}`;
+      return { pageId, generation: value.generation, claimToken: value.claimToken };
+    });
+  }
+  nextDue() { const due = [...this.pages.values()].filter((page) => !page.busy && page.due !== Infinity).map((page) => page.due); return due.length ? Math.min(...due) : undefined; }
+  current(pageId: string) { const page = this.pages.get(pageId); return page ? { fingerprint: page.fingerprint, busy: page.busy } : undefined; }
+  schedule(pageId: string, dueAt: number, _touchedAt: number) { void _touchedAt; const page = this.pages.get(pageId); this.pages.set(pageId, { due: dueAt, fingerprint: page?.fingerprint ?? "", reviewedAt: page?.reviewedAt, busy: page?.busy ?? false, generation: (page?.generation ?? 0) + 1, claimedGeneration: page?.claimedGeneration, claimToken: page?.claimToken }); }
+  markReviewed(pageId: string, generation: number, claimToken: string, fingerprint: string, reviewedAt: number) { const page = this.pages.get(pageId); if (!page || page.claimedGeneration !== generation || page.claimToken !== claimToken) return; page.due = page.generation === generation ? Infinity : page.due; page.fingerprint = fingerprint; page.reviewedAt = reviewedAt; page.busy = false; page.claimedGeneration = undefined; page.claimToken = undefined; }
+  release(pageId: string, generation: number, claimToken: string, _touchedAt: number) { void _touchedAt; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page?.claimedGeneration === generation && page.claimToken === claimToken) { page.busy = false; page.claimedGeneration = undefined; page.claimToken = undefined; } }
+  finish(pageId: string, generation: number, claimToken: string, _now: number) { void _now; if (this.closed) throw new Error("store already closed"); const page = this.pages.get(pageId); if (page?.claimedGeneration === generation && page.claimToken === claimToken) { page.busy = false; if (page.generation === generation) page.due = Infinity; page.claimedGeneration = undefined; page.claimToken = undefined; } }
+  cleanup(before: number) { void before; }
+  close() { this.closed = true; }
+}
+
+class FakeNotion implements NotionClient {
+  readonly page = makePage();
+  readonly patchedPages: string[] = [];
+  readonly patches: Array<Record<string, unknown>> = [];
+  dataSourceCalls = 0;
+  getPageCalls = 0;
+  failDataSource: WorkerError | undefined;
+  failGet: WorkerError | undefined;
+  beforePatch?: () => void | Promise<void>;
+  patchError?: (attempt: number) => WorkerError | undefined;
+  async getDataSource(dataSourceId: string) {
+    this.dataSourceCalls += 1;
+    if (this.failDataSource) throw this.failDataSource;
+    expect(dataSourceId).toBe(sourceId);
+    return { id: sourceId, parent: { database_id: databaseId }, properties: Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, { id, type: name === "item" ? "title" : name === "brand" || name === "barcode" || name === "batchCode" || name === "lotCode" || name === "producer" || name === "countryOfOrigin" || name === "establishmentNumber" || name === "approvalNumber" || name === "retailer" || name === "warnings" || name === "fingerprint" ? "rich_text" : name === "bought" ? "checkbox" : name === "status" ? "select" : "date", ...(name === "status" ? { select: { options: [{ name: "Related warnings found" }, { name: "No related warnings found in covered data" }, { name: "Unable to review" }] } } : {}) }])) };
+  }
+  async getPage(pageId: string, _signal: AbortSignal) { void _signal; this.getPageCalls += 1; if (this.failGet) throw this.failGet; const page = structuredClone(this.page); page.id = pageId; return page; }
+  async patchPage(pageId: string, properties: Record<string, unknown>) {
+    this.patchedPages.push(pageId);
+    await this.beforePatch?.();
+    const error = this.patchError?.(this.patches.length);
+    if (error) throw error;
+    this.patches.push(properties);
+  }
+}
+
+class FakeReview implements ReviewClient {
+  items: ShoppingItem[] = [];
+  next: Promise<void> | undefined;
+  result?: ReviewResponse;
+  async close() {}
+  async review(item: ShoppingItem): Promise<ReviewResponse> {
+    this.items.push(structuredClone(item));
+    if (this.next) await this.next;
+    return this.result ?? { status: "related_warnings", notices: [{ title: "Official notice", url: "https://example.gov/notice" }] };
+  }
+}
+
+function makePage(): TestPage {
+  return {
+    id: "page-1", parent: { database_id: databaseId, data_source_id: sourceId }, properties: {
+      Item: property(ids.item, "title", { title: [{ plain_text: "Milk" }] }), Brand: property(ids.brand, "rich_text", { rich_text: [] }),
+      Barcode: property(ids.barcode, "rich_text", { rich_text: [] }),
+      BatchCode: property(ids.batchCode, "rich_text", { rich_text: [] }), LotCode: property(ids.lotCode, "rich_text", { rich_text: [] }),
+      Producer: property(ids.producer, "rich_text", { rich_text: [] }), CountryOfOrigin: property(ids.countryOfOrigin, "rich_text", { rich_text: [] }),
+      EstablishmentNumber: property(ids.establishmentNumber, "rich_text", { rich_text: [] }), ApprovalNumber: property(ids.approvalNumber, "rich_text", { rich_text: [] }),
+      Retailer: property(ids.retailer, "rich_text", { rich_text: [] }), UseBy: property(ids.useBy, "date", { date: null }),
+      BestBefore: property(ids.bestBefore, "date", { date: null }), ProductionDate: property(ids.productionDate, "date", { date: null }),
+      Bought: property(ids.bought, "checkbox", { checkbox: false }), Warnings: property(ids.warnings, "rich_text", { rich_text: [] }),
+      Status: property(ids.status, "select", { select: null }), Reviewed: property(ids.reviewed, "date", { date: null }),
+      Fingerprint: property(ids.fingerprint, "rich_text", { rich_text: [] }),
+    },
+  };
+}
+
+const workers: Array<ReturnType<typeof createShoppingWebhookWorker>> = [];
+async function setup(options: { now?: () => number; review?: FakeReview; notion?: FakeNotion; config?: ShoppingWorkerConfig } = {}) {
+  const notion = options.notion ?? new FakeNotion();
+  const review = options.review ?? new FakeReview();
+  const store = new MemoryStore();
+  const logs: string[] = [];
+  const worker = createShoppingWebhookWorker({ config: options.config ?? makeConfig(0), notion, reviewer: review, store, now: options.now, delay: async () => undefined, debounceMs: 10, log: (message) => logs.push(message) });
+  workers.push(worker);
+  await worker.start();
+  const address = worker.server.address();
+  if (!address || typeof address === "string") throw new Error("Expected local test server address");
+  return { notion, review, store, worker, logs, url: `http://127.0.0.1:${address.port}/webhooks/notion` };
+}
+afterEach(async () => { await Promise.all(workers.splice(0).map((worker) => worker.stop())); });
+
+function payload(id: string, type = "page.created", updatedProperties?: string[], pageId = "page-1") {
+  return { id, timestamp: new Date().toISOString(), type, entity: { id: pageId, type: "page" }, data: updatedProperties ? { updated_properties: updatedProperties } : {} };
+}
+async function send(url: string, value: unknown) {
+  const body = JSON.stringify(value);
+  const signature = `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  return await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-notion-signature": signature }, body });
+}
+async function eventually(predicate: () => boolean) {
+  const until = Date.now() + 4_000;
+  while (!predicate() && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(predicate()).toBe(true);
+}
+
+describe("Notion shopping webhook worker", () => {
+  it("does not acknowledge a failed durable enqueue and accepts its redelivery", async () => {
+    const { store, review, url } = await setup();
+    const accept = store.acceptEvent.bind(store);
+    store.acceptEvent = () => { throw new Error("private datastore failure"); };
+    const failed = await send(url, payload("retry-enqueue"));
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain("private datastore");
+    expect(review.items).toHaveLength(0);
+    store.acceptEvent = accept;
+    expect((await send(url, payload("retry-enqueue"))).status).toBe(202);
+    await eventually(() => review.items.length === 1);
+  });
+  it("catches pump storage failures, logs no storage detail, and leaves queued work pending", async () => {
+    const { store, url, logs } = await setup();
+    await send(url, payload("evt-pump-storage"));
+    const cleanup = store.cleanup.bind(store);
+    let fail = true;
+    store.cleanup = (before: number) => { if (fail) { fail = false; throw new Error("private storage failure"); } cleanup(before); };
+    await eventually(() => logs.length === 1);
+    expect(logs[0]).toBe("Shopping queue maintenance failed; retrying later.");
+    expect(logs.join(" ")).not.toContain("private storage");
+    expect(store.pages.get("page-1")?.due).not.toBe(Infinity);
+  });
+  it("durably deduplicates webhook IDs, claims due pages once, and expires IDs after the retry window", () => {
+    const store = new SqliteWorkerStore(":memory:");
+    try {
+      expect(store.acceptEvent("event-1", "page-1", 4_000, 1_000)).toBe("accepted");
+      expect(store.acceptEvent("event-1", "page-1", 4_000, 1_000)).toBe("duplicate");
+      expect(store.nextDue()).toBe(4_000);
+      expect(store.duePages(3_999, 2)).toEqual([]);
+      const [claim] = store.duePages(4_000, 2);
+      expect(claim).toMatchObject({ pageId: "page-1", generation: 1 });
+      expect(store.duePages(4_001, 2)).toEqual([]);
+      store.finish("page-1", claim!.generation, claim!.claimToken, 4_001);
+      expect(store.duePages(4_001, 2)).toEqual([]); // finishing acknowledges the claimed event
+      expect(store.acceptEvent("event-1", "page-1", 90_000_000, 90_000_000)).toBe("duplicate");
+      store.cleanup(100_000_000 - 25 * 60 * 60 * 1_000);
+      expect(store.acceptEvent("event-1", "page-1", 100_000_000, 100_000_000)).toBe("accepted");
+    } finally { store.close(); }
+  });
+
+  it("rolls back event deduplication when enqueue fails so delivery can recover", () => {
+    class FailingEnqueueStore extends SqliteWorkerStore {
+      failEnqueue = true;
+      override schedule(pageId: string, dueAt: number, touchedAt: number): void {
+        if (this.failEnqueue) throw new Error("injected enqueue failure");
+        super.schedule(pageId, dueAt, touchedAt);
+      }
+    }
+    const store = new FailingEnqueueStore(":memory:");
+    try {
+      expect(() => store.acceptEvent("event-retry-enqueue", "page-retry-enqueue", 2_000, 1_000)).toThrow("injected enqueue failure");
+      expect(store.nextDue()).toBeUndefined();
+      store.failEnqueue = false;
+      expect(store.acceptEvent("event-retry-enqueue", "page-retry-enqueue", 2_000, 1_000)).toBe("accepted");
+      expect(store.duePages(2_000, 1)[0]).toMatchObject({ pageId: "page-retry-enqueue", generation: 1 });
+    } finally { store.close(); }
+  });
+
+  it("only lets the current claim generation and token acknowledge or mark a row", () => {
+    const store = new SqliteWorkerStore(":memory:");
+    try {
+      store.acceptEvent("event-claim-one", "page-claim", 1, 1);
+      const first = store.duePages(1, 1)[0]!;
+      store.schedule("page-claim", 2, 2); // A newer edit arrives while the first worker is active.
+      store.finish(first.pageId, first.generation, first.claimToken, 2);
+      const second = store.duePages(2, 1)[0]!;
+      expect(second.generation).toBe(first.generation + 1);
+      store.markReviewed(first.pageId, first.generation, first.claimToken, "stale-fingerprint", 3);
+      expect(store.current(first.pageId)?.fingerprint).toBe("");
+      expect(store.duePages(3, 1)).toEqual([]); // The old claim cannot clear the newer lease.
+      store.markReviewed(second.pageId, second.generation, second.claimToken, "current-fingerprint", 3);
+      expect(store.current(second.pageId)?.fingerprint).toBe("current-fingerprint");
+    } finally { store.close(); }
+  });
+
+  it("resumes a persisted leased page after restart when its claim expires", () => {
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-"));
+    const path = join(directory, "state.sqlite");
+    let store = new SqliteWorkerStore(path);
+    try {
+      store.acceptEvent("event-claimed", "page-claimed", 1_000, 1_000);
+      expect(store.duePages(1_000, 1)[0]).toMatchObject({ pageId: "page-claimed", generation: 1 });
+      store.close(); // Simulate a process crash before finish().
+      store = new SqliteWorkerStore(path);
+      expect(store.nextDue()).toBe(601_000);
+      expect(store.duePages(600_999, 1)).toEqual([]);
+      expect(store.duePages(601_000, 1)[0]).toMatchObject({ pageId: "page-claimed", generation: 1 });
+    } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it("migrates an existing SQLite queue before claiming old pending work", () => {
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-migrate-"));
+    const path = join(directory, "state.sqlite");
+    const legacy = new DatabaseSync(path);
+    legacy.exec("CREATE TABLE seen_events (id TEXT PRIMARY KEY,page_id TEXT NOT NULL,seen_at INTEGER NOT NULL); CREATE TABLE pending_pages (page_id TEXT PRIMARY KEY,due_at INTEGER NOT NULL,busy_until INTEGER NOT NULL DEFAULT 0,pending INTEGER NOT NULL DEFAULT 1,last_fingerprint TEXT,last_reviewed_at INTEGER,touched_at INTEGER NOT NULL); INSERT INTO pending_pages(page_id,due_at,busy_until,pending,touched_at) VALUES('legacy-page',100,0,1,50);");
+    legacy.close();
+    const store = new SqliteWorkerStore(path);
+    try {
+      const claim = store.duePages(100, 1)[0];
+      expect(claim).toMatchObject({ pageId: "legacy-page", generation: 0 });
+      store.finish(claim!.pageId, claim!.generation, claim!.claimToken, 100);
+    } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it("verifies the signature over exact raw body bytes with constant-time digest comparison", () => {
+    const raw = Buffer.from('{"id":"unchanged raw body"}');
+    const valid = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
+    expect(verifySignature(raw, valid, secret)).toBe(true);
+    expect(verifySignature(raw, valid.toUpperCase(), secret)).toBe(false);
+    expect(verifySignature(Buffer.from(JSON.stringify(JSON.parse(raw.toString()))), valid, secret)).toBe(true);
+    expect(verifySignature(Buffer.from('{ "id":"unchanged raw body"}'), valid, secret)).toBe(false);
+  });
+
+  it("deduplicates duplicate delivery and ignores output-only property events", async () => {
+    const { url, review, store } = await setup();
+    const first = await send(url, payload("evt-1"));
+    const duplicate = await send(url, payload("evt-1"));
+    const outputOnly = await send(url, payload("evt-output", "page.properties_updated", [ids.warnings, ids.status]));
+    expect(first.status).toBe(202);
+    expect(duplicate.status).toBe(202);
+    expect(outputOnly.status).toBe(200);
+    expect(store.events.size).toBe(1);
+    expect(review.items).toHaveLength(0); // Debounce is still pending.
+  });
+
+  it("treats recoverable MCP tool errors as temporary and ignores payloads on error results", async () => {
+    const internal = classifyMcpToolResultError({
+      isError: true,
+      structuredContent: { items: [{ id: "page-1", status: "no_related_warnings", notices: [] }] },
+      _meta: { publicError: { code: "INTERNAL_ERROR", recoverable: true } },
+    });
+    expect(internal).toMatchObject({ code: "temporary", retryAfterMs: undefined });
+    expect(classifyMcpToolResultError({ isError: true, _meta: { publicError: { code: "quota_exceeded", recoverable: true, retryAfterSeconds: 3_000_000 } } }))
+      .toMatchObject({ code: "temporary", retryAfterMs: 24 * 60 * 60 * 1_000 });
+    expect(classifyMcpToolResultError({ isError: true, _meta: { publicError: { code: "invalid_arguments", recoverable: false } } }))
+      .toMatchObject({ code: "invalid_config" });
+    expect(classifyMcpToolResultError({ isError: false, structuredContent: { items: [] } })).toBeUndefined();
+
+    let currentTime = Date.now();
+    const review = new FakeReview();
+    let calls = 0;
+    review.review = async () => {
+      calls += 1;
+      if (calls === 1) throw new WorkerError(internal!.message, internal!.code, 0);
+      return { status: "no_related_warnings", notices: [] };
+    };
+    const { url, notion, store, logs } = await setup({ now: () => currentTime, review });
+    await send(url, payload("evt-recoverable-mcp-error"));
+    currentTime += 4_000;
+    await eventually(() => notion.patches.length === 1);
+    expect(calls).toBe(2);
+    expect(logs).not.toContain("Notion resource or property configuration changed; worker paused.");
+    expect(store.current("page-1")?.fingerprint).not.toBe("");
+  });
+
+  it("accepts separator-formatted 14-digit GTINs within the shared 300-character limit", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.barcode = { id: ids.barcode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    const formattedBarcode = "0-000 0000-00000 0";
+    notion.page.properties.Barcode = property(ids.barcode, "rich_text", { rich_text: [{ plain_text: formattedBarcode }] });
+    const { url, review } = await setup({ config, notion });
+    await send(url, payload("evt-separated-gtin"));
+    await eventually(() => review.items.length === 1);
+    expect(review.items[0]?.barcode).toBe(formattedBarcode);
+  });
+
+  it("forwards only configured packet facts and triggers on a configured packet edit", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    config.notionProperties.useBy = { id: ids.useBy, kind: "date" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "  LOT-42  " }] });
+    notion.page.properties.Retailer = property(ids.retailer, "rich_text", { rich_text: [{ plain_text: "Unconfigured Shop" }] });
+    notion.page.properties.UseBy = property(ids.useBy, "date", { date: { start: "2026-11-30", end: null } });
+    const { url, review } = await setup({ config, notion });
+
+    expect((await send(url, payload("evt-packet-trigger", "page.properties_updated", [ids.batchCode]))).status).toBe(202);
+    await eventually(() => review.items.length === 1);
+
+    expect(review.items[0]?.packet).toEqual({ batchCode: "LOT-42", dates: { useBy: "2026-11-30" } });
+    expect(review.items[0]?.packet).not.toHaveProperty("retailer");
+    expect(review.items[0]).not.toHaveProperty("packSize");
+  });
+
+  it.each([
+    ["invalid calendar date", { start: "2026-02-30", end: null }],
+    ["date range", { start: "2026-02-28", end: "2026-03-02" }],
+  ])("refuses %s packet dates without calling MCP", async (_description, date) => {
+    const config = makeConfig(0);
+    config.notionProperties.useBy = { id: ids.useBy, kind: "date" };
+    const notion = new FakeNotion();
+    notion.page.properties.UseBy = property(ids.useBy, "date", { date });
+    const { url, review } = await setup({ config, notion });
+
+    await send(url, payload(`evt-invalid-packet-${String(_description).replaceAll(" ", "-")}`));
+    await eventually(() => notion.patches.length === 1);
+
+    expect(review.items).toHaveLength(0);
+    expect(notion.patches[0]?.[ids.status]).toEqual({ select: { name: config.statusLabels.unable } });
+    expect(notion.patches[0]?.[ids.warnings]).toEqual({ rich_text: [{ type: "text", text: { content: expect.stringContaining("packet detail is invalid") } }] });
+  });
+
+  it("refuses overlong packet text without truncating or calling MCP", async () => {
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "L".repeat(301) }] });
+    const { url, review } = await setup({ config, notion });
+
+    await send(url, payload("evt-overlong-packet"));
+    await eventually(() => notion.patches.length === 1);
+
+    expect(review.items).toHaveLength(0);
+    expect(notion.patches[0]?.[ids.status]).toEqual({ select: { name: config.statusLabels.unable } });
+  });
+
+  it("discards a review when a configured packet field changes in flight", async () => {
+    let release!: () => void;
+    const review = new FakeReview();
+    review.next = new Promise<void>((resolve) => { release = resolve; });
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    const notion = new FakeNotion();
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-OLD" }] });
+    let currentTime = Date.now();
+    const { url, store } = await setup({ now: () => currentTime, review, config, notion });
+    await send(url, payload("evt-packet-review"));
+    currentTime += 4_000;
+    await eventually(() => review.items.length === 1);
+
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-NEW" }] });
+    release();
+    await eventually(() => store.pages.get("page-1")?.generation === 2 && !store.pages.get("page-1")?.busy);
+    // The fake clock must pass the debounce due time after processPage schedules the changed row.
+    currentTime += 20;
+    await eventually(() => review.items.length === 2 && notion.patches.length === 1);
+
+    expect(review.items.map((item) => item.packet?.batchCode)).toEqual(["LOT-OLD", "LOT-NEW"]);
+    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint(review.items[1]!, false, { batchCode: "LOT-NEW" }) } }] });
+    expect(store.current("page-1")?.fingerprint).not.toBe(inputFingerprint({ id: "page-1", name: "Milk", bought: false }, false, { batchCode: "LOT-OLD" }));
+  });
+
+  it("fetches and reviews the latest row after debounce; old/out-of-order signals cannot restore old fields", async () => {
+    let currentTime = Date.now();
+    const { url, notion, review, store } = await setup({ now: () => currentTime });
+    await send(url, payload("evt-new"));
+    notion.page.properties.Item.title = [{ plain_text: "Changed after event" }];
+    await send(url, payload("evt-old", "page.properties_updated", [ids.item]));
+    currentTime += 4_000;
+    await eventually(() => notion.patches.length === 1);
+    expect(review.items).toEqual([{ id: "page-1", name: "Changed after event", bought: false }]);
+    expect(notion.patches[0]?.[ids.fingerprint]).toBeDefined();
+    expect(store.current("page-1")?.fingerprint).toBe(inputFingerprint({ id: "page-1", name: "Changed after event", bought: false }, false));
+  });
+
+  it("reserves warning-output space for qualifications and never writes a partial URL", async () => {
+    const notion = new FakeNotion();
+    const review = new FakeReview();
+    const qualification = `Coverage qualification: ${"reviewed evidence; ".repeat(20)}END-QUALIFICATION`;
+    const longUrl = `https://example.gov/notice/${"x".repeat(340)}`;
+    review.result = {
+      status: "related_warnings",
+      warnings: [qualification],
+      notices: Array.from({ length: 5 }, (_, index) => ({
+        title: `Notice ${index + 1} ${"T".repeat(160)}`,
+        url: longUrl,
+        date: "2026-10-09",
+        reason: `${"Detailed batch evidence. ".repeat(15)}Batch LOT-EXACT-421; use-by 2026-10-09.`,
+        relationshipCount: 5,
+        relationshipsShown: 1,
+        relationshipsComplete: false,
+      })),
+    };
+    const { url } = await setup({ notion, review });
+    await send(url, payload("evt-long-notices"));
+    await eventually(() => notion.patches.length === 1);
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text).toContain(qualification);
+    expect(text).toContain("Batch LOT-EXACT-421");
+    expect(text).toContain("2026-10-09");
+    expect(text).toContain("Some affected product groups are omitted; inspect the official notice.");
+    expect(text).toContain("official notice link omitted");
+    expect(text).toContain("Additional notice details omitted");
+    expect(text).not.toContain("https://example.gov/notice/");
+    expect(text.length).toBeLessThanOrEqual(1_900);
+  });
+
+  it("maps MCP official links, coverage, total count, and all grouped evidence into Notion output", async () => {
+    const relatedWarnings = Array.from({ length: 5 }, (_, warningIndex) => ({
+      warning: {
+        slug: `milk-recall-${warningIndex + 1}`,
+        title: `Milk recall ${warningIndex + 1}`,
+        websiteUrl: `https://eatoryeet.app/incidents/milk-recall-${warningIndex + 1}`,
+        officialSource: { url: `https://www.gov.uk/food-recall/${warningIndex + 1}`, label: "Food authority" },
+        publishedAt: "2026-10-09T10:00:00.000Z",
+      },
+      relationships: Array.from({ length: warningIndex === 0 ? 6 : 1 }, (_, groupIndex) => ({
+        association: "source_group",
+        reasons: warningIndex === 0 && groupIndex === 0
+          ? Array.from({ length: 10 }, (_, reasonIndex) => ({ type: "product", evidence: `Affected milk detail ${reasonIndex + 1}` }))
+          : [{ type: "product", evidence: `Affected milk group ${groupIndex + 1}` }],
+        packetReviewRequired: false,
+      })),
+      relationshipCount: warningIndex === 0 ? 6 : 1,
+      relationshipsComplete: true,
+    }));
+    const parsed = parseReviewResponse({
+      id: "page-1",
+      status: "related_warnings",
+      qualification: "Related published warnings were found; compare the packet.",
+      relatedWarnings,
+      total: 7,
+      nextAction: { tool: "get_warning", slug: "milk-recall-1" },
+    }, {
+      qualification: "This is a discovery review of published regional warnings; no match does not establish safety.",
+      coverage: {
+        region: "UK",
+        healthy: true,
+        checkedAt: "2026-10-09T10:00:00.000Z",
+        sources: [{ id: "fsa", name: "Food Standards Agency", region: "UK", lastSuccessfulAt: "2026-10-09T09:50:00.000Z", status: "healthy", scope: "food" }],
+      },
+    });
+    const review = new FakeReview();
+    review.result = parsed;
+    const { url, notion } = await setup({ review });
+    await send(url, payload("evt-mcp-output-mapping"));
+    await eventually(() => notion.patches.length === 1);
+
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text.startsWith("This is a discovery review")).toBe(true);
+    expect(text).toContain("Source coverage (UK): current; checked 2026-10-09; Food Standards Agency: healthy.");
+    expect(text).toContain("Showing 5 of 7 warning notices; 2 more omitted.");
+    expect(text).toContain("https://www.gov.uk/food-recall/1");
+    expect(text).not.toContain("https://eatoryeet.app/incidents/");
+    expect(text).toContain("Affected milk group 6");
+    expect(text).toContain("Affected milk detail 10");
+    expect(text.length).toBeLessThanOrEqual(1_900);
+  });
+
+  it("keeps the first notice title and whole official URL when long qualifications leave room only for a compact nudge", async () => {
+    const url = `https://www.gov.uk/food-recall/${"x".repeat(250)}`;
+    const parsed = parseReviewResponse({
+      id: "page-1",
+      status: "related_warnings",
+      qualification: "I".repeat(500),
+      relatedWarnings: [{
+        warning: {
+          slug: "long-evidence-recall",
+          title: "Urgent milk recall: check the package",
+          websiteUrl: "https://eatoryeet.app/incidents/long-evidence-recall",
+          officialSource: { url, label: "Food authority" },
+          publishedAt: "2026-10-09T10:00:00.000Z",
+        },
+        relationships: Array.from({ length: 6 }, (_, groupIndex) => ({
+          association: "source_group",
+          reasons: [{ type: "product", evidence: `Group ${groupIndex + 1}: ${"batch and date evidence ".repeat(9)}` }],
+          packetReviewRequired: true,
+        })),
+        relationshipCount: 6,
+        relationshipsComplete: true,
+      }],
+      total: 1,
+      nextAction: { tool: "get_warning", slug: "long-evidence-recall" },
+    }, {
+      qualification: "G".repeat(500),
+      coverage: {
+        region: "UK",
+        healthy: true,
+        checkedAt: "2026-10-09T10:00:00.000Z",
+        sources: Array.from({ length: 4 }, (_, index) => ({ id: `source-${index}`, name: `Official food safety source ${index} ${"N".repeat(35)}`, region: "UK", lastSuccessfulAt: null, status: "healthy", scope: "food" })),
+      },
+    });
+    const review = new FakeReview();
+    review.result = parsed;
+    const notion = new FakeNotion();
+    const { url: webhook } = await setup({ review, notion });
+    await send(webhook, payload("evt-compact-official-notice"));
+    await eventually(() => notion.patches.length === 1);
+
+    const output = notion.patches[0]?.[ids.warnings] as { rich_text: Array<{ text: { content: string } }> };
+    const text = output.rich_text.map((part) => part.text.content).join("");
+    expect(text.startsWith("G".repeat(500))).toBe(true);
+    expect(text).toContain("I".repeat(500));
+    expect(text).toContain("Source coverage (UK): current");
+    expect(text).toContain("Urgent milk recall: check the package");
+    expect(text).toContain(url);
+    expect(text).toContain("[notice evidence omitted]");
+    expect(text).toContain("Additional notice details omitted");
+    expect(text).not.toContain("https://eatoryeet.app/incidents/");
+    expect(text.length).toBeLessThanOrEqual(1_900);
+  });
+
+  it("discards an in-flight review after the shopper edits the input and schedules the newer value", async () => {
+    let release!: () => void;
+    const review = new FakeReview();
+    review.next = new Promise<void>((resolve) => { release = resolve; });
+    let currentTime = Date.now();
+    const { url, notion, store } = await setup({ now: () => currentTime, review });
+    await send(url, payload("evt-edit-run"));
+    currentTime += 4_000;
+    await eventually(() => review.items.length === 1);
+    notion.page.properties.Item.title = [{ plain_text: "New input" }];
+    release();
+    await eventually(() => notion.getPageCalls >= 2);
+    currentTime += 20;
+    await eventually(() => review.items.length === 2);
+    expect(notion.patches).toHaveLength(1);
+    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: "page-1", name: "New input", bought: false }, false) } }] });
+    expect(review.items[1]).toEqual({ id: "page-1", name: "New input", bought: false });
+    expect(store.current("page-1")?.fingerprint).not.toBe(inputFingerprint({ id: "page-1", name: "Milk", bought: false }, false));
+  });
+
+  it("keeps an event accepted during a slow write pending after the old generation completes", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const writeStarted = new Promise<void>((resolve) => { started = resolve; });
+    const writeGate = new Promise<void>((resolve) => { release = resolve; });
+    let patchCount = 0;
+    let currentTime = Date.now();
+    const notion = new FakeNotion();
+    notion.beforePatch = async () => { patchCount += 1; if (patchCount === 1) { started(); await writeGate; } };
+    const { url, review, store } = await setup({ now: () => currentTime, notion });
+    try {
+      await send(url, payload("evt-slow-write-first"));
+      currentTime += 4_000;
+      await writeStarted;
+      notion.page.properties.Item.title = [{ plain_text: "Edited during write" }];
+      await send(url, payload("evt-slow-write-new-input", "page.properties_updated", [ids.item]));
+      currentTime += 4_000; // The newer event is due before the first write can finish.
+      release();
+      await eventually(() => review.items.length === 2 && notion.patches.length === 2);
+      expect(review.items.map((item) => item.name)).toEqual(["Milk", "Edited during write"]);
+      expect(store.pages.get("page-1")?.due).toBe(Infinity);
+      expect(store.current("page-1")?.fingerprint).toBe(inputFingerprint({ id: "page-1", name: "Edited during write", bought: false }, false));
+    } finally { release(); }
+  });
+
+  it("does not let continuous newer webhook events postpone an earlier due page", async () => {
+    let currentTime = Date.now();
+    const { url, notion, review } = await setup({ now: () => currentTime });
+    await send(url, payload("evt-early-page"));
+    let earlyPageReviewed = false;
+    for (let index = 0; index < 15; index += 1) {
+      currentTime += 100;
+      await send(url, payload(`evt-noise-${index}`, "page.created", undefined, `noise-page-${index}`));
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      earlyPageReviewed ||= review.items.some((item) => item.id === "page-1");
+    }
+    expect(earlyPageReviewed).toBe(true);
+    expect(notion.patchedPages).toContain("page-1");
+  });
+
+  it("skips bought and blank rows and never writes shopper properties", async () => {
+    let currentTime = Date.now();
+    const { url, notion, review } = await setup({ now: () => currentTime });
+    notion.page.properties.Bought.checkbox = true;
+    await send(url, payload("evt-bought"));
+    currentTime += 4_000;
+    await new Promise((resolve) => setTimeout(resolve, 175));
+    expect(review.items).toHaveLength(0);
+    notion.page.properties.Bought.checkbox = false;
+    notion.page.properties.Item.title = [{ plain_text: "   " }];
+    await send(url, payload("evt-blank"));
+    currentTime += 4_000;
+    await new Promise((resolve) => setTimeout(resolve, 175));
+    expect(review.items).toHaveLength(0);
+    expect(notion.patches).toHaveLength(0);
+  });
+
+  it("pauses cleanly on revoked access or missing configured output properties", async () => {
+    let currentTime = Date.now();
+    const notion = new FakeNotion();
+    notion.failGet = new WorkerError("revoked", "revoked");
+    const { url, store } = await setup({ now: () => currentTime, notion });
+    await send(url, payload("evt-revoked"));
+    currentTime += 4_000;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(store.current("page-1")?.busy).toBe(false);
+    const subsequent = await send(url, payload("evt-after-revoke"));
+    expect(subsequent.status).toBe(503);
+  });
+
+  it("retries transient startup validation with the server retry hint before draining queued work", async () => {
+    const currentTime = Date.now();
+    const notion = new FakeNotion();
+    const getDataSource = notion.getDataSource.bind(notion);
+    let validationAttempts = 0;
+    notion.getDataSource = async (dataSourceId: string) => {
+      validationAttempts += 1;
+      if (validationAttempts === 1) throw new WorkerError("temporary", "temporary", 2_300);
+      return await getDataSource(dataSourceId);
+    };
+    const reviewer = new FakeReview();
+    const store = new MemoryStore();
+    store.acceptEvent("persisted-before-start", "page-1", currentTime, currentTime);
+    const delays: number[] = [];
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer, store, now: () => currentTime, delay: async (ms) => { delays.push(ms); } });
+    workers.push(worker);
+    await worker.start();
+    expect(validationAttempts).toBe(2);
+    expect(delays).toEqual([2_300]);
+    expect(notion.getPageCalls).toBe(0); // The queue is gated until validation succeeds.
+    await eventually(() => reviewer.items.length === 1);
+  });
+
+  it("keeps accepted work queued when access pauses, then drains it after restart", async () => {
+    let currentTime = Date.now();
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-pause-"));
+    const path = join(directory, "state.sqlite");
+    const firstStore = new SqliteWorkerStore(path);
+    const revokedNotion = new FakeNotion();
+    revokedNotion.failGet = new WorkerError("revoked", "revoked");
+    const firstLogs: string[] = [];
+    const firstWorker = createShoppingWebhookWorker({ config: makeConfig(0), notion: revokedNotion, reviewer: new FakeReview(), store: firstStore, now: () => currentTime, log: (entry) => firstLogs.push(entry) });
+    workers.push(firstWorker);
+    let secondWorker: ReturnType<typeof createShoppingWebhookWorker> | undefined;
+    let secondStore: SqliteWorkerStore | undefined;
+    try {
+      await firstWorker.start();
+      const firstAddress = firstWorker.server.address();
+      if (!firstAddress || typeof firstAddress === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${firstAddress.port}/webhooks/notion`, payload("evt-accepted-before-pause"));
+      currentTime += 4_000;
+      await eventually(() => firstLogs.some((entry) => entry === "Notion access stopped; worker paused.") && firstStore.nextDue() !== undefined && firstStore.nextDue()! <= currentTime);
+      await firstWorker.stop();
+
+      secondStore = new SqliteWorkerStore(path);
+      const reviewer = new FakeReview();
+      secondWorker = createShoppingWebhookWorker({ config: makeConfig(0), notion: new FakeNotion(), reviewer, store: secondStore, now: () => currentTime });
+      workers.push(secondWorker);
+      await secondWorker.start();
+      await eventually(() => reviewer.items.length === 1);
+      expect(reviewer.items[0]?.name).toBe("Milk");
+    } finally {
+      await firstWorker.stop();
+      await secondWorker?.stop();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("permanently pauses on invalid startup schema without processing queued rows", async () => {
+    const notion = new FakeNotion();
+    notion.failDataSource = new WorkerError("missing", "missing_property");
+    const reviewer = new FakeReview();
+    const logs: string[] = [];
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer, store: new MemoryStore(), log: (entry) => logs.push(entry) });
+    workers.push(worker);
+    await worker.start();
+    const address = worker.server.address();
+    if (!address || typeof address === "string") throw new Error("Expected local test server address");
+    expect((await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload("evt-startup-invalid-schema"))).status).toBe(503);
+    expect(logs).toEqual(["Selected data source or configured properties are invalid; worker paused."]);
+    expect(notion.getPageCalls).toBe(0);
+    expect(reviewer.items).toHaveLength(0);
+  });
+
+  it("rejects unsupported brand and barcode property types before startup", () => {
+    const reviewer = new FakeReview();
+    const brandConfig = makeConfig(0);
+    brandConfig.notionProperties.brand = { id: ids.brand, kind: "select" };
+    const barcodeConfig = makeConfig(0);
+    barcodeConfig.notionProperties.barcode = { id: "barcode", kind: "checkbox" };
+    for (const config of [brandConfig, barcodeConfig]) expect(() => createShoppingWebhookWorker({ config, notion: new FakeNotion(), reviewer, store: new MemoryStore() })).toThrow(WorkerError);
+    expect(reviewer.items).toHaveLength(0);
+  });
+
+  it("pauses after the private review MCP connection is revoked", async () => {
+    let currentTime = Date.now();
+    const review = new FakeReview();
+    review.review = async () => { throw new WorkerError("revoked", "revoked"); };
+    const { url, store, logs } = await setup({ now: () => currentTime, review });
+    await send(url, payload("evt-mcp-revoked"));
+    currentTime += 4_000;
+    await eventually(() => logs.includes("Notion access stopped; worker paused.") && store.current("page-1")?.busy === false && store.pages.get("page-1")?.due !== Infinity);
+    expect((await send(url, payload("evt-after-mcp-revoke"))).status).toBe(503);
+  });
+
+  it("schedules MCP quota hints durably instead of retrying every minute", async () => {
+    let currentTime = Date.now();
+    let calls = 0;
+    const review = new FakeReview();
+    review.review = async () => { calls += 1; throw new WorkerError("quota", "temporary", 3 * 60 * 60 * 1_000); };
+    const { url, store } = await setup({ now: () => currentTime, review });
+    await send(url, payload("evt-mcp-quota"));
+    currentTime += 4_000;
+    await eventually(() => store.pages.get("page-1")?.due === currentTime + 3 * 60 * 60 * 1_000);
+    expect(calls).toBe(1);
+    expect(store.pages.get("page-1")?.busy).toBe(false);
+  });
+
+  it("waits for an aborted page task before closing SQLite on shutdown", async () => {
+    let currentTime = Date.now();
+    const notion = new FakeNotion();
+    let started!: () => void;
+    const pageStarted = new Promise<void>((resolve) => { started = resolve; });
+    notion.getPage = async (_pageId: string, signal: AbortSignal) => await new Promise<TestPage>((_resolve, reject) => {
+      started();
+      if (signal.aborted) { reject(signal.reason); return; }
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+    const directory = mkdtempSync(join(tmpdir(), "notion-worker-stop-"));
+    const path = join(directory, "state.sqlite");
+    const store = new SqliteWorkerStore(path);
+    const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer: new FakeReview(), store, now: () => currentTime, delay: async () => undefined, debounceMs: 10 });
+    workers.push(worker);
+    let restarted: SqliteWorkerStore | undefined;
+    try {
+      await worker.start();
+      const address = worker.server.address();
+      if (!address || typeof address === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload("evt-stop-in-flight"));
+      currentTime += 4_000;
+      await pageStarted;
+      await worker.stop();
+      restarted = new SqliteWorkerStore(path);
+      expect(restarted.nextDue()).toBeLessThanOrEqual(currentTime);
+      expect(restarted.duePages(currentTime, 1)[0]).toMatchObject({ pageId: "page-1", generation: 1 });
+    } finally {
+      await worker.stop();
+      restarted?.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("drops page events outside the selected database without pausing this worker", async () => {
+    const { url, notion } = await setup();
+    notion.page.parent.database_id = "another-database";
+    await send(url, payload("evt-other-db"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const allowed = await send(url, payload("evt-in-scope"));
+    expect(allowed.status).toBe(202);
+  });
+
+  it("pauses after a configured output property disappears", async () => {
+    const { url, notion } = await setup();
+    delete notion.page.properties.Status;
+    await send(url, payload("evt-missing-output"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const subsequent = await send(url, payload("evt-after-missing-output"));
+    expect(subsequent.status).toBe(503);
+  });
+
+  it("re-checks inputs before every write retry after a rate limit", async () => {
+    let currentTime = Date.now();
+    const notion = new FakeNotion();
+    const config = makeConfig(0);
+    config.notionProperties.batchCode = { id: ids.batchCode, kind: "rich_text" };
+    notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-OLD" }] });
+    let patchAttempts = 0;
+    notion.patchError = () => {
+      patchAttempts += 1;
+      if (patchAttempts === 1) {
+        notion.page.properties.Item.title = [{ plain_text: "Changed during rate limit" }];
+        notion.page.properties.BatchCode = property(ids.batchCode, "rich_text", { rich_text: [{ plain_text: "LOT-NEW" }] });
+        currentTime += 4_000;
+        return new WorkerError("limited", "temporary", 0);
+      }
+      return undefined;
+    };
+    const { url, review } = await setup({ now: () => currentTime, notion, config });
+    await send(url, payload("evt-write-retry"));
+    currentTime += 4_000;
+    await eventually(() => patchAttempts === 1);
+    currentTime += 20;
+    await eventually(() => review.items.length === 2);
+    expect(notion.patches).toHaveLength(1);
+    expect(review.items.map((item) => item.packet?.batchCode)).toEqual(["LOT-OLD", "LOT-NEW"]);
+    expect(notion.patches[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint(review.items[1]!, false, { batchCode: "LOT-NEW" }) } }] });
+  });
+
+  it("reserves request start times before waiting so concurrent Notion calls stay paced", async () => {
+    const starts: number[] = [];
+    const notion = new NotionRestClient("notion-token", async () => {
+      starts.push(Date.now());
+      return Response.json({});
+    });
+    await Promise.all([
+      notion.getPage("page-one", new AbortController().signal),
+      notion.getPage("page-two", new AbortController().signal),
+    ]);
+    starts.sort((left, right) => left - right);
+    expect(starts).toHaveLength(2);
+    expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(300);
+    expect(starts[1]! - starts[0]!).toBeLessThan(2_000);
+  });
+
+  it("releases a concurrency slot when a reserved pacing wait is aborted", async () => {
+    let releaseFirst!: (response: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => { releaseFirst = resolve; });
+    let firstStarted!: () => void;
+    const firstStartedPromise = new Promise<void>((resolve) => { firstStarted = resolve; });
+    let firstStartedAt = 0;
+    let thirdStartedAt: number | undefined;
+    const notion = new NotionRestClient("notion-token", async (input) => {
+      const pageId = new URL(String(input)).pathname.split("/").at(-1);
+      if (pageId === "first") { firstStartedAt = Date.now(); firstStarted(); return await firstResponse; }
+      if (pageId === "third") thirdStartedAt = Date.now();
+      if (pageId === "second") throw new Error("The aborted request must not reach Notion.");
+      return Response.json({});
+    });
+    const first = notion.getPage("first", new AbortController().signal);
+    let third: Promise<unknown> | undefined;
+    try {
+      await firstStartedPromise;
+      const aborter = new AbortController();
+      const second = notion.getPage("second", aborter.signal).then(() => undefined, (error: unknown) => error);
+      await new Promise((resolve) => setTimeout(resolve, 20)); // Let the second request reserve its future start slot.
+      third = notion.getPage("third", new AbortController().signal);
+      await new Promise((resolve) => setTimeout(resolve, 20)); // The third request now waits for one of the two slots.
+      aborter.abort(new Error("test cancellation"));
+      expect(await second).toBeInstanceOf(Error);
+      await eventually(() => thirdStartedAt !== undefined);
+      expect(thirdStartedAt! - firstStartedAt).toBeGreaterThanOrEqual(500);
+      expect(thirdStartedAt! - firstStartedAt).toBeLessThan(2_000);
+    } finally {
+      releaseFirst(Response.json({}));
+      await first;
+      await third;
+    }
+  });
+
+  for (const [scenario, mutate] of [
+    ["edited", (page: TestPage) => { page.properties.Item.title = [{ plain_text: "New after write failure" }]; }],
+    ["bought", (page: TestPage) => { page.properties.Bought.checkbox = true; }],
+    ["moved outside the selected data source", (page: TestPage) => { page.parent.data_source_id = "another-source"; }],
+  ] as const) {
+    it(`re-preflights through the real Notion client after a PATCH 503 when the row is ${scenario}`, async () => {
+      const page = makePage();
+      const schema = await new FakeNotion().getDataSource(sourceId);
+      let pageReads = 0, patchAttempts = 0;
+      const successfulWrites: Array<Record<string, unknown>> = [];
+      const notion = new NotionRestClient("notion-token", async (input, init) => {
+        const path = new URL(String(input)).pathname;
+        if (path === `/v1/data_sources/${sourceId}`) return Response.json(schema);
+        if (path === `/v1/pages/${page.id}` && (init?.method ?? "GET") === "GET") {
+          pageReads += 1;
+          return Response.json(page);
+        }
+        if (path === `/v1/pages/${page.id}` && init?.method === "PATCH") {
+          patchAttempts += 1;
+          if (patchAttempts === 1) return new Response("temporary failure", { status: 503, headers: { "retry-after": "0" } });
+          successfulWrites.push(JSON.parse(String(init.body)).properties as Record<string, unknown>);
+          return new Response(null, { status: 200 });
+        }
+        return new Response(null, { status: 404 });
+      });
+      const review = new FakeReview();
+      const store = new MemoryStore();
+      const worker = createShoppingWebhookWorker({ config: makeConfig(0), notion, reviewer: review, store, delay: async () => { mutate(page); }, debounceMs: 10 });
+      workers.push(worker);
+      await worker.start();
+      const address = worker.server.address();
+      if (!address || typeof address === "string") throw new Error("Expected local test server address");
+      await send(`http://127.0.0.1:${address.port}/webhooks/notion`, payload(`evt-real-client-${scenario}`));
+      await eventually(() => scenario === "edited" ? successfulWrites.length === 1 : pageReads >= 3 && store.current(page.id)?.busy === false);
+      expect(patchAttempts).toBe(scenario === "edited" ? 2 : 1);
+      if (scenario === "edited") {
+        await eventually(() => review.items.length === 2);
+        expect(review.items.map((item) => item.name)).toEqual(["Milk", "New after write failure"]);
+        expect(successfulWrites[0]?.[ids.fingerprint]).toEqual({ rich_text: [{ type: "text", text: { content: inputFingerprint({ id: page.id, name: "New after write failure", bought: false }, false) } }] });
+      } else {
+        expect(successfulWrites).toHaveLength(0);
+        expect(review.items).toHaveLength(1);
+      }
+    });
+  }
+});
