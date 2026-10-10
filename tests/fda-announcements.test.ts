@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { parseFdaAnnouncementDetail, parseFdaAnnouncementRows } from "@/lib/incidents/fda-announcements";
+import { browseCategories } from "@/lib/incidents/categories";
+import gripeWaterRow from "./fixtures/fda-gripe-water.json";
 
 const listingRow = [
   '<time datetime="2026-08-22T04:00:00Z">08/22/2026</time>',
@@ -14,6 +16,33 @@ const listingRow = [
 ];
 
 describe("FDA recall announcements", () => {
+  it("imports the dietary-supplement gripe-water notice with its affected lot and advice", () => {
+    const rows = parseFdaAnnouncementRows({ data: [gripeWaterRow] });
+    expect(rows).toHaveLength(1);
+    const incident = parseFdaAnnouncementDetail(rows[0], `
+      <h2 id="recall-announcement">Company Announcement</h2>
+      <p>Pacific Health Sciences is recalling Baby Sleep Gripe Water.</p>
+      <p>Lot Number: 25122bw</p>
+      <p>Best Before: 12/2028</p>
+      <p>Consumers should stop using the affected lot and discard it or return it.</p>
+      <h2>Company Contact Information</h2>
+    `);
+
+    expect(incident).toMatchObject({ region: "US", status: "active", hazard: gripeWaterRow[4] });
+    expect(incident.targets).toContainEqual(expect.objectContaining({ type: "lot", value: "25122BW" }));
+    expect(incident.consumerAdvice).toContain("stop using");
+    expect(browseCategories(incident)).toEqual(["Supplements"]);
+  });
+
+  it("keeps unrelated FDA product types out of the food and supplement import", () => {
+    const rows = ["Drugs", "Medical Devices", "Cosmetics", "Animal &amp; Veterinary"].map((productType) => {
+      const row = [...listingRow];
+      row[3] = productType;
+      return row;
+    });
+    expect(parseFdaAnnouncementRows({ data: rows })).toEqual([]);
+  });
+
   it("parses the official listing row", () => {
     const rows = parseFdaAnnouncementRows({ data: [listingRow] });
 

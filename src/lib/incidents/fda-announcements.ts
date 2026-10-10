@@ -8,7 +8,10 @@ import { sourceHtmlParagraphs, sourceHtmlToText } from "@/lib/incidents/source-t
 
 const FDA_ORIGIN = "https://www.fda.gov";
 const INDEX_PATH = "/safety/recalls-market-withdrawals-safety-alerts";
-const FOOD_PRODUCT_TYPE = "2323";
+const PRODUCT_TYPES = [
+  { id: "2323", name: "Food & Beverages" },
+  { id: "2305", name: "Dietary Supplements" },
+] as const;
 const INITIAL_LISTING_LIMIT = 1_000;
 const MAX_LISTING_ROWS = 5_000;
 const LISTING_ATTEMPTS = 3;
@@ -49,13 +52,13 @@ function parseAnnouncementRows(input: unknown): AnnouncementListing[] {
   const parsed = rowsSchema.parse(input);
   return parsed.data.flatMap((row) => {
     const productType = sourceHtmlToText(row[3]);
-    if (!productType.includes("Food & Beverages")) return [];
+    if (!PRODUCT_TYPES.some(({ name }) => productType.split(",").some((type) => type.trim() === name))) return [];
 
     const link = linkFromHtml(row[1]);
     const dateValue = /datetime="([^"]+)"/i.exec(row[0])?.[1];
     const publishedAt = dateValue ? new Date(dateValue) : new Date(Number.NaN);
     if (!link || Number.isNaN(publishedAt.getTime())) {
-      throw new Error("FDA announcements listing contained a food row without a valid link or date");
+      throw new Error("FDA announcements listing contained a food or supplement row without a valid link or date");
     }
     const pageUrl = new URL(link.path, FDA_ORIGIN);
     if (pageUrl.origin !== FDA_ORIGIN) throw new Error(`FDA announcements listing contained an external detail link: ${link.path}`);
@@ -257,7 +260,7 @@ export function parseFdaAnnouncementDetail(listing: AnnouncementListing, html: s
   };
 }
 
-function dataTableRequest(indexHtml: string, draw: number, length: number): URL {
+function dataTableRequest(indexHtml: string, productType: string, draw: number, length: number): URL {
   const settingsText = /<script\s+type="application\/json"\s+data-drupal-selector="drupal-settings-json">([\s\S]*?)<\/script>/i.exec(indexHtml)?.[1];
   if (!settingsText) throw new Error("FDA announcements page did not include its data configuration");
   const settings = z.object({ datatables: z.record(z.string(), z.unknown()) }).parse(JSON.parse(settingsText));
@@ -269,24 +272,18 @@ function dataTableRequest(indexHtml: string, draw: number, length: number): URL 
 
   const url = new URL("/datatables/views/ajax", FDA_ORIGIN);
   for (const [key, value] of Object.entries(config.ajax.data)) url.searchParams.set(key, String(value));
-  url.searchParams.set("field_regulated_product_field", FOOD_PRODUCT_TYPE);
+  url.searchParams.set("field_regulated_product_field", productType);
   url.searchParams.set("draw", String(draw));
   url.searchParams.set("start", "0");
   url.searchParams.set("length", String(length));
   return url;
 }
 
-async function fetchListings(): Promise<AnnouncementListing[]> {
-  const indexHtml = await fetchOfficialText(new URL(INDEX_PATH, FDA_ORIGIN).toString(), {
-    sourceName: "FDA announcements",
-    headers: FDA_HEADERS,
-    timeoutMs: 20_000,
-    cache: "no-store",
-  });
+async function fetchProductTypeListings(indexHtml: string, productType: string): Promise<AnnouncementListing[]> {
   let requestedLimit = INITIAL_LISTING_LIMIT;
   let lastError = "response row count did not match its reported total";
   for (let attempt = 1; attempt <= LISTING_ATTEMPTS; attempt += 1) {
-    const payload = await fetchOfficialJson(dataTableRequest(indexHtml, attempt, requestedLimit).toString(), {
+    const payload = await fetchOfficialJson(dataTableRequest(indexHtml, productType, attempt, requestedLimit).toString(), {
       sourceName: "FDA announcements data",
       headers: FDA_HEADERS,
       timeoutMs: 20_000,
@@ -310,7 +307,7 @@ async function fetchListings(): Promise<AnnouncementListing[]> {
     if (data.length === recordsFiltered && recordsFiltered === recordsTotal) {
       const listings = parseAnnouncementRows({ data });
       if (listings.length !== recordsFiltered) {
-        throw new Error(`FDA announcements returned ${listings.length} food rows for ${recordsFiltered} reported rows`);
+        throw new Error(`FDA announcements returned ${listings.length} food or supplement rows for ${recordsFiltered} reported rows`);
       }
       const paths = new Set<string>();
       for (const listing of listings) {
@@ -324,6 +321,18 @@ async function fetchListings(): Promise<AnnouncementListing[]> {
   }
 
   throw new Error(`FDA announcements full listing remained incomplete after ${LISTING_ATTEMPTS} attempts: ${lastError}`);
+}
+
+async function fetchListings(): Promise<AnnouncementListing[]> {
+  const indexHtml = await fetchOfficialText(new URL(INDEX_PATH, FDA_ORIGIN).toString(), {
+    sourceName: "FDA announcements",
+    headers: FDA_HEADERS,
+    timeoutMs: 20_000,
+    cache: "no-store",
+  });
+  const listings = await Promise.all(PRODUCT_TYPES.map(({ id }) => fetchProductTypeListings(indexHtml, id)));
+  // A notice can belong to both FDA product types. Its detail page identifies it.
+  return [...new Map(listings.flat().map((listing) => [listing.path, listing])).values()];
 }
 
 async function fetchDetail(listing: AnnouncementListing): Promise<NormalisedIncident> {
@@ -342,7 +351,7 @@ export const fdaAnnouncementsSource: IncidentSource = {
   name: "FDA recall announcements",
   url: new URL(INDEX_PATH, FDA_ORIGIN).toString(),
   region: "US",
-  scope: "Food and beverage notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
+  scope: "Food, beverage and dietary-supplement notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
   async fetchIncidents() {
     const listings = await fetchListings();
     const results: NormalisedIncident[] = [];

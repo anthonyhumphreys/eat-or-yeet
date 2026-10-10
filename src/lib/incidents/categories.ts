@@ -168,12 +168,17 @@ export type CategorySource = {
   targets: Array<{ type: string; value: string; valueNormalized?: string; groupId?: string | null }>;
   hazard?: string | null;
   summary?: string | null;
+  originalSourceData?: unknown;
   /** Relevant Open Food Facts category tags by normalised GTIN, attached at import. */
   productCategoryTags?: Record<string, string[]> | null;
 };
 
 export function browseCategories(incident: CategorySource): FoodCategory[] {
   const title = titleProducts(incident.title);
+  const sourceData = incident.originalSourceData;
+  const officialSupplement = typeof sourceData === "object" && sourceData !== null
+    && "productType" in sourceData && typeof sourceData.productType === "string"
+    && sourceData.productType.split(",").some((type) => type.trim() === "Dietary Supplements");
   const offTags = incident.productCategoryTags ?? {};
   const gtinTags = (target: CategorySource["targets"][number]) =>
     offTags[target.valueNormalized || normaliseGtin(target.value)] ?? [];
@@ -189,7 +194,9 @@ export function browseCategories(incident: CategorySource): FoodCategory[] {
   const allTags = gtins.flatMap(gtinTags);
 
   const found = new Set<FoodCategory>();
-  if (products.length) {
+  if (officialSupplement) {
+    found.add("Supplements");
+  } else if (products.length) {
     for (const product of products) {
       const groupTags = product.groupId ? gtins.filter((target) => target.groupId === product.groupId).flatMap(gtinTags) : [];
       const groupCategory = foodTypeFromOffTags(groupTags);
