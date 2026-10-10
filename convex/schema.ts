@@ -14,6 +14,8 @@ const foodCategory = v.union(
   v.literal("Drinks"),
   v.literal("Prepared foods"),
   v.literal("Pantry"),
+  v.literal("Baby food"),
+  v.literal("Pharmaceutical"),
   v.literal("Supplements"),
   v.literal("Other foods"),
 );
@@ -79,6 +81,8 @@ export default defineSchema({
     retrievedAt: v.number(),
     isDemo: v.boolean(),
     targets: v.array(incidentTarget),
+    // Open Food Facts category tags by normalised GTIN, for browse labels only.
+    productCategoryTags: v.optional(v.record(v.string(), v.array(v.string()))),
   })
     .index("by_authority_sourceId", ["authority", "sourceId"]),
 
@@ -137,6 +141,19 @@ export default defineSchema({
     metadata: v.any(),
     updatedAt: v.number(),
   }).index("by_gtin", ["gtin"]),
+
+  // Open Food Facts categories for recalled barcodes. Unlike the metadata
+  // cache these rows never expire: they are rechecked when `due` passes, and a
+  // failed recheck keeps the last answer so browse labels do not flap.
+  productCategoryCache: defineTable({
+    gtin: v.string(),
+    status: v.union(v.literal("pending"), v.literal("found"), v.literal("missing")),
+    tags: v.array(v.string()),
+    due: v.number(),
+    checkedAt: v.optional(v.number()),
+  })
+    .index("by_gtin", ["gtin"])
+    .index("by_due", ["due"]),
 
   productMetadataCache: defineTable({
     gtin: v.string(),

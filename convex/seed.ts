@@ -60,7 +60,7 @@ export const demo = mutation({
       const incidentId = existing
         ? (await ctx.db.patch(existing._id, record), existing._id)
         : await ctx.db.insert("incidents", record);
-      const browseSource = { title: record.title, targets: record.targets, originalSourceData: record.originalSourceData };
+      const browseSource = { title: record.title, targets: record.targets, originalSourceData: record.originalSourceData, hazard: record.hazard, summary: record.summary };
       const matchRecord = {
         incidentId,
         title: record.title,
