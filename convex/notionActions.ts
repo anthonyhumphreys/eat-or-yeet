@@ -268,14 +268,15 @@ export const setup = internalAction({
       const api = oauthApi(credentialSession.fetcher);
       let binding: ListBinding;
       const preserved = persistedBinding(setup);
-      if (setup.databaseId || setup.dataSourceId || setup.properties) {
+      if (setup.templatePageId) {
+        binding = await api.discoverList(credentialSession.accessToken, setup.templatePageId, setup.region, controller);
+      } else if (setup.databaseId || setup.dataSourceId || setup.properties) {
         if (!preserved) throw new WorkerError("Stored Notion list configuration is invalid", "invalid_config");
         binding = preserved;
         const config = configFor(binding, setup.region);
         await validateSelectedDataSource(new NotionRestClient(() => Promise.resolve(credentialSession.accessToken), credentialSession.fetcher), config, controller);
       } else {
-        if (!setup.templatePageId) throw new WorkerError("Notion template page is unavailable", "invalid_config");
-        binding = await api.discoverList(credentialSession.accessToken, setup.templatePageId, setup.region, controller);
+        throw new WorkerError("Notion template page is unavailable", "invalid_config");
       }
       await ctx.runMutation(internal.notion.bindInstallation, {
         installationId: setup.installationId,
