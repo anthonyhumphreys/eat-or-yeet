@@ -125,6 +125,14 @@ describe("Open Food Facts categories", () => {
   it("fall back to the name rules when the barcode has no categories", () => {
     expect(browseCategories({ title: "Recall", targets: [product("Doritos Chilli Heatwave", "p0"), gtin("5000328657950", "p0")], productCategoryTags: {} })).toEqual(["Snacks & sweets"]);
   });
+
+  it("keeps product names that start with After", () => {
+    expect(browseCategories({ title: "After Eight Chocolate Mints", targets: [] })).toEqual(["Snacks & sweets"]);
+  });
+
+  it("drops a hazard clause introduced by after", () => {
+    expect(browseCategories({ title: "Maker recalls Mystery Selection after undeclared milk was found", targets: [] })).toEqual(["Other foods"]);
+  });
 });
 
 describe("extra tags", () => {

@@ -159,7 +159,8 @@ function isBabyFood(name: string): boolean {
 function titleProducts(title: string): string {
   return title
     .replace(/^\s*update(?:d)?\s*\d*\s*:\s*/i, "")
-    .split(/\b(?:because|due to|as a precaution|following|after|over (?:concerns|fears))\b/i)[0];
+    .split(/\b(?:because|due to|as a precaution|following|over (?:concerns|fears))\b/i)[0]
+    .split(/\bafter\s+(?=(?:undeclared|unapproved|possible|potential|suspected|presence|detection|discovery|contamination|cross[- ]contamination|salmonella|listeria|e\.?\s*coli|botulism|allergen)\b)/i)[0];
 }
 
 export type CategorySource = {
