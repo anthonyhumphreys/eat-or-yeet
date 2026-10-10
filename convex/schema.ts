@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { notionTables } from "./lib/notion_schema";
 
 const region = v.union(v.literal("UK"), v.literal("US"));
 const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"));
@@ -55,6 +56,7 @@ const incidentTarget = v.object({
 });
 
 export default defineSchema({
+  ...notionTables,
   incidents: defineTable({
     title: v.string(),
     slug: v.string(),

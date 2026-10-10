@@ -16,6 +16,7 @@ export function SiteFooter() {
         <nav className="flex gap-4" aria-label="Footer navigation">
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/privacy">Privacy</Link>
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/incidents">Current warnings</Link>
+          <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/integrations/notion">Notion</Link>
         </nav>
       </div>
     </footer>
