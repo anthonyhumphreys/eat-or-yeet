@@ -34,34 +34,6 @@ function annotations(name: NotionToolName) {
   return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: name === "check_product" } as const;
 }
 
-function conciseText(name: NotionToolName, value: unknown): string {
-  if (name === "review_shopping_items") {
-    const result = ReviewShoppingResultSchema.parse(value);
-    return [result.qualification, ...result.items.map((item) => {
-      const related = `${item.total} related warning${item.total === 1 ? "" : "s"}`;
-      const titles = item.relatedWarnings.slice(0, 2).map(({ warning }) => warning.title);
-      return `${item.id}: ${item.status.replaceAll("_", " ")} (${related})${titles.length ? ` — ${titles.join("; ")}` : ""}`;
-    })].join("\n");
-  }
-  if (name === "check_product") {
-    const result = PublicCheckResultSchema.parse(value);
-    const coverage = result.coverage.healthy ? "" : `Coverage is not current for ${result.coverage.region}.`;
-    return [result.label, result.qualification, coverage].filter(Boolean).join("\n");
-  }
-  if (name === "search_warnings") {
-    const result = PublicSearchResultSchema.parse(value);
-    const headlines = result.warnings.slice(0, 3).map((warning) => warning.title);
-    const count = `${result.total} warning${result.total === 1 ? "" : "s"} found`;
-    return [count, ...headlines, result.qualification].join("\n");
-  }
-  if (name === "get_warning") {
-    const result = PublicWarningDetailsSchema.parse(value);
-    return `${result.warning.title}\n${result.consumerAdvice}\n${result.affectedGroupCount} affected product group${result.affectedGroupCount === 1 ? "" : "s"}`;
-  }
-  const result = PublicCoverageSchema.parse(value);
-  return `${result.healthy ? "Coverage is current" : "Coverage is incomplete or needs attention"} for ${result.region}. ${result.sources.length} required source${result.sources.length === 1 ? "" : "s"} reported.`;
-}
-
 function toolCallback<Name extends NotionToolName, Schema extends z.ZodType>(
   name: Name,
   inputSchema: Schema,
@@ -76,7 +48,9 @@ function toolCallback<Name extends NotionToolName, Schema extends z.ZodType>(
         ...context,
         signal: serverContext.mcpReq.signal,
       }));
-      return { content: [{ type: "text", text: conciseText(name, output) }], structuredContent: output };
+      // Some hosts only forward text to the model. Mirror the validated public
+      // result so warning links, cursors, restrictions and coverage stay usable.
+      return { content: [{ type: "text", text: JSON.stringify(output) }], structuredContent: output };
     } catch (error) {
       const safe = redactedIntegrationToolError(error);
       return { isError: true, content: [{ type: "text", text: safe.message }], _meta: { publicError: safe.metadata } };

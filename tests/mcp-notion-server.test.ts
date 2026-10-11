@@ -108,6 +108,7 @@ describe("private Notion MCP server", () => {
 
     const result = await client.callTool({ name: "review_shopping_items", arguments: { region: "US", items: [{ id: "milk-1", name: "Milk" }] } });
     expect(result.structuredContent).toEqual(shopping);
+    expect(result.content).toEqual([{ type: "text", text: JSON.stringify(shopping) }]);
     expect(executor).toHaveBeenCalledWith("review_shopping_items", { region: "US", items: [{ id: "milk-1", name: "Milk", bought: false }] }, expect.objectContaining({
       network: "trusted-network", connection: { id: "notion-shopping", dailyLimit: 40 }, signal: expect.any(AbortSignal),
     }));
@@ -117,7 +118,7 @@ describe("private Notion MCP server", () => {
       observation: { productName: "Milk", batchCode: "LOT-42", dates: { useBy: "2026-10-09" } },
     } });
     expect(packetCheck.structuredContent).toEqual(checkResult);
-    expect(packetCheck.content).toEqual([{ type: "text", text: "Possible warning match\nA possible warning match needs review against the packet and official notice." }]);
+    expect(packetCheck.content).toEqual([{ type: "text", text: JSON.stringify(checkResult) }]);
     expect(packetCheck.structuredContent).toMatchObject({
       warnings: [{ packetReviewRequired: true, affectedGroups: [{ targets: [{ type: "batch", value: "LOT-42" }] }] }],
     });
@@ -130,7 +131,7 @@ describe("private Notion MCP server", () => {
 
     const search = await client.callTool({ name: "search_warnings", arguments: { region: "US", query: "milk" } });
     expect(search.structuredContent).toEqual(searchWarnings);
-    expect(search.content).toEqual([{ type: "text", text: "0 warnings found\nWarning search is discovery, not a product check. No search results do not establish that food is safe." }]);
+    expect(search.content).toEqual([{ type: "text", text: JSON.stringify(searchWarnings) }]);
     expect(executor).toHaveBeenCalledWith("search_warnings", expect.objectContaining({ region: "US", query: "milk", pageSize: 20 }), expect.objectContaining({
       network: "trusted-network", connection: { id: "notion-shopping", dailyLimit: 40 },
     }));
