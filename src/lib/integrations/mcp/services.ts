@@ -98,6 +98,8 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
       }
     })(), context.signal);
     context.signal.throwIfAborted();
+    // Private shopping batches have item statuses but no top-level status.
+    // A completed batch is an operational success, including skipped items.
     outcome = "status" in value ? String(value.status) : "ok";
     return value;
   } catch (error) {

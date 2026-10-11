@@ -64,7 +64,9 @@ describe("analytics privacy boundary", () => {
     expect(await captureEvent("test", {})).toBe(false);
     vi.stubEnv("VERCEL_ENV", "preview"); expect(analyticsEnabled()).toBe(false);
     expect(await captureEvent("test", {})).toBe(false); expect(fetcher).toHaveBeenCalledOnce();
-    vi.stubEnv("VERCEL_ENV", "production"); vi.stubEnv("POSTHOG_HOST", "http://localhost:3000"); expect(analyticsEnabled()).toBe(false);
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("POSTHOG_HOST", "https://us.i.posthog.com"); expect(analyticsEnabled()).toBe(false);
+    vi.stubEnv("POSTHOG_HOST", "http://localhost:3000"); expect(analyticsEnabled()).toBe(false);
   });
   it("constructs MCP metrics without inputs, results, network IDs, error messages or sessions", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
