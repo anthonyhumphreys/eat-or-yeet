@@ -9,6 +9,7 @@ The Lexio Notion account owns the Eat or Yeet OAuth connection. It is installabl
 - Connection ID: `3f6d872b-594c-81f5-b79f-0037ef0c6e2b`.
 - Redirect URI: `https://www.eatoryeet.app/api/notion/callback`.
 - Webhook URL: `https://www.eatoryeet.app/api/notion/webhook`.
+- Verified webhook subscription ID: `3f6d872b-594c-81e4-8095-009947c07910`.
 - [Public template](https://carnelian-airedale-eb7.notion.site/Eat-or-Yeet-shopping-list-3f57b822339680b99d06f6c687dd87e8): configured for duplication during OAuth.
 - Capabilities: read/update content; no insert content, comments or user information.
 - Webhook events: `page.created` and `page.properties_updated`, using the implementation's pinned `2025-09-03` API version.
@@ -42,7 +43,7 @@ Notion delivers its verification token to the webhook URL before activating a su
 3. In Notion's connection **Webhooks** tab, create the subscription using the production webhook URL, pinned version and the two events above. Capture is deliberately temporary: it is disabled by default, rejects ordinary events, validates a bounded token-only body and cannot run after the deadline or once a signing key exists.
 4. Retrieve the runtime log entry prefixed `notion_webhook_verification_candidate`. It contains RSA-OAEP ciphertext, never the plaintext token. Save only its base64 ciphertext to a private local file.
 5. Run `pnpm tsx scripts/notion-webhook-setup.ts decrypt <candidate-file>`. The candidate is written to a local file with owner-only permissions. Paste it into Notion's **Verify subscription** form. If Notion rejects it, do not configure it as the signing key; resend and inspect a fresh candidate during another short capture window.
-6. Only after Notion shows the subscription as verified, save that exact token as sensitive `NOTION_WEBHOOK_VERIFICATION_TOKEN` and save the subscription ID in Vercel. Remove both temporary capture settings. Redeploy and confirm a real signed event reaches the normal handler.
+6. Only after Notion shows the subscription as verified, save that exact token as sensitive `NOTION_WEBHOOK_VERIFICATION_TOKEN` and save the subscription ID in Vercel. If the portal does not display the ID, use the browser's Network inspector to read the existing `listWebhookSubscriptions` response for this connection. Match the active record's integration ID and webhook URL; do not use a workspace subscription ID or replay authenticated requests. Remove both temporary capture settings. Redeploy and confirm a real signed event reaches the normal handler.
 7. Delete local plaintext credential/token files and the capture private key after verifying storage. The encrypted capture log cannot be used to verify events without the private key or token.
 
 Do not claim a webhook is active merely because a capture returned 202. Capture never changes the trust configuration or accepts a shopping-list event. The normal handler checks the HMAC signature, integration ID, subscription ID, workspace and authorized bot before queuing work.

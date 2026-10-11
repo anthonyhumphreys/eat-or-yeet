@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 const linkClass = "inline-flex min-h-11 items-center rounded-sm font-semibold underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 const oauthErrors: Record<string, string> = {
-  cancelled: "You cancelled Notion access. Your list was not connected. Start again when you are ready.",
+  cancelled: "You cancelled this Notion setup. Any existing connection is unchanged. Try again when you are ready.",
   expired: "This setup link expired or has already been used. Start again to connect your list.",
   setup_unavailable: "We could not connect your list. Try again in a few minutes. If it still fails, contact support.",
 };
