@@ -42,7 +42,7 @@ export default function IntegrationsPage() {
           </ol>
           <p className={promptClass}>&quot;Add a custom Remote HTTPS MCP server named eat-or-yeet at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Install the ZIP&apos;s setup and checking SKILL.md files as private skills, preserving their contents. Confirm the connection and four discovered tools.&quot;</p>
           <p className={promptClass}>&quot;Check barcode 044000061494 against US food warnings and show the source coverage.&quot;</p>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">The custom connection and both private skills were installed in Grok Bot for macOS on 11 October 2026. The app cannot import the marketplace manifest directly. Team administrators may restrict custom connections. The other guides below have not all been tested with Eat or Yeet.</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">We tested this custom connection and both private skills in Grok Bot for macOS on 11 October 2026, including barcode and packet checks, warning search, warning details and source coverage. The app cannot import the marketplace manifest directly. Team administrators may restrict custom connections. The other guides below have not all been tested with Eat or Yeet.</p>
           <a className={`${linkClass} mt-2`} href="https://cursor.com/help/grok-bot/connect-plugins">Grok Bot plugin guide</a>
           <details className="mt-5 rounded-xl border px-5">
             <summary className={summaryClass}>Use the website through your Bot&apos;s browser</summary>
