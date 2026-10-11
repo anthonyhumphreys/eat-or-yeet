@@ -1,4 +1,4 @@
-import { constants, generateKeyPairSync, privateDecrypt } from "node:crypto";
+import { constants, createHmac, generateKeyPairSync, privateDecrypt } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { captureNotionWebhookVerification, notionWebhookCaptureLabel } from "../src/lib/integrations/notion-http";
@@ -48,6 +48,17 @@ describe("operator-controlled Notion webhook verification capture", () => {
     expect(decrypted.toString()).toBe(token);
   });
 
+  it("captures a token-only bootstrap signed with its candidate, without trusting it", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const signature = `sha256=${createHmac("sha256", token).update(JSON.stringify({ verification_token: token })).digest("hex")}`;
+    const env = environment();
+    const response = await captureNotionWebhookVerification(request(undefined, { "x-notion-signature": signature }), env);
+    expect(response?.status).toBe(202);
+    expect(log).toHaveBeenCalledOnce();
+    expect(env.NOTION_WEBHOOK_VERIFICATION_TOKEN).toBeUndefined();
+    expect(JSON.stringify(log.mock.calls)).not.toContain(token);
+  });
+
   it.each([
     { NOTION_INSTALL_ENABLED: "false" },
     { NOTION_WEBHOOK_SETUP_PUBLIC_KEY: "" },
@@ -71,10 +82,13 @@ describe("operator-controlled Notion webhook verification capture", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  it("rejects oversized bodies, signed events and another origin", async () => {
+  it("rejects oversized bodies, invalid signatures, signed ordinary events and another origin", async () => {
     const log = vi.spyOn(console, "info");
     expect((await captureNotionWebhookVerification(request({ verification_token: "x".repeat(2_049) }), environment()))?.status).toBe(413);
     expect((await captureNotionWebhookVerification(request(undefined, { "x-notion-signature": "sha256=unused" }), environment()))?.status).toBe(400);
+    const event = { type: "page.created", id: "event" };
+    const signature = `sha256=${createHmac("sha256", token).update(JSON.stringify(event)).digest("hex")}`;
+    expect((await captureNotionWebhookVerification(request(event, { "x-notion-signature": signature }), environment()))?.status).toBe(400);
     const other = new Request("https://other.example/api/notion/webhook", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ verification_token: token }) });
     expect((await captureNotionWebhookVerification(other, environment()))?.status).toBe(400);
     expect(log).not.toHaveBeenCalled();
