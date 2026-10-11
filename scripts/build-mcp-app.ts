@@ -21,5 +21,5 @@ if (Buffer.byteLength(html) > MAX_APP_HTML_BYTES || Buffer.byteLength(JSON.strin
 }
 const output = join(root, "public/mcp-app");
 await mkdir(output, { recursive: true });
-await writeFile(join(output, "result-v1.html"), html);
+await writeFile(join(output, "result-v2.html"), html);
 console.info(`Built inline MCP app: ${Buffer.byteLength(html)} bytes.`);

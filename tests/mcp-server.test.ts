@@ -73,6 +73,20 @@ describe("MCP server transport", () => {
     expect("text" in content && content.text).toContain("Content-Security-Policy");
     expect(executor).not.toHaveBeenCalled();
   });
+  it("rejects telemetry without consent or with private fields, and never invokes food tools", async () => {
+    const executor = executorFor();
+    const { client } = await connect(executor);
+    for (const args of [
+      { consent: false, host: "chatgpt", event: "app_opened" },
+      { consent: true, host: "chatgpt", event: "app_opened", barcode: "private" },
+    ]) {
+      const result = await client.callTool({ name: "record_app_event", arguments: args });
+      expect(result.isError).toBe(true);
+    }
+    const result = await client.callTool({ name: "record_app_event", arguments: { consent: true, host: "chatgpt", event: "app_opened" } });
+    expect(result.structuredContent).toEqual({ recorded: false });
+    expect(executor).not.toHaveBeenCalled();
+  });
   it("creates per-request transports without SDK warning noise", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -94,14 +108,16 @@ describe("MCP server transport", () => {
       "search_warnings",
       "get_warning",
       "get_coverage",
+      "record_app_event",
     ]);
-    expect(tools.map(({ annotations }) => annotations)).toEqual([
+    expect(tools.filter(({ name }) => name !== "record_app_event").map(({ annotations }) => annotations)).toEqual([
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     ]);
     expect(tools.every((tool) => tool.outputSchema)).toBe(true);
+    expect(tools.find(({ name }) => name === "record_app_event")?._meta).toMatchObject({ ui: { visibility: ["app"] } });
 
     const result = await client.callTool({ name: "get_coverage", arguments: { region: "US" } });
     expect(result.structuredContent).toEqual(coverage);
@@ -120,7 +136,7 @@ describe("MCP server transport", () => {
     const { client } = await connect(executor, "legacy");
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(4);
+    expect(tools).toHaveLength(5);
     const result = await client.callTool({ name: "get_coverage", arguments: { region: "US" } });
     expect(result.structuredContent).toEqual(coverage);
     expect(executor).toHaveBeenCalledTimes(1);

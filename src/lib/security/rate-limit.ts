@@ -7,7 +7,7 @@ import { fetchMutation } from "convex/nextjs";
 import { api } from "@convex/_generated/api";
 import { securitySecret } from "./config";
 
-export type RateLimitAction = "check" | "share";
+export type RateLimitAction = "check" | "share" | "analytics";
 export type RateLimitScope = "anonymous" | "network";
 export type RateLimitSubject = { subject: string; scope: RateLimitScope };
 
@@ -22,6 +22,7 @@ export type RateLimitResult = {
 const rules: Record<RateLimitAction, Record<RateLimitScope, number>> = {
   check: { anonymous: 120, network: 600 },
   share: { anonymous: 20, network: 100 },
+  analytics: { anonymous: 120, network: 600 },
 };
 
 export async function takeRateLimits(subjects: RateLimitSubject[], action: RateLimitAction): Promise<RateLimitResult[]> {

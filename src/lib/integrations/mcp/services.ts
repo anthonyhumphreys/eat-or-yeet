@@ -1,4 +1,5 @@
 import "server-only";
+import { recordMcpOperation } from "@/lib/analytics/server";
 
 import { getRegionCoverage, WarningSnapshotLimitError } from "@/db/queries";
 import { checkProduct } from "@/lib/checks/service";
@@ -113,6 +114,7 @@ export async function executeTool(name: ToolName, args: unknown, context: ToolCo
     outcome = publicError.code;
     throw publicError;
   } finally {
+    recordMcpOperation(name, outcome, Date.now() - startedAt, Boolean(context.connection));
     if (process.env.NODE_ENV === "production") {
       console.info(JSON.stringify({ event: "mcp_operation", operation: name, latencyMs: Date.now() - startedAt, outcome }));
     }

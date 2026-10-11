@@ -13,7 +13,7 @@ type RateLimitBucket = {
   limit?: number;
 };
 
-type RateLimitAction = "check" | "share" | "mcp_check" | "mcp_browse" | "mcp_coverage" | "mcp_shopping";
+type RateLimitAction = "check" | "share" | "analytics" | "mcp_check" | "mcp_browse" | "mcp_coverage" | "mcp_shopping";
 
 async function takeBucket(ctx: MutationCtx, bucket: RateLimitBucket) {
   const cost = bucket.cost ?? 1;
@@ -90,6 +90,7 @@ async function takeLimitedBuckets(ctx: MutationCtx, buckets: RateLimitBucket[]) 
 const rateLimitAction = v.union(
   v.literal("check"),
   v.literal("share"),
+  v.literal("analytics"),
   v.literal("mcp_check"),
   v.literal("mcp_browse"),
   v.literal("mcp_coverage"),

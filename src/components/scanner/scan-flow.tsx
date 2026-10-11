@@ -13,6 +13,7 @@ import { VerdictView } from "@/components/verdict/verdict-view";
 import { Button } from "@/components/ui/button";
 import { emptyObservation, type ProductObservation } from "@/lib/domain/schemas";
 import type { VerdictResult } from "@/lib/domain/types";
+import { trackWebsiteEvent } from "@/lib/analytics/browser";
 
 type Step = "barcode" | "details" | "checking" | "result" | "error";
 
@@ -30,6 +31,7 @@ export function ScanFlow() {
   }, [step]);
 
   const check = useCallback(async (nextObservation: ProductObservation) => {
+    trackWebsiteEvent({ event: "website_check_started", method: "scan", region });
     setObservation(nextObservation);
     setStep("checking");
     setError(null);
@@ -42,8 +44,10 @@ export function ScanFlow() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "The check failed");
       setResult(payload);
+      trackWebsiteEvent({ event: "website_check_finished", method: "scan", region, outcome: payload.verdict });
       setStep("result");
     } catch (cause) {
+      trackWebsiteEvent({ event: "website_check_finished", method: "scan", region, outcome: "error" });
       setError(cause instanceof Error ? cause.message : "The check failed.");
       setStep("error");
     }

@@ -270,6 +270,8 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .status-line[data-tone="error"] { color: var(--danger); }
 .status-line[data-tone="success"] { color: var(--foreground); }
 .website-links { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 13px; margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.analytics-choice { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.6; }
+.analytics-choice .button { min-height: 44px; }
 
 @media (max-width: 420px) {
   .shell { padding: 14px 13px 20px; }
