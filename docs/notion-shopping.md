@@ -30,10 +30,20 @@ Reviews run when items change. They do not monitor future recalls or send notifi
 
 ## Manage your connection
 
-Open [Manage your Notion list](https://www.eatoryeet.app/integrations/notion/manage) in the browser you used to connect. You can pause or resume reviews, change country, retry setup, reconnect or disconnect. Changing country schedules reviews for unbought items.
+Open [Manage your Notion list](https://www.eatoryeet.app/integrations/notion/manage) in the browser you used to connect. You can pause or resume reviews, change country, retry setup, reconnect or disconnect. Changing country schedules reviews for unbought items. Edits first received while paused do not start reviews; after resuming, edit an item to request a new review.
 
 Pausing or disconnecting may take a little time while an existing review finishes. Use **Refresh status** to check progress. Disconnect removes the saved connection and pending reviews; your shopping list stays in Notion. If automatic access removal fails, remove Eat or Yeet in Notion's connection settings.
 
-Credentials are encrypted. Eat or Yeet reads only the configured fields in the connected list and writes its review fields. [Privacy details](https://www.eatoryeet.app/privacy).
+## What the connection shares
+
+Connecting lets Eat or Yeet read the configured shopping fields in your list and write its review fields. We store the authorizing Notion user, workspace and bot identifiers, list and field mapping, country, management session and review state. Access and refresh credentials are encrypted before storage. Our backend decrypts them to run your reviews. Pausing keeps the connection and its credentials; disconnect to remove them.
+
+We do not save your profile name, email address or avatar, or keep shopping item text as a history. Account identifiers are still personal data. If you enter personal information in a shopping field, it may be processed during a review. Use product details only. [Privacy details](https://www.eatoryeet.app/privacy).
+
+## Check without connecting
+
+You can use the template without giving Eat or Yeet access to your Notion account or list. Open [Check a product](https://www.eatoryeet.app/search), choose UK or US and enter the barcode. Alternatively, choose **Label details** and enter the product name, brand and any packet details you know. Select **Check published warnings**.
+
+This sends the product details you submit for a website check. Results appear on the website and are not written back to Notion; you can copy them into your list yourself.
 
 Service owners: see the [managed-service runbook](./operators/notion-managed-service.md) and [readiness record](./operators/notion-readiness.md).

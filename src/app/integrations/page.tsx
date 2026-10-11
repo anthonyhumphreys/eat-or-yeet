@@ -86,7 +86,9 @@ export default function IntegrationsPage() {
           <details className="mt-4 border-y">
             <summary className={summaryClass}>About automatic reviews</summary>
             <p className="pb-3 leading-7 text-muted-foreground">When connected, adding or changing an unbought item starts a review. Review status, Related warnings and Reviewed at appear beside it. Reviews can take a few minutes.</p>
+            <p className="pb-3 leading-7 text-muted-foreground">Connecting gives us access to the configured shopping fields and lets us write review results. We store Notion account and list identifiers, encrypted credentials and review state. We do not save your profile name or email address.</p>
             <p className="pb-3 leading-7 text-muted-foreground">Use the management page to pause reviews, change country or disconnect. Your list stays in Notion after disconnecting. Reviews run when items change; they do not watch for future recalls.</p>
+            <p className="pb-3 leading-7 text-muted-foreground">Prefer to keep your list unconnected? <Link className={linkClass} href="/search">Check a product on this site</Link> using its barcode or label details. This gives us no access to your Notion account or list. Results stay on the website unless you copy them into Notion yourself.</p>
             <Link className={`${linkClass} mb-2`} href="/integrations/notion">Notion setup and privacy details</Link>
           </details>
         </section>
