@@ -145,7 +145,7 @@ For every host, also verify schema rejection of an unknown input field and overs
 
 ## Release, privacy, and operations gates
 
-The route must remain production-off until the human review/merge gate opens. Before enabling it:
+Production testing was explicitly authorized and enabled on 11 October 2026. Public-directory publication remains a separate decision. Before enabling the route in another environment or expanding its release:
 
 - Verify `MCP_ENABLED` is explicitly enabled only in the intended environment. Confirm production stays off when unset and `OPTIONS`/health routes do not accidentally activate the MCP endpoint.
 - Validate no-auth origin policy against the real Next/Vercel request context. Test trusted local origins separately from arbitrary `Origin`, `Host`, and `X-Forwarded-*` values. Verify Vercel's trusted client/network context is consumed only through the documented runtime helper; do not trust spoofable forwarded headers directly. Record the deployed function/runtime, region, and request-context setup.

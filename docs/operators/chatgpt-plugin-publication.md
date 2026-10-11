@@ -17,7 +17,7 @@ The submission needs four public URLs, written under `extensions.com.openai.inte
 - `supportURL`: `/support` is prepared with anthony@lexio.app. Deploy and inspect the public page before writing its URL to the submission manifest.
 - `termsOfServiceURL`: published terms applying to this plugin. Anth approved the [terms](eat-or-yeet-terms-draft.md) and confirmed Lexio Apps Ltd as operator on 11 October 2026. `/terms` now contains the approved wording. Verify its production deployment before adding the URL.
 
-Verify page contents and public access before adding the URLs to a submission package. Keep the current portable source and prepare a separate public upload copy. Convert the supplied branding into square PNG assets and inspect them at small sizes on light and dark backgrounds. The listing logo must be at least 256 by 256 pixels; the composer icon at least 48 by 48. Each may be up to 5 MiB. The current SVG is valid for the portable package but needs a submission-compatible PNG.
+Verify page contents and public access before adding the URLs to a submission package. Keep the current portable source and prepare a separate public upload copy. Prepare square branding assets and inspect them at small sizes on light and dark backgrounds. The logo and composer icon must be at least 48 by 48 pixels. PNG, JPEG, WebP and SVG are supported; each asset may be up to 5 MiB. The supplied SVG can be used if it meets these constraints. The separate public draft currently uses an inspected 256 by 256 PNG.
 
 ## 2. Test and record a real demo
 
