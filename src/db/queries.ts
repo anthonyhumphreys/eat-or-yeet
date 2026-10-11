@@ -7,6 +7,7 @@ import { cache } from "react";
 
 import { api } from "@convex/_generated/api";
 import type { DatasetStatus, MatchableIncident } from "@/lib/domain/types";
+import { rowSuperCategories } from "@/lib/incidents/super-categories";
 
 const MATCH_DATA_CACHE_TTL_MS = 5 * 60 * 1_000;
 const MAX_MATCH_DATA_CACHE_ENTRIES = 4;
@@ -157,7 +158,7 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   const url = deploymentUrl();
   const version = await fetchQuery(api.incidents.getDatasetVersion, {}, { url });
   const row = await cachedIncidentBySlug(slug, includeDemo, url, version);
-  return row ? { ...mapIncident(row), superCategories: row.superCategories } : null;
+  return row ? { ...mapIncident(row), superCategories: rowSuperCategories(row) } : null;
 });
 
 const cachedPublicListPage = unstable_cache(
@@ -278,7 +279,7 @@ export async function listActivePublicIncidents(region?: Region) {
       void authorityUrl;
       void sourceId;
       void publishedAt;
-      return { ...row, updatedAt: new Date(row.updatedAt) };
+      return { ...row, superCategories: rowSuperCategories(row), updatedAt: new Date(row.updatedAt) };
     });
 }
 

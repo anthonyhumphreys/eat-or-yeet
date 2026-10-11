@@ -59,13 +59,13 @@ function capitalise(value: string) {
 }
 
 /** Groups an official hazard statement into one plain-language tag. The tag never replaces the source wording. */
-export function classifyHazard({ title, hazard, pathogen }: { title: string; hazard?: string | null; pathogen?: string | null }): HazardSummary {
+export function classifyHazard({ title, hazard, pathogen, superCategories }: { title: string; hazard?: string | null; pathogen?: string | null; superCategories?: readonly string[] }): HazardSummary {
   const text = `${pathogen ?? ""}\n${hazard ?? ""}\n${title}`;
   for (const [pattern, label] of pathogens) if (pattern.test(pathogen ?? "") || pattern.test(text)) return { kind: "pathogen", label };
 
   // Checked before allergens: these notices warn people allergic to the
   // medicine, but the hazard is the residue itself (FSA-PRIN-37-2026).
-  if (/veterinary (?:medicine|drug)|(?:antibiotic|drug|medicine) residue|\bantibiotics? \(|penicillin/i.test(text)) return { kind: "other", label: "Medicine residue" };
+  if (!superCategories?.includes("Medical") && /veterinary (?:medicine|drug)|(?:antibiotic|drug|medicine) residue|\bantibiotics? \(|penicillin/i.test(text)) return { kind: "other", label: "Medicine residue" };
 
   if (allergenSignal.test(text)) {
     // Product names in titles ("Milk Chocolate") would add false allergens, so prefer the hazard statement.

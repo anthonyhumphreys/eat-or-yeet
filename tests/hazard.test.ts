@@ -21,6 +21,7 @@ describe("hazard tags", () => {
   });
 
   it("names common medicine recall reasons", () => {
+    expect(classifyHazard({ title: "Penicillin V potassium tablets", hazard: "Subpotent drug", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Wrong strength" });
     expect(classifyHazard({ title: "Example Pharma recall: Infants' Acetaminophen", hazard: "Subpotent drug" })).toEqual({ kind: "other", label: "Wrong strength" });
     expect(classifyHazard({ title: "Example Pharma recall: Metformin", hazard: "CGMP Deviations: NDMA impurity above the acceptable intake limit" })).toEqual({ kind: "other", label: "Impurity" });
     expect(classifyHazard({ title: "Example Pharma recall: Saline Nasal Spray", hazard: "Microbial contamination of non-sterile products" })).toEqual({ kind: "spoilage", label: "Contamination" });

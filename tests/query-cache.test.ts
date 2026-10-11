@@ -55,6 +55,12 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("warning data caches", () => {
+  it("treats legacy food details and browse rows as Food when the category field is absent", async () => {
+    const db = await import("@/db/queries");
+    expect((await db.getIncidentBySlug("biscuit-recall"))?.superCategories).toEqual(["Food"]);
+    expect((await db.listActivePublicIncidents("UK"))[0].superCategories).toEqual(["Food"]);
+  });
+
   it("does not reuse food-era cached pages or details after the category shape changes", async () => {
     const url = "https://test.convex.cloud";
     entries.set(JSON.stringify([["public-warning-page-v5"], ["UK", null, url, revision]]),
