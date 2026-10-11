@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getNotionInstallationOrigin } from "../src/lib/integrations/notion-installation";
+import { getNotionInstallationOrigin, getNotionSetupOrigin } from "../src/lib/integrations/notion-installation";
 
 describe("getNotionInstallationOrigin", () => {
   it("keeps managed Notion setup disabled unless explicitly enabled", () => {
@@ -52,5 +52,35 @@ describe("getNotionInstallationOrigin", () => {
       NOTION_INSTALL_ENABLED: "true",
       NEXT_PUBLIC_APP_URL: appUrl,
     })).toBeUndefined();
+  });
+});
+
+describe("getNotionSetupOrigin", () => {
+  const configured: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    NOTION_INSTALL_ENABLED: "true",
+    NEXT_PUBLIC_APP_URL: "https://www.eatoryeet.app",
+    CONVEX_SERVER_SECRET: "test-server-secret",
+    NEXT_PUBLIC_CONVEX_URL: "https://example.convex.cloud",
+    NOTION_CLIENT_ID: "test-client",
+    NOTION_CLIENT_SECRET: "test-client-secret",
+    NOTION_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
+    NOTION_INTEGRATION_ID: "test-integration",
+    NOTION_SUBSCRIPTION_ID: "test-subscription",
+    NOTION_WEBHOOK_VERIFICATION_TOKEN: "test-webhook-token",
+  };
+
+  it("offers setup only with complete configuration and a valid, enabled origin", () => {
+    expect(getNotionSetupOrigin(configured)).toBe("https://www.eatoryeet.app");
+    expect(getNotionSetupOrigin({ ...configured, NOTION_INSTALL_ENABLED: "false" })).toBeUndefined();
+    expect(getNotionSetupOrigin({ ...configured, NEXT_PUBLIC_APP_URL: "https://www.eatoryeet.app/path" })).toBeUndefined();
+  });
+
+  it.each([
+    "CONVEX_SERVER_SECRET", "NEXT_PUBLIC_CONVEX_URL", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET",
+    "NOTION_CREDENTIAL_KEY", "NOTION_INTEGRATION_ID", "NOTION_SUBSCRIPTION_ID", "NOTION_WEBHOOK_VERIFICATION_TOKEN",
+  ])("withholds setup when %s is missing or blank", (name) => {
+    expect(getNotionSetupOrigin({ ...configured, [name]: undefined })).toBeUndefined();
+    expect(getNotionSetupOrigin({ ...configured, [name]: "  " })).toBeUndefined();
   });
 });

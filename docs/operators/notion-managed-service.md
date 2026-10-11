@@ -1,41 +1,62 @@
 # Managed Notion installation operations
 
-This runbook is for the service owner. Shoppers use [Add to Notion](../notion-shopping.md) and Notion's consent screen. The standalone API-token worker remains an optional operator-run setup in [its own runbook](./notion-shopping-worker.md).
+Shoppers use [Notion setup](https://www.eatoryeet.app/integrations/notion). They do not need tokens, webhooks or a worker. The optional [self-hosted worker](./notion-shopping-worker.md) is a separate operator setup.
 
-## Release gate
+## Production connection
 
-Keep `NOTION_INSTALL_ENABLED` off until the public connection, copied template, signed webhook and multi-workspace acceptance tests pass. Local tests use controlled Notion responses and do not prove public consent or delivery. Enabling the website alone does not register the OAuth app or webhook.
+The Lexio Notion account owns the Eat or Yeet OAuth connection. It is installable in any workspace; each user authorizes their own copied list. It is not listed in the Notion Marketplace.
 
-## Register the Notion connection
+- Connection ID: `3f6d872b-594c-81f5-b79f-0037ef0c6e2b`.
+- Redirect URI: `https://www.eatoryeet.app/api/notion/callback`.
+- Webhook URL: `https://www.eatoryeet.app/api/notion/webhook`.
+- [Public template](https://carnelian-airedale-eb7.notion.site/Eat-or-Yeet-shopping-list-3f57b822339680b99d06f6c687dd87e8): configured for duplication during OAuth.
+- Capabilities: read/update content; no insert content, comments or user information.
+- Webhook events: `page.created` and `page.properties_updated`, using the implementation's pinned `2025-09-03` API version.
 
-Use the public Notion OAuth connection for customer installs. Keep the private test connection separate. Register the production callback URL exactly as:
+Use the `www` URLs exactly. The bare domain redirects and is not the configured OAuth origin. The public template must contain the expected shopping-list fields and no private test data. The callback must return the duplicated template page ID; choosing arbitrary existing pages is not supported.
 
-`https://eatoryeet.app/api/notion/callback`
+## Required environment settings
 
-Grant only the page and database read/update capabilities required to discover the chosen template and maintain its existing rows. Configure the intended workspace installation scope. Publish a clean shopping-list template with the expected fields and no private test data. Verify the consent flow duplicates the template and returns its page ID.
+| Setting | Vercel Production | Convex Production |
+| --- | --- | --- |
+| `NEXT_PUBLIC_APP_URL` | `https://www.eatoryeet.app` | Same canonical origin |
+| `NOTION_INSTALL_ENABLED` | `true` for the authorized production pilot | Not used |
+| `NOTION_CLIENT_ID` | OAuth connection ID | Same ID |
+| `NOTION_CLIENT_SECRET` | Sensitive OAuth secret | Same secret |
+| `NOTION_CREDENTIAL_KEY` | Sensitive base64 encoding of 32 random bytes | Same key |
+| `NOTION_INTEGRATION_ID` | Connection ID | Not used |
+| `NOTION_SUBSCRIPTION_ID` | Verified webhook subscription ID | Not used |
+| `NOTION_WEBHOOK_VERIFICATION_TOKEN` | Sensitive token verified in Notion | Not used |
+| `NOTION_REVIEW_CONNECTION_KEY` | Not used | Existing private review key |
 
-Register one Notion webhook subscription at:
+The normal Convex URL and server secret must also be configured in Vercel. The setup button and hosted routes require the complete Vercel configuration. This checks configuration presence, not Notion availability or completion of live acceptance tests. Changing Vercel settings requires a new deployment before the application uses them.
 
-`https://eatoryeet.app/api/notion/webhook`
+Never copy values returned by `vercel env pull` for sensitive settings: these can be placeholders. Obtain an actual credential from its issuing service and save it directly in each required environment. Do not commit secrets or put them in browser code, URLs or ordinary logs. Keep preview credentials separate.
 
-Subscribe to page-created and page-properties-updated events supported by the deployed Notion API version. Store the webhook verification token in the hosting secret store. Do not accept an unsolicited verification token or expose it in logs.
+## Register and verify the webhook
 
-## Deploy the hosted routes
+Notion delivers its verification token to the webhook URL before activating a subscription. An unverified token must not automatically become the trusted signing key. See [Notion's verification flow](https://developers.notion.com/reference/webhooks).
 
-Deploy the matching Convex schema/functions and Next.js application. Set `NEXT_PUBLIC_APP_URL` to the canonical HTTPS origin for that environment. In Vercel, configure `NOTION_INSTALL_ENABLED`, `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_INTEGRATION_ID`, `NOTION_SUBSCRIPTION_ID`, `NOTION_WEBHOOK_VERIFICATION_TOKEN` and `NOTION_CREDENTIAL_KEY`. The OAuth client details and encryption key also belong in the matching Convex environment for refresh and credential handling. Store `NOTION_REVIEW_CONNECTION_KEY` in Convex as the private operator key used by the website's review action. Never commit these values, put them in a URL, or expose them to browser code. Keep preview and production credentials separate. `NOTION_CREDENTIAL_KEY` must be a base64 encoding of 32 random bytes and match in Vercel and Convex.
+1. Run `pnpm tsx scripts/notion-webhook-setup.ts prepare`. It creates a local RSA private key and public key under ignored `dist/notion-readiness/webhook-setup/`. The private key must stay on the operator's machine. The script refuses to overwrite existing keys.
+2. Set `NOTION_WEBHOOK_SETUP_PUBLIC_KEY` in Vercel to the public PEM. Immediately before deployment, set `NOTION_WEBHOOK_SETUP_EXPIRES_AT` to a Unix timestamp in milliseconds no more than 15 minutes ahead. Leave `NOTION_WEBHOOK_VERIFICATION_TOKEN` unset. Deploy the application.
+3. In Notion's connection **Webhooks** tab, create the subscription using the production webhook URL, pinned version and the two events above. Capture is deliberately temporary: it is disabled by default, rejects ordinary events, validates a bounded token-only body and cannot run after the deadline or once a signing key exists.
+4. Retrieve the runtime log entry prefixed `notion_webhook_verification_candidate`. It contains RSA-OAEP ciphertext, never the plaintext token. Save only its base64 ciphertext to a private local file.
+5. Run `pnpm tsx scripts/notion-webhook-setup.ts decrypt <candidate-file>`. The candidate is written to a local file with owner-only permissions. Paste it into Notion's **Verify subscription** form. If Notion rejects it, do not configure it as the signing key; resend and inspect a fresh candidate during another short capture window.
+6. Only after Notion shows the subscription as verified, save that exact token as sensitive `NOTION_WEBHOOK_VERIFICATION_TOKEN` and save the subscription ID in Vercel. Remove both temporary capture settings. Redeploy and confirm a real signed event reaches the normal handler.
+7. Delete local plaintext credential/token files and the capture private key after verifying storage. The encrypted capture log cannot be used to verify events without the private key or token.
 
-The OAuth and webhook handlers run as Vercel Next.js routes. Convex stores the installation mapping, encrypted credentials, scoped sessions, event IDs, queued page reviews and bounded review counters. No per-customer environment key, SQLite database, NAS container or Vercel-hosted polling process is needed. Jobs begin from Notion page-change events and country changes. They read only configured fields from the bound list and write only result fields.
+Do not claim a webhook is active merely because a capture returned 202. Capture never changes the trust configuration or accepts a shopping-list event. The normal handler checks the HMAC signature, integration ID, subscription ID, workspace and authorized bot before queuing work.
 
-The private review key authorizes server-to-server calls to the existing Notion review tool. Keep it server-only and budget its use alongside per-installation and global limits. It is one operator credential, not a key issued to each shopper. Never put a Convex admin credential in a customer installation.
+## Live acceptance and release
 
-## Verify before enabling
+Use a fresh copied template with synthetic packet details. Verify:
 
-On a controlled preview, test the public consent flow, country propagation, template-copy selection, cancel and retry paths, callback replay protection, signed webhook delivery, field discovery, first review, result-write loop suppression and management session recovery. Test two workspaces and two users in one workspace. Confirm a revoked or busy installation does not affect another one.
+- Consent, UK/US propagation, template duplication, cancel/retry and callback replay protection.
+- First review after an item change, packet fields retained, Bought skipped and result writes not causing a loop.
+- Pause/resume, country change, limit/retry display and explicit status refresh.
+- Reconnect and disconnect during a review: stop new work, drain writes, remove connection state and revoke access where supported. Preserve the list.
+- Two workspaces and two users in one workspace. Revocation or a busy installation must not affect another installation.
 
-Exercise pause/resume, country change, daily-limit display, explicit status refresh, reconnect and disconnect while a review is in flight. Disconnect must stop new work, drain active writes, remove Convex connection state and revoke the Notion connection where supported. The shopping list must remain in Notion. If automatic revocation fails, show the shopper how to remove access in Notion.
+Local fixture tests verify the implementation, including the pause/resume regression and tenant isolation. They do not prove real OAuth consent or webhook delivery. See the [readiness record](./notion-readiness.md) for the current evidence and outstanding checks. Production flags were enabled at the user's request for testing; do not describe the feature as generally available until live checks pass.
 
-Enable `NOTION_INSTALL_ENABLED` only after the preview checks pass and the production OAuth callback, template and webhook are registered. Monitor Vercel route failures, Convex job backlog, review limits and Notion API errors. Do not describe the integration as generally available before these checks pass.
-
-## USDA hosting boundary
-
-The NAS is used for the USDA snapshot importer because USDA blocks requests from the hosted runtime. It does not host customer Notion credentials, callbacks, webhooks or review queues. See [USDA snapshot sync](../usda-sync.md) for that separate process.
+Convex stores encrypted credentials, scoped sessions and bounded event/review queues. Jobs read only configured fields in the bound list and write only result fields. Monitor route failures, backlog, review limits and Notion API errors. No customer API key, polling process or NAS container is needed. The NAS hosts the [USDA importer](../usda-sync.md), not customer Notion credentials.

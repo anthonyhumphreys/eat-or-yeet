@@ -1,6 +1,6 @@
 # Grok Bot plugin publication preparation
 
-Prepared on 11 October 2026 for Eat or Yeet, operated by Lexio Apps Ltd. Anth made the application repository public and authorized using it for the Grok Bot submission. The plugin lives in `plugins/grok-bot/`, indexed by the root `.cursor-plugin/marketplace.json`. The obsolete separate plugin repository was deleted on 11 October 2026 after its complete Git history was backed up locally. No marketplace application has been submitted yet.
+Prepared on 11 October 2026 for Eat or Yeet, operated by Lexio Apps Ltd. Anth made the application repository public and authorized using it for the Grok Bot submission. The plugin lives in `plugins/grok-bot/`, indexed by the root `.cursor-plugin/marketplace.json`. The obsolete separate plugin repository was deleted on 11 October 2026 after its complete Git history was backed up locally. The user confirmed submitting the publisher application on 11 October 2026. Publisher approval and a live plugin listing have not been verified.
 
 ## Local deliverables
 
@@ -77,9 +77,9 @@ The app transcript did not expose raw tool arguments, so the observed model resp
 The seven plugin package files live in `plugins/grok-bot/` within the public application repository. The root marketplace manifest selects only this directory, not the application source or the portable plugin with the same identifier. The Grok Bot ZIP and SHA-256 sidecar are published at https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0. GitHub's uploaded ZIP digest matches the rebuilt archive checksum above. The release points to plugin source commit `77af7772044b8ef0e4edbfafa00367905c33a665`.
 
 1. All 11 host cases passed using the custom connection and private skills in Grok Bot 0.68.1. No marketplace installation has been tested yet.
-2. The publisher form is prepared with the main repository, updated raw logo and customer-facing description. No application has been submitted yet.
-3. The authorized developer must complete Publisher Terms acceptance for submission.
-4. After approval, verify marketplace installation and update the listing status only when it is live.
+2. The user submitted the publisher application with the main repository, updated logo and customer-facing description.
+3. Check the publisher application status. After approval, complete any remaining plugin-listing submission steps shown by the portal.
+4. Verify installation from the marketplace before describing the listing as live.
 
 The xAI GitHub marketplace's README explicitly targets Grok Build. Its PR process is a separate distribution route and is outside this Grok Bot package preparation.
 

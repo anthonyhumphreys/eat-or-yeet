@@ -1,8 +1,9 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { constants, createHash, createHmac, createPublicKey, publicEncrypt, randomBytes, timingSafeEqual } from "node:crypto";
 
 import type { Id } from "@convex/_generated/dataModel";
 import { encryptCredentials } from "../../../integrations/notion/hosted/crypto.ts";
 import type { Authorization, InstallationStatus, Region } from "../../../integrations/notion/managed/types.ts";
+import { getNotionInstallationOrigin } from "./notion-installation";
 
 export type NotionManagement = {
   installation: { id: Id<"notionInstallations">; region: Region; status: InstallationStatus; binding?: { databaseId: string }; errorCode?: string };
@@ -30,6 +31,31 @@ export type NotionHttpDependencies = {
 };
 const OAUTH_TTL = 10 * 60_000;
 const SESSION_TTL = 30 * 24 * 60 * 60_000;
+export const notionWebhookCaptureLabel = "eat-or-yeet/notion-webhook-verification/v1";
+
+/** Capture an untrusted setup candidate, encrypted for a local operator, without trusting it. */
+export async function captureNotionWebhookVerification(request: Request, environment: NodeJS.ProcessEnv = process.env): Promise<Response | null> {
+  const origin = getNotionInstallationOrigin(environment);
+  const publicKey = environment.NOTION_WEBHOOK_SETUP_PUBLIC_KEY;
+  const expiresAt = Number(environment.NOTION_WEBHOOK_SETUP_EXPIRES_AT);
+  const remaining = expiresAt - Date.now();
+  if (!origin || environment.NOTION_WEBHOOK_VERIFICATION_TOKEN?.trim() || !publicKey || !Number.isFinite(remaining) || remaining <= 0 || remaining > 15 * 60_000) return null;
+  if (new URL(request.url).origin !== origin || request.headers.has("x-notion-signature")) return json(400, { error: "invalid_verification_request" });
+  if (!request.headers.get("content-type")?.startsWith("application/json")) return json(400, { error: "invalid_verification_request" });
+  try {
+    const raw = await readBody(request, 2_048);
+    if (!raw) return json(413, { error: "body_too_large" });
+    const payload: unknown = JSON.parse(new TextDecoder().decode(raw));
+    if (!record(payload) || Object.keys(payload).length !== 1 || typeof payload.verification_token !== "string" || !/^secret_[A-Za-z0-9_-]{20,120}$/.test(payload.verification_token)) return json(400, { error: "invalid_verification_request" });
+    const key = createPublicKey(publicKey);
+    if (key.asymmetricKeyType !== "rsa" || !key.asymmetricKeyDetails?.modulusLength || key.asymmetricKeyDetails.modulusLength < 2_048) return json(503, { error: "temporarily_unavailable" });
+    const encrypted = publicEncrypt({ key, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256", oaepLabel: Buffer.from(notionWebhookCaptureLabel) }, Buffer.from(payload.verification_token)).toString("base64");
+    // Never log or return the plaintext token. Notion's portal must verify the candidate
+    // before an operator promotes it to NOTION_WEBHOOK_VERIFICATION_TOKEN.
+    console.info("notion_webhook_verification_candidate", encrypted);
+    return json(202, { received: true });
+  } catch { return json(400, { error: "invalid_verification_request" }); }
+}
 
 export function notionCookieNames(origin: string) {
   const prefix = new URL(origin).protocol === "https:" ? "__Host-" : "";

@@ -1,19 +1,21 @@
 import { expect, test } from "@playwright/test";
+import { getNotionSetupOrigin } from "../src/lib/integrations/notion-installation";
 
-const enabled = process.env.NOTION_INSTALL_ENABLED === "true";
+const enabled = Boolean(getNotionSetupOrigin());
 
 test("disabled Notion entry explains availability without an install button", async ({ page, context, baseURL }) => {
   test.skip(enabled, "This case runs against the default-off server.");
   await context.addCookies([{ name: "eat-or-yeet-region", value: "US", url: baseURL! }]);
   await page.goto("/integrations/notion");
-  await expect(page.getByRole("heading", { name: "Notion setup is not available yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Get the template now" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Add to Notion/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Eat or Yeet homepage" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Get the Notion template" })).toHaveAttribute("href", /notion\.site/);
+  await expect(page.getByRole("link", { name: "check your packet on this site" })).toHaveAttribute("href", "/search");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test.describe("enabled Notion entry", () => {
-  test.skip(!enabled, "Run with NOTION_INSTALL_ENABLED=true and a configured NEXT_PUBLIC_APP_URL.");
+  test.skip(!enabled, "Run with complete Notion setup configuration.");
 
   test("uses the saved country and follows a header change before installation", async ({ page, context, baseURL }) => {
     const errors: string[] = [];
@@ -26,7 +28,7 @@ test.describe("enabled Notion entry", () => {
     await expect(add).toHaveAttribute("href", "/api/notion/connect?region=US");
     await expect(page.getByText("Warning country: United States", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Manage, reconnect or disconnect a Notion list" })).toHaveAttribute("href", "/integrations/notion/manage");
-    await expect(page.getByRole("heading", { name: "No Notion AI needed" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You control the connection" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   });

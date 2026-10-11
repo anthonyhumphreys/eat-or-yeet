@@ -5,8 +5,8 @@ import { cookies } from "next/headers";
 
 import { api } from "@convex/_generated/api";
 import { NotionOAuthApi } from "../../../integrations/notion/managed/notion-api.ts";
-import { getNotionInstallationOrigin } from "./notion-installation";
-import { handleNotionRequest, notionCookieNames, notionCsrf, notionHash, type NotionHttpDependencies } from "./notion-http";
+import { getNotionInstallationOrigin, getNotionSetupOrigin } from "./notion-installation";
+import { captureNotionWebhookVerification, handleNotionRequest, notionCookieNames, notionCsrf, notionHash, type NotionHttpDependencies } from "./notion-http";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -14,7 +14,7 @@ function required(name: string): string {
   return value;
 }
 export function notionHttpDependencies(): NotionHttpDependencies | null {
-  const origin = getNotionInstallationOrigin();
+  const origin = getNotionSetupOrigin();
   if (!origin) return null;
   const secret = required("CONVEX_SERVER_SECRET");
   const url = required("NEXT_PUBLIC_CONVEX_URL");
@@ -39,6 +39,10 @@ export function notionHttpDependencies(): NotionHttpDependencies | null {
 }
 export async function notionRoute(kind: Parameters<typeof handleNotionRequest>[0], request: Request) {
   try {
+    if (kind === "webhook") {
+      const captured = await captureNotionWebhookVerification(request);
+      if (captured) return captured;
+    }
     const deps = notionHttpDependencies();
     if (!deps) return Response.json({ error: "notion_setup_disabled" }, { status: 503, headers: { "cache-control": "no-store" } });
     return await handleNotionRequest(kind, request, deps);
