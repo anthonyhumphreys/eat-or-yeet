@@ -38,7 +38,7 @@ export default function IntegrationsPage() {
             <li>Download the Eat or Yeet ZIP from the <a className={linkClass} href="https://github.com/anthonyhumphreys/eat-or-yeet-plugin/releases">plugin releases</a>.</li>
             <li>Attach it in a chat with your Bot and send the setup message below.</li>
             <li>Open Connect apps → Your plugins → Private skills and look for setup and checking.</li>
-            <li>Choose UK or US, then ask it to check your barcode or packet details.</li>
+            <li>Choose UK or US once per chat, then ask it to check your barcode or packet details. You can change the region at any time.</li>
           </ol>
           <p className={promptClass}>&quot;Add a custom Remote HTTPS MCP server named eat-or-yeet at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Install the ZIP&apos;s setup and checking SKILL.md files as private skills, preserving their contents. Confirm the connection and four discovered tools.&quot;</p>
           <p className={promptClass}>&quot;Check barcode 044000061494 against US food warnings and show the source coverage.&quot;</p>
