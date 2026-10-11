@@ -5,6 +5,7 @@ export function SiteFooter() {
     <footer className="border-t py-7 text-sm text-muted-foreground">
       <div className="page-shell flex flex-wrap items-center justify-between gap-4">
         <div>
+          <p className="mb-1">Provided by <Link className="underline underline-offset-4" href="/terms">Lexio Apps Ltd</Link>.</p>
           <p>Published warning checks with the source, date, and region shown.</p>
           <p className="mt-1">
             Created by{" "}
@@ -15,6 +16,8 @@ export function SiteFooter() {
         </div>
         <nav className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Footer navigation">
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/privacy">Privacy</Link>
+          <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/terms">Terms</Link>
+          <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/support">Support</Link>
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/incidents">Current warnings</Link>
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/integrations">Integrations</Link>
         </nav>

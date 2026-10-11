@@ -14,14 +14,14 @@ The submission needs four public URLs, written under `extensions.com.openai.inte
 
 - `websiteURL`: the existing Eat or Yeet website.
 - `privacyPolicyURL`: the existing `/privacy` page, reviewed for this exact plugin.
-- `supportURL`: `/support` is prepared locally with anthony@lexio.app. Deploy and inspect the public page before writing its URL to the submission manifest.
-- `termsOfServiceURL`: published terms applying to this plugin. A [review draft](eat-or-yeet-terms-draft.md) is prepared; it is not approved or served by the website. Confirm the operator statement and approve the wording before creating and publishing a terms page.
+- `supportURL`: `/support` is prepared with anthony@lexio.app. Deploy and inspect the public page before writing its URL to the submission manifest.
+- `termsOfServiceURL`: published terms applying to this plugin. Anth approved the [terms](eat-or-yeet-terms-draft.md) and confirmed Lexio Apps Ltd as operator on 11 October 2026. `/terms` now contains the approved wording. Verify its production deployment before adding the URL.
 
 Verify page contents and public access before adding the URLs to a submission package. Keep the current portable source and prepare a separate public upload copy. Convert the supplied branding into square PNG assets and inspect them at small sizes on light and dark backgrounds. The listing logo must be at least 256 by 256 pixels; the composer icon at least 48 by 48. Each may be up to 5 MiB. The current SVG is valid for the portable package but needs a submission-compatible PNG.
 
 ## 2. Test and record a real demo
 
-Use [ChatGPT Plugins](https://chatgpt.com/plugins), the plus button and Add custom MCP server to create a development connection. Enter Eat or Yeet and the package's endpoint, `https://www.eatoryeet.app/mcp`, with No authentication. The original bare-domain address returned a 308 cross-origin redirect that the MCP client refused. The package now uses the canonical hostname. Install it, start a new chat, type @ and select Eat or Yeet. Account and workspace policies may restrict custom connections.
+Use [ChatGPT Plugins](https://chatgpt.com/plugins), Add and Add custom MCP server to create a development connection. Enter Eat or Yeet and the package's endpoint, `https://www.eatoryeet.app/mcp`, with No authentication. The original bare-domain address returned a 308 cross-origin redirect that the MCP client refused. The package now uses the canonical hostname. Choose Connect Eat or Yeet, then start a new chat, type @ and select Eat or Yeet. Account and workspace policies may restrict custom connections.
 
 Run these draft review cases. All are **Not run in ChatGPT**. SDK/unit checks are separate evidence and do not prove ChatGPT tool selection or card rendering.
 

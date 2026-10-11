@@ -1,10 +1,10 @@
 # Eat or Yeet terms of use
 
-**Draft for Anth's review, prepared 11 October 2026. Not approved, published or in force.**
+**Approved by Anth on 11 October 2026. Lexio Apps Ltd confirmed as the service operator. Public copy prepared at `/terms`; verify deployment before describing it as live.**
 
 ## About Eat or Yeet
 
-Eat or Yeet is provided by Lexio Apps Ltd, company number 11633419. Our registered office is The Old Court House, Clark Street, Morecambe, England, LA4 5HR. You can contact us at anthony@lexio.app.
+Eat or Yeet is provided by Lexio Apps Ltd, a company registered in England and Wales with company number 11633419. Our registered office is The Old Court House, Clark Street, Morecambe, England, LA4 5HR. You can contact us at anthony@lexio.app.
 
 These terms cover the Eat or Yeet website and its integrations, including the ChatGPT plugin and connected Notion shopping lists. By using Eat or Yeet, you agree to these terms.
 
@@ -52,8 +52,8 @@ If you have a problem with a check or connection, email anthony@lexio.app. Tell 
 
 ## Preparation notes, remove from the published page
 
-- The operator statement assumes Lexio Apps Ltd is the entity providing Eat or Yeet, as proposed for this business publication. Anth must confirm this before publication.
-- Company name, number and registered office were checked against [Companies House](https://find-and-update.company-information.service.gov.uk/company/11633419) on 11 October 2026. Confirm the registration jurisdiction for the website's final company disclosure.
+- Anth confirmed Lexio Apps Ltd as the operator and approved the terms before publication.
+- Company name, number and registered office were checked against [Companies House](https://find-and-update.company-information.service.gov.uk/company/11633419) on 11 October 2026. The incorporation certificate was also inspected and confirms registration in England and Wales.
 - Wording follows the service and privacy information in the current code. The Notion section is conditional because automatic reviews are still being configured.
 - This draft uses plain service limits and preserves consumer rights. It contains no financial liability cap, indemnity, arbitration clause, exclusive court choice, automatic renewal or unilateral right to impose fees. Any additional legal arrangements need a separate decision and review.
 - [CMA guidance on fair customer contracts](https://www.gov.uk/guidance/writing-a-fair-contract-for-customers) informed the plain wording and avoidance of broad disclaimers. This draft has not had a solicitor's review.

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Integrations",
-  description: "Use Eat or Yeet with Grok Bot, ChatGPT, Notion and other AI tools. Follow simple setup steps to check published UK and US food warnings.",
+  description: "Use Eat or Yeet with Grok Bot, OpenClaw, Meta Muse, Hermes, ChatGPT and Notion. Follow simple setup steps to check published UK and US food warnings.",
 };
 
 const mcpUrl = "https://www.eatoryeet.app/mcp";
@@ -24,24 +24,33 @@ export default function IntegrationsPage() {
         </p>
         <nav aria-label="Integration guides" className="mt-6 flex flex-wrap gap-x-6 gap-y-1">
           <a className={linkClass} href="#grok-bot">Grok Bot</a>
+          <a className={linkClass} href="#openclaw">OpenClaw</a>
+          <a className={linkClass} href="#muse">Meta Muse</a>
+          <a className={linkClass} href="#hermes">Hermes</a>
           <a className={linkClass} href="#chatgpt">ChatGPT</a>
           <a className={linkClass} href="#notion">Notion</a>
-          <a className={linkClass} href="#other-tools">Other AI tools</a>
         </nav>
 
         <section id="grok-bot" aria-labelledby="grok-bot-title" className="mt-10 scroll-mt-24 border-t pt-8">
           <h2 id="grok-bot-title" className="text-2xl font-black tracking-tight">Grok Bot</h2>
-          <p className="mt-3 leading-7 text-muted-foreground">Ask your Bot to use the Eat or Yeet website through its browser.</p>
-          <ol className={stepsClass}>
-            <li>Open a chat with your Bot.</li>
-            <li>Tell it to visit Eat or Yeet, choose your country and check your barcode or packet details.</li>
-            <li>Read the result and open any related official warning to compare the product and batch.</li>
-          </ol>
-          <p className={promptClass}>
-            &quot;Open https://www.eatoryeet.app/search in your browser. Choose US and check barcode 044000061494. Show me the result, source coverage and any official warning links.&quot;
-          </p>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Replace US and the example barcode with your country and packet. This browser workflow has not yet been tested in Grok Bot.</p>
-          <a className={`${linkClass} mt-2`} href="https://docs.x.ai/grok-bot/computer-and-apps">Grok Bot browser guide</a>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">These guides follow the apps&apos; documentation. They have not all been tested with Eat or Yeet.</p>
+          <p className="mt-3 leading-7 text-muted-foreground">Grok Bot supports custom remote MCP servers. Ask it to help add Eat or Yeet as a plugin.</p>
+          <p className={promptClass}>&quot;Help me add a custom MCP plugin called Eat or Yeet. Use Remote HTTPS at https://www.eatoryeet.app/mcp with no authentication. Then check barcode 044000061494 against US food warnings and show the source coverage.&quot;</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">Review the connection before adding it. No Eat or Yeet account or key is needed. For a Team Bot, an owner or manager can add it through the Bot&apos;s Setup → Plugins card. Your team may restrict custom connectors. This connection still needs testing in Grok Bot.</p>
+          <a className={`${linkClass} mt-2`} href="https://docs.x.ai/grok-bot/team-bots#plugins">Grok Bot plugin guide</a>
+          <details className="mt-5 rounded-xl border px-5">
+            <summary className={summaryClass}>Use the website through your Bot&apos;s browser</summary>
+            <ol className={stepsClass}>
+              <li>Open a chat with your Bot.</li>
+              <li>Tell it to visit Eat or Yeet, choose your country and check your barcode or packet details.</li>
+              <li>Read the result and open any related official warning to compare the product and batch.</li>
+            </ol>
+            <p className={promptClass}>
+              &quot;Open https://www.eatoryeet.app/search in your browser. Choose US and check barcode 044000061494. Show me the result, source coverage and any official warning links.&quot;
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">Replace US and the example barcode with your country and packet. This browser workflow has not yet been tested in Grok Bot.</p>
+            <a className={`${linkClass} mt-2`} href="https://docs.x.ai/grok-bot/computer-and-apps">Grok Bot browser guide</a>
+          </details>
           <details className="mt-5 rounded-xl border px-5">
             <summary className={summaryClass}>Using Grok on the web?</summary>
             <ol className={`${stepsClass} mt-1`}>
@@ -54,17 +63,50 @@ export default function IntegrationsPage() {
           </details>
         </section>
 
+        <section id="openclaw" aria-labelledby="openclaw-title" className="mt-10 scroll-mt-24 border-t pt-8">
+          <h2 id="openclaw-title" className="text-2xl font-black tracking-tight">OpenClaw</h2>
+          <ol className={stepsClass}>
+            <li>Open the Control UI, then Settings → MCP.</li>
+            <li>Under Configured servers, choose Add server. Name it eat-or-yeet and choose Streamable HTTP.</li>
+            <li>Enter <code className="break-all text-foreground">{mcpUrl}</code>, leave authentication empty and add the server.</li>
+            <li>Start a chat and ask Eat or Yeet to check your packet in UK or US.</li>
+          </ol>
+          <a className={`${linkClass} mt-2`} href="https://docs.openclaw.ai/tools/mcp">OpenClaw MCP guide</a>
+        </section>
+
+        <section id="muse" aria-labelledby="muse-title" className="mt-10 scroll-mt-24 border-t pt-8">
+          <h2 id="muse-title" className="text-2xl font-black tracking-tight">Meta Muse</h2>
+          <p className="mt-3 leading-7 text-muted-foreground">Ask Muse to create a custom connector. It will guide you through the setup.</p>
+          <p className={promptClass}>&quot;Help me create a custom connector for Eat or Yeet, a remote MCP server at https://www.eatoryeet.app/mcp. It uses Streamable HTTP and needs no authentication. I want to check published UK or US food warnings.&quot;</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">Review what Muse proposes before connecting. We have not verified this server in Muse yet. If it requires a sign-in or cannot connect, <Link className={linkClass} href="/search">use Eat or Yeet on the web</Link>. No Eat or Yeet credentials are required.</p>
+          <a className={`${linkClass} mt-2`} href="https://www.meta.com/help/artificial-intelligence/1687253048996149/">Meta Muse connector guide</a>
+        </section>
+
+        <section id="hermes" aria-labelledby="hermes-title" className="mt-10 scroll-mt-24 border-t pt-8">
+          <h2 id="hermes-title" className="text-2xl font-black tracking-tight">Hermes</h2>
+          <p className="mt-3 leading-7 text-muted-foreground">Ask Hermes to add Eat or Yeet to its MCP connections, then start a new chat or use /reload-mcp.</p>
+          <p className={promptClass}>&quot;Add Eat or Yeet as a remote HTTP MCP server at https://www.eatoryeet.app/mcp, with no authentication. Keep my existing MCP connections. Then check my product against UK or US food warnings.&quot;</p>
+          <details className="mt-5 rounded-xl border px-5">
+            <summary className={summaryClass}>Add the connection yourself</summary>
+            <p className="leading-7 text-muted-foreground">Add eat-or-yeet inside mcp_servers in ~/.hermes/config.yaml. Keep any existing servers.</p>
+            <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{`mcp_servers:
+  eat-or-yeet:
+    url: "${mcpUrl}"`}</code></pre>
+          </details>
+          <a className={`${linkClass} mt-2`} href="https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp">Hermes MCP guide</a>
+        </section>
+
         <section id="chatgpt" aria-labelledby="chatgpt-title" className="mt-10 scroll-mt-24 border-t pt-8">
           <h2 id="chatgpt-title" className="text-2xl font-black tracking-tight">ChatGPT plugin</h2>
           <p className="mt-3 leading-7 text-muted-foreground">The Eat or Yeet directory listing is coming soon. You can try a custom connection if your ChatGPT account allows it.</p>
           <ol className={stepsClass}>
-            <li>Open <a className={linkClass} href="https://chatgpt.com/plugins">ChatGPT Plugins</a>, choose the plus button, then Add custom MCP server.</li>
+            <li>Open <a className={linkClass} href="https://chatgpt.com/plugins">ChatGPT Plugins</a>, choose Add, then Add custom MCP server.</li>
             <li>Name it Eat or Yeet. Enter <code className="break-all text-foreground">{mcpUrl}</code> and choose No authentication.</li>
-            <li>Read the connection notice, then choose Create as a plugin. Install the resulting plugin.</li>
+            <li>Read the connection notice, then choose Create as a plugin and Connect Eat or Yeet.</li>
             <li>Start a new chat. Type @, select Eat or Yeet, and ask it to check your barcode in UK or US.</li>
           </ol>
           <p className={promptClass}>&quot;Check barcode 044000061494 against US food warnings. Show me the source coverage and explain the result.&quot;</p>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">If Add custom MCP server is missing, your account or workspace may not allow custom connections. You can <Link className={linkClass} href="/search">check your product on this site</Link> instead. Installation and result cards still need testing in ChatGPT.</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">If Add custom MCP server is missing, your account or workspace may not allow custom connections. You can <Link className={linkClass} href="/search">check your product on this site</Link> instead. This creates a personal connection while the public listing is being prepared.</p>
           <a className={`${linkClass} mt-2`} href="https://developers.openai.com/plugins/deploy/connect-chatgpt">ChatGPT connection guide</a>
         </section>
 
@@ -90,7 +132,7 @@ export default function IntegrationsPage() {
         </section>
 
         <section id="other-tools" aria-labelledby="other-tools-title" className="mt-10 scroll-mt-24 border-t pt-8">
-          <h2 id="other-tools-title" className="text-2xl font-black tracking-tight">Other AI tools</h2>
+          <h2 id="other-tools-title" className="text-2xl font-black tracking-tight">More MCP apps</h2>
           <p className="mt-3 leading-7 text-muted-foreground">Apps that support remote MCP connections can use the same address. MCP is the connection format that lets an assistant ask Eat or Yeet for a check.</p>
           <div className="mt-5 rounded-xl border bg-muted/35 p-5">
             <p className="font-bold">Connection address</p>
@@ -99,22 +141,25 @@ export default function IntegrationsPage() {
           </div>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">These setup recipes follow each app&apos;s documentation. They have not yet been tested in every app. If a connection fails, use the website while we check compatibility.</p>
           <details className="mt-5 rounded-xl border px-5">
-            <summary className={summaryClass}>Codex</summary>
-            <p className="leading-7 text-muted-foreground">Run this command in your terminal, then reload Codex and start a new chat.</p>
-            <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{`codex mcp add eat-or-yeet --url ${mcpUrl}`}</code></pre>
-            <a className={`${linkClass} mb-2`} href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli">Codex setup guide</a>
-          </details>
-          <details className="mt-3 rounded-xl border px-5">
-            <summary className={summaryClass}>Cursor</summary>
-            <p className="leading-7 text-muted-foreground">Add this connection to ~/.cursor/mcp.json. If that file already has connections, keep them and add Eat or Yeet inside mcpServers. Reload Cursor and enable Eat or Yeet.</p>
-            <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{JSON.stringify({ mcpServers: { "eat-or-yeet": { url: mcpUrl } } }, null, 2)}</code></pre>
-            <a className={`${linkClass} mb-2`} href="https://cursor.com/docs/mcp">Cursor setup guide</a>
-          </details>
-          <details className="mt-3 rounded-xl border px-5">
-            <summary className={summaryClass}>Gemini CLI</summary>
-            <p className="leading-7 text-muted-foreground">Run this command in your terminal. Start Gemini and use /mcp to check that Eat or Yeet is connected.</p>
-            <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{`gemini mcp add --transport http eat-or-yeet ${mcpUrl}`}</code></pre>
-            <a className={`${linkClass} mb-2`} href="https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html">Gemini CLI setup guide</a>
+            <summary className={summaryClass}>Coding tools: Codex, Cursor and Gemini CLI</summary>
+            <details className="mt-3 rounded-xl border px-5">
+              <summary className={summaryClass}>Codex</summary>
+              <p className="leading-7 text-muted-foreground">Run this command in your terminal, then reload Codex and start a new chat.</p>
+              <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{`codex mcp add eat-or-yeet --url ${mcpUrl}`}</code></pre>
+              <a className={`${linkClass} mb-2`} href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli">Codex setup guide</a>
+            </details>
+            <details className="mt-3 rounded-xl border px-5">
+              <summary className={summaryClass}>Cursor</summary>
+              <p className="leading-7 text-muted-foreground">Add this connection to ~/.cursor/mcp.json. If that file already has connections, keep them and add Eat or Yeet inside mcpServers. Reload Cursor and enable Eat or Yeet.</p>
+              <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{JSON.stringify({ mcpServers: { "eat-or-yeet": { url: mcpUrl } } }, null, 2)}</code></pre>
+              <a className={`${linkClass} mb-2`} href="https://cursor.com/docs/mcp">Cursor setup guide</a>
+            </details>
+            <details className="mt-3 rounded-xl border px-5">
+              <summary className={summaryClass}>Gemini CLI</summary>
+              <p className="leading-7 text-muted-foreground">Run this command in your terminal. Start Gemini and use /mcp to check that Eat or Yeet is connected.</p>
+              <pre className="my-4 overflow-x-auto rounded-lg bg-muted/35 p-4 text-sm"><code>{`gemini mcp add --transport http eat-or-yeet ${mcpUrl}`}</code></pre>
+              <a className={`${linkClass} mb-2`} href="https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html">Gemini CLI setup guide</a>
+            </details>
           </details>
           <p className={promptClass}>&quot;Use Eat or Yeet to check this product in the UK. The item is [product name], the brand is [brand], and the batch code is [code].&quot;</p>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">Replace the bracketed details with what is on your packet, or just give a barcode and country.</p>
