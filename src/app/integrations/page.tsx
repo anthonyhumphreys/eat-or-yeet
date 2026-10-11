@@ -33,9 +33,16 @@ export default function IntegrationsPage() {
 
         <section id="grok-bot" aria-labelledby="grok-bot-title" className="mt-10 scroll-mt-24 border-t pt-8">
           <h2 id="grok-bot-title" className="text-2xl font-black tracking-tight">Grok Bot</h2>
-          <p className="mt-3 leading-7 text-muted-foreground">A marketplace package is not available yet. You can add Eat or Yeet as a custom remote MCP connection. No Eat or Yeet account or API key is needed.</p>
-          <p className={promptClass}>&quot;Help me add a custom MCP connection called Eat or Yeet. Use Remote HTTPS at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Then check barcode 044000061494 against US food warnings and show the source coverage.&quot;</p>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Choose UK or US once per chat. You can change the region at any time. Review the connection before adding it. We tested this connection in Grok Bot for macOS on 11 October 2026, including barcode and packet checks, warning search, warning details and source coverage. Team administrators may restrict custom connections. The other guides below have not all been tested with Eat or Yeet.</p>
+          <p className="mt-3 leading-7 text-muted-foreground">Use a custom connection while our marketplace listing is being prepared. No Eat or Yeet account or API key is needed.</p>
+          <ol className={stepsClass}>
+            <li>Download the ZIP from the <a className={linkClass} href="https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0">Grok Bot plugin release</a>.</li>
+            <li>Attach it in a chat with your Bot and send the setup message below.</li>
+            <li>Open Connect apps → Your plugins → Private skills and look for setup and checking.</li>
+            <li>Choose UK or US once per chat, then ask it to check your barcode or packet details. You can change the region at any time.</li>
+          </ol>
+          <p className={promptClass}>&quot;Add a custom Remote HTTPS MCP server named eat-or-yeet at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Install the ZIP&apos;s setup and checking SKILL.md files as private skills, preserving their contents. Confirm the connection and four discovered tools.&quot;</p>
+          <p className={promptClass}>&quot;Check barcode 044000061494 against US food warnings and show the source coverage.&quot;</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">We tested this custom connection and both private skills in Grok Bot for macOS on 11 October 2026, including barcode and packet checks, warning search, warning details and source coverage. The app cannot import the marketplace manifest directly. Team administrators may restrict custom connections. The other guides below have not all been tested with Eat or Yeet.</p>
           <a className={`${linkClass} mt-2`} href="https://cursor.com/help/grok-bot/connect-plugins">Grok Bot plugin guide</a>
           <details className="mt-5 rounded-xl border px-5">
             <summary className={summaryClass}>Use the website through your Bot&apos;s browser</summary>

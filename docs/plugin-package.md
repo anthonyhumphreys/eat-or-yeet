@@ -34,7 +34,7 @@ The standard JSON schemas validate portable structure, not every semantic requir
 
 ## Grok Bot distribution
 
-The private Cursor-format package is retained in `plugins/grok-bot/`. Publication is on hold pending Alykkat's approval to make the application repository public. Do not create or publish a separate repository.
+The Cursor-format package lives in `plugins/grok-bot/` inside the public application repository. The root `.cursor-plugin/marketplace.json` selects this plugin directory, so the publisher form uses the main repository URL. The former separate plugin repository has been deleted. Keep publication in this repository.
 
 Run `pnpm package:plugin:grok-bot` to export a standalone Cursor-format package to `dist/grok-bot/eat-or-yeet/`, with an archive at `dist/grok-bot/eat-or-yeet-grok-bot.zip` and a SHA-256 sidecar. The ZIP includes the `eat-or-yeet/` directory and its hidden `.cursor-plugin/plugin.json`.
 

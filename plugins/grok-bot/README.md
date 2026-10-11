@@ -2,11 +2,11 @@
 
 Check packaged food against published UK and US warnings using a barcode or details from the packet. Eat or Yeet reports matching warnings, possible matches and source coverage. A result is not a guarantee that food is safe.
 
-The service is operated by Lexio Apps Ltd. This package is prepared privately in `plugins/grok-bot/` inside the application repository. Publication and marketplace submission are on hold pending Alykkat's approval to make the repository public. Do not publish this folder or create a separate public repository without explicit approval.
+The service is operated by Lexio Apps Ltd. The plugin lives in [`plugins/grok-bot`](https://github.com/anthonyhumphreys/eat-or-yeet/tree/main/plugins/grok-bot) within the public application repository. The root `.cursor-plugin/marketplace.json` points to this directory. Marketplace submission is being prepared; use the custom connection below for now.
 
 ## Set up in Grok Bot
 
-1. For authorized private testing, build the ZIP from the application repository with `pnpm package:plugin:grok-bot`. The local archive is `dist/grok-bot/eat-or-yeet-grok-bot.zip`.
+1. Download the ZIP from the [Grok Bot release](https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0). You can also build it from the application repository with `pnpm package:plugin:grok-bot`; the local archive is `dist/grok-bot/eat-or-yeet-grok-bot.zip`.
 2. Open a chat with your Bot, attach the ZIP and send this message:
 
 > Add a custom Remote HTTPS MCP server named eat-or-yeet at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Install the ZIP's setup and checking SKILL.md files as private skills, preserving their contents. Confirm the connection and four discovered tools.

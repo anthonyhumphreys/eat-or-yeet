@@ -1,6 +1,6 @@
 # Grok Bot plugin publication preparation
 
-Prepared privately on 11 October 2026 for Eat or Yeet, operated by Lexio Apps Ltd. Publication and marketplace submission are on hold pending Alykkat's approval to make the application repository public. The separate `eat-or-yeet-plugin` repository had been published without Anth's authorization. It was made private and archived on 11 October 2026; its package files were moved into `plugins/grok-bot/` in the private application repository. No marketplace application has been submitted. Do not publish this package or create a separate public repository without explicit approval.
+Prepared on 11 October 2026 for Eat or Yeet, operated by Lexio Apps Ltd. Anth made the application repository public and authorized using it for the Grok Bot submission. The plugin lives in `plugins/grok-bot/`, indexed by the root `.cursor-plugin/marketplace.json`. The obsolete separate plugin repository was deleted on 11 October 2026 after its complete Git history was backed up locally. No marketplace application has been submitted yet.
 
 ## Local deliverables
 
@@ -18,6 +18,7 @@ Verification completed on 11 October 2026:
 - All 546 unit tests passed after the MCP compatibility fix, including the 12 portable/Grok Bot packaging tests and two new text-only host regressions. The production build passed.
 - Cursor's unmodified `validate-template.mjs` passed against the extracted ZIP in a temporary single-entry marketplace wrapper. Its only warning was that no optional hooks file exists. The wrapper and validator are excluded from the release package.
 - Validator source was pinned to `cursor/plugin-template` commit `46216072ac5750f782f95bb325b4d12b7c3ae9c9`; provenance is recorded in `dist/grok-bot/validator-provenance.json`.
+- Rebuilt main-repository archive SHA-256: `60fb60161c737a5db1c4d6d8b11bede8c99186bc263e4525aac70c80e5504b9d`. The checked-in folder and actual root marketplace manifest passed Cursor's validator; all 12 packaging tests, lint and typecheck passed.
 - Original withdrawn archive SHA-256: `debaf2cd294114a2a5e5885bad5fa72a84529b659f40c7a341cae8b399853cfb`.
 
 ## Listing copy
@@ -37,7 +38,7 @@ Verification completed on 11 October 2026:
 - Licence: MIT for the standalone plugin files
 - Release notes: Initial Grok Bot package with UK and US food warning checks, warning search and detail, source coverage, and setup/checking skills.
 
-The native manifest references the private application repository. The withdrawn standalone repository's initial commit was `b4f9089`; its Git history is preserved privately. Anth approved the existing Cursor account to manage a future Lexio application, but that does not authorize publication. The publisher form contains obsolete standalone repository and logo URLs. Do not submit it while publication is on hold.
+The native manifest references the public application repository. The publisher form uses `https://github.com/anthonyhumphreys/eat-or-yeet` and the raw logo at `https://raw.githubusercontent.com/anthonyhumphreys/eat-or-yeet/main/plugins/grok-bot/assets/icon.svg`. Its description identifies `plugins/grok-bot` and the root marketplace manifest. Anth approved using the existing Cursor account to manage the Lexio application. Organization name and contact remain Lexio Apps Ltd. and anthony@lexio.app.
 
 ## Endpoint verification
 
@@ -73,12 +74,12 @@ The app transcript did not expose raw tool arguments, so the observed model resp
 
 ## Publication status and next steps
 
-The seven plugin package files now live in `plugins/grok-bot/` within the private application repository. The obsolete standalone repository is private and archived. Previous release checks and host test results remain historical evidence, not publication approval.
+The seven plugin package files live in `plugins/grok-bot/` within the public application repository. The root marketplace manifest selects only this directory, not the application source or the portable plugin with the same identifier. A Grok Bot ZIP is hosted in the main repository's `grok-bot-v0.1.0` release.
 
-1. Wait for Alykkat's approval and Anth's explicit instruction before changing repository visibility or publishing a package.
-2. All 11 host cases passed using the custom connection and private skills in Grok Bot 0.68.1. No marketplace installation has been tested yet.
-3. Revisit the publisher form and repository layout only after approval. Its previous standalone repository and raw logo links are obsolete.
-4. The authorized developer must complete Publisher Terms acceptance for any future submission. After approval, verify marketplace installation separately.
+1. All 11 host cases passed using the custom connection and private skills in Grok Bot 0.68.1. No marketplace installation has been tested yet.
+2. The publisher form is prepared with the main repository, updated raw logo and plugin-directory instructions. No application has been submitted yet.
+3. The authorized developer must complete Publisher Terms acceptance for submission.
+4. After approval, verify marketplace installation and update the listing status only when it is live.
 
 The xAI GitHub marketplace's README explicitly targets Grok Build. Its PR process is a separate distribution route and is outside this Grok Bot package preparation.
 

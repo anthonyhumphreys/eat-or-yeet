@@ -20,6 +20,12 @@ describe("Grok Bot distribution", () => {
       "eat-or-yeet/skills/checking/SKILL.md",
       "eat-or-yeet/skills/setup/SKILL.md",
     ]);
+    const repositoryRoot = path.dirname(path.dirname(pluginRoot));
+    const marketplace = JSON.parse(await readFile(path.join(repositoryRoot, ".cursor-plugin/marketplace.json"), "utf8"));
+    expect(marketplace.plugins).toEqual([{ name: "eat-or-yeet", source: "plugins/grok-bot" }]);
+    for (const [filename, bytes] of Object.entries(files)) {
+      expect(Buffer.from(bytes)).toEqual(await readFile(path.join(repositoryRoot, "plugins/grok-bot", filename.replace(/^eat-or-yeet\//, ""))));
+    }
     const manifest = JSON.parse(Buffer.from(files["eat-or-yeet/.cursor-plugin/plugin.json"]).toString("utf8"));
     expect(manifest).toMatchObject({
       name: "eat-or-yeet",
