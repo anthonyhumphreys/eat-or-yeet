@@ -38,7 +38,7 @@ Verification completed on 11 October 2026:
 - Licence: MIT for the standalone plugin files
 - Release notes: Initial Grok Bot package with UK and US food warning checks, warning search and detail, source coverage, and setup/checking skills.
 
-The native manifest references the public application repository. The publisher form uses `https://github.com/anthonyhumphreys/eat-or-yeet` and the raw logo at `https://raw.githubusercontent.com/anthonyhumphreys/eat-or-yeet/main/plugins/grok-bot/assets/icon.svg`. Its description identifies `plugins/grok-bot` and the root marketplace manifest. Anth approved using the existing Cursor account to manage the Lexio application. Organization name and contact remain Lexio Apps Ltd. and anthony@lexio.app.
+The native manifest references the public application repository. The publisher form uses `https://github.com/anthonyhumphreys/eat-or-yeet` and the raw logo at `https://raw.githubusercontent.com/anthonyhumphreys/eat-or-yeet/main/plugins/grok-bot/assets/icon.svg`. The description uses customer-facing copy, with no submission request or repository-path instructions. Reviewer routing: this package targets Grok Bot and Cursor; the root marketplace manifest identifies `plugins/grok-bot`. Anth approved using the existing Cursor account to manage the Lexio application. Organization name and contact remain Lexio Apps Ltd. and anthony@lexio.app.
 
 ## Endpoint verification
 
@@ -77,7 +77,7 @@ The app transcript did not expose raw tool arguments, so the observed model resp
 The seven plugin package files live in `plugins/grok-bot/` within the public application repository. The root marketplace manifest selects only this directory, not the application source or the portable plugin with the same identifier. The Grok Bot ZIP and SHA-256 sidecar are published at https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0. GitHub's uploaded ZIP digest matches the rebuilt archive checksum above. The release points to plugin source commit `77af7772044b8ef0e4edbfafa00367905c33a665`.
 
 1. All 11 host cases passed using the custom connection and private skills in Grok Bot 0.68.1. No marketplace installation has been tested yet.
-2. The publisher form is prepared with the main repository, updated raw logo and plugin-directory instructions. No application has been submitted yet.
+2. The publisher form is prepared with the main repository, updated raw logo and customer-facing description. No application has been submitted yet.
 3. The authorized developer must complete Publisher Terms acceptance for submission.
 4. After approval, verify marketplace installation and update the listing status only when it is live.
 
