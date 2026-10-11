@@ -1,0 +1,22 @@
+{
+  "name": "eat-or-yeet",
+  "version": "0.1.0",
+  "description": "Check packaged food against published UK and US warnings by barcode or label details. Results show source coverage and are not a safety guarantee.",
+  "author": {
+    "name": "Lexio Apps Ltd.",
+    "email": "anthony@lexio.app"
+  },
+  "homepage": "https://www.eatoryeet.app",
+  "repository": "https://github.com/anthonyhumphreys/eat-or-yeet",
+  "license": "MIT",
+  "keywords": [
+    "food-safety",
+    "recalls",
+    "barcode",
+    "United Kingdom",
+    "United States"
+  ],
+  "logo": "assets/icon.svg",
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json"
+}

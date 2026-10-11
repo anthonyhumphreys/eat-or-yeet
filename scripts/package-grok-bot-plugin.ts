@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createPluginArchive } from "./package-plugin";
 
 const repositoryRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const templateRoot = path.join(repositoryRoot, "plugins/grok-bot-distribution");
+const templateRoot = path.join(repositoryRoot, "plugins/grok-bot");
 export const grokBotOutputRoot = path.join(repositoryRoot, "dist/grok-bot");
 
 const sourceManifestSchema = z.object({
@@ -42,7 +42,7 @@ export async function createGrokBotPackage(): Promise<Record<string, Uint8Array>
     description: source.description,
     author: { name: "Lexio Apps Ltd.", email: "anthony@lexio.app" },
     homepage: "https://www.eatoryeet.app",
-    repository: "https://github.com/anthonyhumphreys/eat-or-yeet-plugin",
+    repository: "https://github.com/anthonyhumphreys/eat-or-yeet",
     license: "MIT",
     keywords: source.keywords,
     logo: "assets/icon.svg",

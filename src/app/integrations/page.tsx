@@ -35,7 +35,7 @@ export default function IntegrationsPage() {
           <h2 id="grok-bot-title" className="text-2xl font-black tracking-tight">Grok Bot</h2>
           <p className="mt-3 leading-7 text-muted-foreground">Use a custom connection while our marketplace listing is being prepared. No Eat or Yeet account or API key is needed.</p>
           <ol className={stepsClass}>
-            <li>Download the Eat or Yeet ZIP from the <a className={linkClass} href="https://github.com/anthonyhumphreys/eat-or-yeet-plugin/releases">plugin releases</a>.</li>
+            <li>Download the ZIP from the <a className={linkClass} href="https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0">Grok Bot plugin release</a>.</li>
             <li>Attach it in a chat with your Bot and send the setup message below.</li>
             <li>Open Connect apps → Your plugins → Private skills and look for setup and checking.</li>
             <li>Choose UK or US once per chat, then ask it to check your barcode or packet details. You can change the region at any time.</li>

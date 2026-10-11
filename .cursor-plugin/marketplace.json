@@ -1,0 +1,13 @@
+{
+  "name": "eat-or-yeet",
+  "owner": {
+    "name": "Lexio Apps Ltd.",
+    "email": "anthony@lexio.app"
+  },
+  "plugins": [
+    {
+      "name": "eat-or-yeet",
+      "source": "plugins/grok-bot"
+    }
+  ]
+}

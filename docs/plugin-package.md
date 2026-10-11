@@ -34,6 +34,8 @@ The standard JSON schemas validate portable structure, not every semantic requir
 
 ## Grok Bot distribution
 
+The Cursor-format package lives in `plugins/grok-bot/` inside the public application repository. The root `.cursor-plugin/marketplace.json` selects this plugin directory, so the publisher form uses the main repository URL. The former separate plugin repository has been deleted. Keep publication in this repository.
+
 Run `pnpm package:plugin:grok-bot` to export a standalone Cursor-format package to `dist/grok-bot/eat-or-yeet/`, with an archive at `dist/grok-bot/eat-or-yeet-grok-bot.zip` and a SHA-256 sidecar. The ZIP includes the `eat-or-yeet/` directory and its hidden `.cursor-plugin/plugin.json`.
 
 The exporter reuses the validated portable files, preserves both skills and the icon byte-for-byte, and writes a native Cursor manifest with Lexio publisher details and a relative logo reference. It includes the Grok Bot README and the MIT licence approved for this standalone distribution. The application repository is not relicensed. OpenAI-specific metadata, registered App bindings, schemas and application code are not exported. The existing portable source and the ChatGPT submission are not changed.
