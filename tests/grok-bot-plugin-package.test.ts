@@ -26,7 +26,7 @@ describe("Grok Bot distribution", () => {
       author: { name: "Lexio Apps Ltd.", email: "anthony@lexio.app" },
       license: "MIT",
       logo: "assets/icon.svg",
-      repository: "https://github.com/anthonyhumphreys/eat-or-yeet-plugin",
+      repository: "https://github.com/anthonyhumphreys/eat-or-yeet",
     });
     for (const forbidden of ["extensions", "apps", "hooks"]) {
       expect(manifest).not.toHaveProperty(forbidden);
