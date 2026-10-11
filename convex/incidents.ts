@@ -26,6 +26,7 @@ const checkSources = sources.filter((source) => source.superCategory === "Food")
 const UPSERT_BATCH_SIZE = 25;
 const DATASET_PAGE_SIZE = 100;
 const LEGACY_FDA_REPAIR_PAGE_SIZE = 25;
+const REPORTED_CURSOR_PREFIX = "reported:";
 
 function normalisedTargetValue(target: NormalisedTarget): string {
   if (target.type === "gtin") return normaliseGtin(target.value);
@@ -266,13 +267,23 @@ export const listActivePage = query({
       throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
     }
     const now = args.snapshot ? 0 : Date.now();
+    // Page each indexed status separately so reports do not become active
+    // recalls and browsing does not scan every resolved incident.
+    const reports = !args.foodOnly && args.cursor?.startsWith(REPORTED_CURSOR_PREFIX);
+    const cursor = reports ? args.cursor!.slice(REPORTED_CURSOR_PREFIX.length) || null : args.cursor;
     const page = await ctx.db
       .query("incidentMatchData")
-      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "active"))
-      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor: args.cursor });
+      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", reports ? "reported" : "active"))
+      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor });
+    const nextReports = !args.foodOnly && !reports && page.isDone && Boolean(await ctx.db
+      .query("incidentMatchData")
+      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "reported"))
+      .first());
     return {
       ...page,
-      page: page.page.filter((row) => (args.snapshot ? !row.isDemo : activeMatchData(row, now, false))
+      isDone: page.isDone && !nextReports,
+      continueCursor: nextReports ? REPORTED_CURSOR_PREFIX : reports ? REPORTED_CURSOR_PREFIX + page.continueCursor : page.continueCursor,
+      page: page.page.filter((row) => (args.snapshot ? !row.isDemo : !row.isDemo && row.startsAt <= now && (!row.endsAt || row.endsAt > now))
         && (!args.foodOnly || rowSuperCategories(row).includes("Food"))).map((row) => ({
         id: row.incidentId,
         title: row.title,

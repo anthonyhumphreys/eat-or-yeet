@@ -26,7 +26,17 @@ test("switching from a food category to Medical clears the category and restores
   await page.locator("#warnings li a").first().click();
   await expect(page.getByRole("heading", { name: "What to do" })).toBeVisible();
   await expect(page.getByText(/Do not stop taking a prescribed medicine/)).toBeVisible();
+  await expect(page.getByText(/Current recall status is unverified/)).toBeVisible();
+  await expect(page.getByText(/Published recall report/)).toBeVisible();
+  await expect(page.getByText(/Active recall ·/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Check your pack", exact: true })).toHaveCount(0);
+});
+
+test("a medicine search with no matches offers pharmacist advice instead of the food checker", async ({ page }) => {
+  await page.goto("/?region=US&type=Medical&q=zzzznotarealmedicine");
+  await expect(page.getByText("No recall reports match.")).toBeVisible();
+  await expect(page.getByText(/For a medicine, check the latest official information or ask a pharmacist/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Check its codes and dates", exact: true })).toHaveCount(0);
 });
 
 test("food recall pages preserve the recall region when checking a pack", async ({ page }) => {

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { notionTables } from "./lib/notion_schema";
 
 const region = v.union(v.literal("UK"), v.literal("US"));
-const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"));
+const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"), v.literal("reported"));
 // Browse categories, grouped under super-categories (src/lib/incidents/super-categories.ts).
 const productCategory = v.union(
   v.literal("Produce"),

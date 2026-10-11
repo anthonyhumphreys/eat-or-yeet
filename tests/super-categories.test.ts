@@ -1,3 +1,4 @@
+import type { FunctionReturnType } from "convex/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api, internal } from "@convex/_generated/api";
@@ -33,7 +34,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("openFDA drug recalls", () => {
   it("keeps the recall number, lot, linked brand and package barcode, with medicine advice", () => {
     const incident = parseFdaDrugRecord(drugRecord());
-    expect(incident).toMatchObject({ sourceId: "D-0100-2026", slug: "fda-d-0100-2026", region: "US", status: "active", severity: "high" });
+    expect(incident).toMatchObject({ sourceId: "D-0100-2026", slug: "fda-d-0100-2026", region: "US", status: "reported", severity: "high" });
     expect(incident.authorityUrl).toContain("https://api.fda.gov/drug/enforcement.json");
     expect(incident.consumerAdvice).toMatch(/pharmacist or doctor/);
     expect(incident.targets).toEqual(expect.arrayContaining([
@@ -96,7 +97,7 @@ describe("browse-only medicine recalls", () => {
     targets: [{ type: "lot" as const, value: "AB1234", valueNormalized: "AB1234", matchType: "exact" as const, weight: 60, confidence: 0.9 }],
   });
   const food = () => ({
-    ...drug(), title: "Biscuit recall", slug: "biscuit-recall", sourceId: "F-0001-2026", sourceKey: "fda",
+    ...drug(), status: "active" as const, title: "Biscuit recall", slug: "biscuit-recall", sourceId: "F-0001-2026", sourceKey: "fda",
     summary: "Biscuits", originalSourceData: { product_description: "Biscuits" },
   });
 
@@ -105,8 +106,12 @@ describe("browse-only medicine recalls", () => {
     await t.mutation(internal.incidents.upsertBatch, { items: [drug(), food()] });
 
     const listed = await t.query(api.incidents.listActivePage, { region: "US", cursor: null, snapshot: true });
-    const medicine = listed.page.find((row) => row.slug === "fda-d-0100-2026");
+    expect(listed.isDone).toBe(false);
+    const reports = await t.query(api.incidents.listActivePage, { region: "US", cursor: listed.continueCursor, snapshot: true });
+    expect(reports.isDone).toBe(true);
+    const medicine = reports.page.find((row) => row.slug === "fda-d-0100-2026");
     expect(medicine).toMatchObject({ categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"] });
+    expect((await t.query(api.incidents.getBySlug, { slug: "fda-d-0100-2026" }))?.status).toBe("reported");
     expect(listed.page.find((row) => row.slug === "biscuit-recall")?.superCategories).toEqual(["Food"]);
 
     const foodWarnings = await t.query(api.incidents.listActivePage, { region: "US", cursor: null, snapshot: true, foodOnly: true });
@@ -126,6 +131,23 @@ describe("browse-only medicine recalls", () => {
     const listed = await t.query(api.incidents.listActivePage, { region: "US", cursor: null, snapshot: true, foodOnly: true });
     expect(listed.page).toHaveLength(1);
     expect(listed.page[0].superCategories).toEqual(["Food"]);
+  });
+
+  it("paginates across active food and multiple pages of historical reports without dropping or repeating records", async () => {
+    const t = createBackend();
+    const medicines = Array.from({ length: 101 }, (_, index) => ({ ...drug(), sourceId: `D-${index}-2026`, slug: `medicine-${index}` }));
+    await t.mutation(internal.incidents.upsertBatch, { items: [food(), ...medicines] });
+    const slugs: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 10; page++) {
+      const result: FunctionReturnType<typeof api.incidents.listActivePage> = await t.query(api.incidents.listActivePage, { region: "US", cursor, snapshot: true });
+      slugs.push(...result.page.map((row) => row.slug));
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+    expect(slugs).toHaveLength(102);
+    expect(new Set(slugs).size).toBe(102);
+    expect(slugs).toContain("biscuit-recall");
   });
 
   it("does not let the drug source gate food checks", async () => {

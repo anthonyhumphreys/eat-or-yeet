@@ -74,6 +74,7 @@ function WarningRow({ row, query }: { row: ExplorerRow; query: string }) {
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-5 text-muted-foreground">
             <span className={`rounded-full px-2 font-semibold ${tagTone[row.hazard.kind]}`}><span className="sr-only">Hazard: </span>{row.hazard.label}</span>
             <span>{row.categories.join(", ")}</span>
+            {row.superCategories.includes("Medical") ? <span>Published report · current status unverified</span> : null}
             {row.stores.length ? <span>Sold at <Highlight text={row.stores.join(", ")} query={query} /></span> : null}
           </span>
           <span className="mt-1.5 block text-xs leading-5 text-muted-foreground sm:hidden">
@@ -299,7 +300,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
             {filtered ? (
               <button type="button" onClick={() => update({ q: "", hazard: undefined, type: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
             ) : null}
-            {rows ? <ShareButton label="Share this list" title={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls`} text={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls right now, from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
+            {rows ? <ShareButton label="Share this list" title={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls`} text={`${region} ${type ? `${type.toLowerCase()} ` : ""}recall reports from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
           </div>
         </div>
       </ViewTransition>
@@ -322,7 +323,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
         <div className="flex items-start gap-4 py-10">
           <SearchX className="mt-0.5 size-6 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
-            <p className="font-bold">{filtered ? "No current warnings match." : `No current warnings for the ${regionNames[region]}.`}</p>
+            <p className="font-bold">{filtered ? "No recall reports match." : `No recall reports for the ${regionNames[region]}.`}</p>
             {removable.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {removable.map(([label, change]) => (
@@ -332,7 +333,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
                 ))}
               </div>
             ) : null}
-            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a product is safe.{!type || type === "Food" || type === "Baby" ? <> Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</> : null}</p>
+            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a product is safe.{type === "Medical" ? " For a medicine, check the latest official information or ask a pharmacist." : !type || type === "Food" || type === "Baby" ? <> Have a food pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</> : null}</p>
           </div>
         </div>
       )}

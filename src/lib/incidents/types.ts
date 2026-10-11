@@ -18,7 +18,7 @@ export type NormalisedIncident = {
   title: string;
   slug: string;
   region: "UK" | "US";
-  status: "active" | "resolved";
+  status: "active" | "resolved" | "reported";
   hazard: string | null;
   pathogen: string | null;
   summary: string;

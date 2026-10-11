@@ -78,7 +78,7 @@ There are no model credentials. Remove obsolete OpenRouter variables and revoke 
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
-FDA drug enforcement records are imported for browsing under Medical (and Baby, for infant medicines). Pack checks and their source-health gate cover food sources only. Set `OPENFDA_API_KEY` on the Convex deployment to lift openFDA's shared 1,000-requests-a-day limit.
+FDA drug enforcement records are imported for browsing under Medical (and Baby, for infant medicines). These are published reports, not verified current recalls: [FDA does not update drug-enforcement status after publication](https://open.fda.gov/apis/drug/enforcement/). They use a separate `reported` status, carry an unverified-current-status notice and never become the top alert. Pack checks, MCP/Notion warning tools and their source-health gate cover food sources only. Set `OPENFDA_API_KEY` on the Convex production deployment, not just Vercel, to lift openFDA's shared 1,000-requests-a-day limit.
 
 Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 

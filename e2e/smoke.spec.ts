@@ -237,7 +237,7 @@ test("warning browsing works with reduced motion and without view transition sup
   await expect(listHeading(page, "US")).toBeVisible();
   await page.getByLabel("Hazard", { exact: true }).selectOption("allergen");
   await searchBox(page).fill("no such food warning");
-  await expect(page.getByText("No current warnings match.")).toBeVisible();
+  await expect(page.getByText("No recall reports match.")).toBeVisible();
   await page.getByRole("button", { name: "Remove “no such food warning”" }).click();
   await expect(page.getByRole("heading", { name: /recalls? found$/ })).toBeVisible();
   await expect(page.getByLabel("Hazard", { exact: true })).toHaveValue("allergen");

@@ -42,6 +42,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
   const companyAnnouncement = incident.authority === FDA && source.label === "Official source";
   // Pack checks only cover food recalls so far.
   const checkable = rowSuperCategories(incident).includes("Food");
+  const reported = incident.status === "reported" || rowSuperCategories(incident).includes("Medical");
 
   return (
     <article className="page-shell py-6 sm:py-10">
@@ -51,11 +52,12 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
           <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
             <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-yeet px-2.5 py-0.5 text-xs font-bold text-white dark:text-background"><TriangleAlert className="size-3.5" aria-hidden />Active recall · {hazard.label}</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-yeet px-2.5 py-0.5 text-xs font-bold text-white dark:text-background"><TriangleAlert className="size-3.5" aria-hidden />{reported ? "Published recall report" : incident.status === "resolved" ? "Resolved recall" : "Active recall"} · {hazard.label}</span>
                 <span className="text-muted-foreground">Updated <time dateTime={incident.updatedAt.toISOString()}>{formatRecallDate(incident.updatedAt)}</time> · {timeAgo(incident.updatedAt.valueOf())}</span>
               </p>
               <h1 className="mt-4 max-w-3xl text-[1.75rem] font-black leading-[1.12] tracking-[-0.03em] sm:text-4xl">{incident.title}</h1>
               {incident.summary ? <p className="mt-3 max-w-[65ch] leading-7 text-muted-foreground">{incident.summary}</p> : null}
+              {reported ? <p className="mt-3 max-w-[65ch] text-sm leading-6 text-muted-foreground">Current recall status is unverified. FDA does not update drug-enforcement status after publication. Check the latest official information or ask a pharmacist.</p> : null}
             </div>
             <ShareButton label="Share this recall" title={`Recall: ${incident.title}`} text={`Heads up: ${incident.title} has been recalled (${hazard.label}).`} className="self-start" />
           </header>
@@ -89,7 +91,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
               </section>
             ) : null}
             <NewsList heading="In the news" articles={related} unavailable={news.unavailable} empty="No news stories about this recall yet." />
-            <Link href={`/?region=${incident.region}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all active {incident.region} recalls<ArrowRight className="size-4" aria-hidden /></Link>
+            <Link href={`/?region=${incident.region}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all {incident.region} recall reports<ArrowRight className="size-4" aria-hidden /></Link>
           </div>
         </div>
 

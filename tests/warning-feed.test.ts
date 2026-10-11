@@ -54,6 +54,12 @@ describe("warnings landing feed", () => {
     expect(warningLinks(medical)).toEqual(['href="/incidents/infant-drops"']);
     expect(medical).toContain('href="/?region=US&amp;type=Medical&amp;category=Over-the-counter+medicines"');
     expect(medical).not.toContain("category=Supplements");
+    expect(medical).toContain("Published report · current status unverified");
+    const empty = await render({ type: "Medical", q: "not-a-real-medicine" }, "US");
+    expect(empty).not.toContain("Check its codes and dates");
+    expect(empty).toContain("ask a pharmacist");
+    listWarnings.mockResolvedValue([medicine]);
+    expect(await render({ type: "Medical" }, "US")).not.toContain("Top alert");
   });
 
   it("renders stable September abbreviations and keeps London date boundaries", async () => {

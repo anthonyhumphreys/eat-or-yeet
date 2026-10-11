@@ -36,7 +36,8 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       hazard: classifyHazard(row),
     }))
     : null;
-  const top = rows ? pickTopAlert(rows) : undefined;
+  // Drug enforcement reports cannot establish a current alert.
+  const top = rows ? pickTopAlert(rows.filter((row) => row.superCategories.includes("Food"))) : undefined;
   const category = param(params, "category");
   const type = param(params, "type");
   const hazard = param(params, "hazard");

@@ -15,6 +15,7 @@ type EnforcementEndpoint = {
   api: string;
   label: string;
   consumerAdvice: string;
+  historicalReports?: boolean;
   extraTargets?: (record: z.infer<typeof recordSchema>) => NormalisedTarget[];
 };
 
@@ -163,7 +164,7 @@ function parseEnforcementRecord(value: unknown, endpoint: EnforcementEndpoint): 
     title: `${record.recalling_firm} recall: ${productName}`,
     slug: slugify(`fda-${sourceId}`),
     region: "US",
-    status: incidentStatus(record.status),
+    status: endpoint.historicalReports ? "reported" : incidentStatus(record.status),
     hazard: record.reason_for_recall,
     pathogen: pathogenFrom(record.reason_for_recall),
     summary: record.product_description,
@@ -350,6 +351,9 @@ function drugTargets(record: z.infer<typeof recordSchema>): NormalisedTarget[] {
 const drugEndpoint: EnforcementEndpoint = {
   api: FDA_DRUG_API,
   label: "FDA openFDA drugs",
+  // FDA freezes drug-enforcement status after publication. This is evidence
+  // of a published recall, not evidence that the recall is still ongoing.
+  historicalReports: true,
   consumerAdvice: "Check the lot number on your pack against this recall and follow the firm's instructions. Do not stop taking a prescribed medicine without talking to a pharmacist or doctor first.",
   extraTargets: drugTargets,
 };
@@ -370,6 +374,6 @@ export const fdaDrugSource: IncidentSource = {
   url: FDA_DRUG_API,
   region: "US",
   superCategory: "Medical",
-  scope: "All openFDA Drug Enforcement Reports with status Ongoing, plus explicit status checks for previously active recalls absent from that set.",
-  fetchIncidents: (existingSourceIds = []) => fetchEnforcementIncidents(drugEndpoint, existingSourceIds),
+  scope: "Published openFDA Drug Enforcement Reports marked Ongoing at publication. Current recall status is unverified because FDA does not update this field after publication.",
+  fetchIncidents: () => fetchAllWithStatus(drugEndpoint, "Ongoing"),
 };

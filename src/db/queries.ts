@@ -150,7 +150,7 @@ const cachedIncidentBySlug = unstable_cache(
     void version;
     return incidentBySlug(slug, includeDemo, url);
   },
-  ["warning-details-v2"],
+  ["warning-details-v3"],
   { revalidate: false },
 );
 
@@ -158,7 +158,7 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   const url = deploymentUrl();
   const version = await fetchQuery(api.incidents.getDatasetVersion, {}, { url });
   const row = await cachedIncidentBySlug(slug, includeDemo, url, version);
-  return row ? { ...mapIncident(row), superCategories: rowSuperCategories(row) } : null;
+  return row ? { ...mapIncident(row), status: row.status, superCategories: rowSuperCategories(row) } : null;
 });
 
 const cachedPublicListPage = unstable_cache(
@@ -166,7 +166,7 @@ const cachedPublicListPage = unstable_cache(
     void version;
     return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version, foodOnly }, { url });
   },
-  ["public-warning-page-v6"],
+  ["public-warning-page-v7"],
   { revalidate: false },
 );
 
