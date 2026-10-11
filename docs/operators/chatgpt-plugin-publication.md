@@ -6,7 +6,7 @@ Prepared 11 October 2026 from the actual package and [OpenAI's submission guide]
 
 The source is `plugins/eat-or-yeet/`. It already has a manifest, remote MCP connection, checking/setup skills and an SVG icon. Its description accurately limits checks to published UK and US food warnings. The public `/mcp` connection does not require a shopper account or API key. The protected `/mcp/notion` operator connection must not be included in this listing.
 
-The intended publisher is **Lexio's business identity**, subject to verification in the OpenAI dashboard. Do not select Anthony's individual identity. Use the exact verified legal business name returned by the dashboard; the public name cannot be overridden by package metadata. The support contact is anthony@lexio.app. Availability is unrestricted across OpenAI's available countries, and the plugin is free with no purchases. UK/US source coverage does not itself decide which countries can install it.
+The publisher is **Lexio's approved business identity**. Anth reported business approval, and Safari's upload dialog showed `Business — Lexio Apps Ltd.` selected on 11 October 2026. The organization is Lexio Apps Ltd and the selected project is Eat or Yeet. No ZIP was uploaded. Do not select Anthony's individual identity. Use the verified name returned by the dashboard; the public name cannot be overridden by package metadata. The support contact is anthony@lexio.app. Availability is unrestricted across OpenAI's available countries, and the plugin is free with no purchases. UK/US source coverage does not itself decide which countries can install it.
 
 The user chose Lexio unless that requires payment. No payment is authorized. OpenAI's current submission guide lists no ChatGPT Business subscription requirement or business-verification price. [Developer Terms section 7.8](https://openai.com/policies/developer-apps-terms/) allows minor verification or administrative charges and future submission/publication fees with advance notice. Inspect the actual flow and return to the user before any charge; do not promise free verification or switch identities automatically.
 
@@ -15,7 +15,7 @@ The submission needs four public URLs, written under `extensions.com.openai.inte
 - `websiteURL`: the existing Eat or Yeet website.
 - `privacyPolicyURL`: the existing `/privacy` page, reviewed for this exact plugin.
 - `supportURL`: `/support` is prepared locally with anthony@lexio.app. Deploy and inspect the public page before writing its URL to the submission manifest.
-- `termsOfServiceURL`: published terms applying to this plugin. No terms page exists in this checkout yet. The publisher must decide and approve the terms.
+- `termsOfServiceURL`: published terms applying to this plugin. A [review draft](eat-or-yeet-terms-draft.md) is prepared; it is not approved or served by the website. Confirm the operator statement and approve the wording before creating and publishing a terms page.
 
 Verify page contents and public access before adding the URLs to a submission package. Keep the current portable source and prepare a separate public upload copy. Convert the supplied branding into square PNG assets and inspect them at small sizes on light and dark backgrounds. The listing logo must be at least 256 by 256 pixels; the composer icon at least 48 by 48. Each may be up to 5 MiB. The current SVG is valid for the portable package but needs a submission-compatible PNG.
 
@@ -42,7 +42,7 @@ Write the five positive and three negative cases into `extensions.com.openai.rev
 
 ## 3. Build and inspect the final upload
 
-The local preparation copy is `dist/submission-preparation/eat-or-yeet/`, with an incomplete archive at `dist/submission-preparation/eat-or-yeet-public-DRAFT.zip`. It preserves the portable source. The draft has a 256-pixel PNG inspected on light and dark backgrounds, five positive and three negative prompts, a no-commerce declaration, release notes and explicitly unrestricted country availability. Its ZIP contents and icon dimensions were inspected. None of its cases has been run in ChatGPT. The verified developer name, final category, support/terms URLs and demo URL remain absent. These local artifacts are ignored by Git and are not a release.
+The local preparation copy is `dist/submission-preparation/eat-or-yeet/`, with an incomplete archive at `dist/submission-preparation/eat-or-yeet-public-DRAFT.zip`. It preserves the portable source. The draft has the verified publisher name, a 256-pixel PNG inspected on light and dark backgrounds, five positive and three negative prompts, a no-commerce declaration, release notes and explicitly unrestricted country availability. Its ZIP contents and icon dimensions were inspected. None of its cases has been run in ChatGPT. The final category, support/terms URLs and demo URL remain absent. These local artifacts are ignored by Git and are not a release.
 
 `pnpm package:plugin` builds `dist/eat-or-yeet-plugin.zip` from the current portable source. Its successful build establishes package structure, not public-submission readiness. The public copy must also contain the completed listing, PNG assets and review materials. Update the packaging path or build the separate copy explicitly before calling that upload ready.
 
