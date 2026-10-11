@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/.well-known/openai-apps-challenge",
+        headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
