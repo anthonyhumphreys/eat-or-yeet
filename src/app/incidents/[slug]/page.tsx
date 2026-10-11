@@ -8,6 +8,7 @@ import { IncidentTargets } from "@/components/incidents/incident-targets";
 import { NewsList } from "@/components/news/news-list";
 import { ShareButton } from "@/components/share-button";
 import { Button } from "@/components/ui/button";
+import { rowSuperCategories } from "@/lib/incidents/browse";
 import { classifyHazard } from "@/lib/incidents/hazard";
 import { publicOfficialSource } from "@/lib/incidents/public-source";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
@@ -40,7 +41,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
   // The FDA publishes recalling companies' own announcements as its recall notices.
   const companyAnnouncement = incident.authority === FDA && source.label === "Official source";
   // Pack checks only cover food recalls so far.
-  const checkable = incident.superCategories.includes("Food");
+  const checkable = rowSuperCategories(incident).includes("Food");
 
   return (
     <article className="page-shell py-6 sm:py-10">
