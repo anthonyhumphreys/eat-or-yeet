@@ -11,14 +11,14 @@ The sample conversation is [Check Barcode Warnings](https://chatgpt.com/c/6acae1
 | UK milk warning search | ChatGPT reported 314 keyword matches and distinguished drinking-milk recalls from undeclared-milk allergen notices. It linked returned official FSA notices and kept the search separate from the previous product check. |
 | Warning-detail follow-up | A warning card opened for the actual returned FSA-PRIN-37-2026 notice. Its producer, product and affected date agreed with ChatGPT's summary. Official advice was to avoid consuming the affected milk and return it for a refund. The reply described the notice as historical. |
 | US source coverage | ChatGPT reported FDA Enforcement Reports, FDA Recall Announcements and USDA FSIS, including refresh times and each source's scope. It explained the announcement subset and that healthy coverage does not certify food safety. |
-| Vehicle recall | Prompt sent. Mac locked before the completed response could be inspected. Not verified. |
-| Future recall monitoring | Not run. |
-| Medical diagnosis/treatment | Not run. |
+| Explicit Eat or Yeet vehicle-recall request | Explained that Eat or Yeet covers packaged food and cannot check vehicles; linked the official UK vehicle checker. No Eat or Yeet call. |
+| Plugin-only future monitoring | Explained that Eat or Yeet cannot monitor future recalls or notify later. No new task or Eat or Yeet call. A broader earlier prompt created a separate ChatGPT task; it was disabled and the prompt revised to test the plugin boundary. |
+| Medical diagnosis/treatment | Declined diagnosis and a specific medicine. No Eat or Yeet call; general host health guidance remained separate. |
 
 These observations verify the supported user workflows. Raw tool-call argument JSON was not exported or independently audited. Saved accessibility snapshots are in ignored `dist/chatgpt-test-evidence/`. They are local evidence, not public review attachments.
 
-Product and warning cards rendered with ChatGPT showing CSP off. Repeat a card check with CSP enforcement before treating that host compatibility check as complete. The bundled checking and onboarding skills have not been installed and tested in this ChatGPT connection.
+A fresh product card also rendered with CSP enforcement enabled. Both packaged skills were installed in private plugin version 1.0.1, preserving its identity and audience. Source read-back confirmed their contents. The setup skill waited for UK/US; the checking follow-up used the selected country and qualified the result.
 
-No video was recorded. QuickTime's New Screen Recording command was disabled, and the macOS recording shortcut did not expose usable controls. The Mac subsequently locked. Record a clean, sample-only walkthrough after unlocking, keeping private suggestions, account banners and other conversations off screen. Use a fresh or temporary conversation for unsupported-request cases to avoid using personal memories as test inputs.
+A cleaned 5:10 sample walkthrough was recorded, decoded and played locally, uploaded Unlisted with approval and verified playing in signed-out Safari. Its URL is included in the submission. Private conversations and local snapshots remain separate from the reviewer video.
 
-The public submission still needs the remaining host checks, a reviewer-accessible recording, the final category, domain verification, dashboard scans and publisher attestations. Do not use this private conversation URL as `demo_recording_url` or describe the ZIP as submission-ready.
+Public version 0.1.1 was submitted under Lexio Apps Ltd. on 11 October 2026. The portal showed **In review** and **Not published**. Domain verification, metadata, skill and MCP scans passed. The private host tests and direct endpoint rerun support the submission, but the business draft was not independently installed and tested as a ChatGPT host. Its tools were not live before publication.

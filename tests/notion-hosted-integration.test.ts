@@ -240,8 +240,10 @@ describe("hosted Notion integration with Convex state", () => {
     expect(await state(t, b)).toMatchObject({ installation: { status: "active", region: "US" }, busy: false });
   });
 
-  it("returns the disabled response from the real Next routes without contacting Convex", async () => {
-    vi.stubEnv("NOTION_INSTALL_ENABLED", "false");
+  it.each(["disabled", "incomplete"])("returns an unavailable response from the real Next routes when setup is %s", async (configuration) => {
+    vi.stubEnv("NOTION_INSTALL_ENABLED", configuration === "disabled" ? "false" : "true");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", ORIGIN);
+    vi.stubEnv("NOTION_CLIENT_SECRET", "");
     const external = vi.fn(async () => { throw new Error("Disabled setup must not make external requests"); });
     vi.stubGlobal("fetch", external);
     const requests = [

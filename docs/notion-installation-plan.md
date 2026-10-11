@@ -1,12 +1,12 @@
 # Managed Notion installation
 
-Updated: 10 October 2026
+Updated: 11 October 2026
 
 ## Decision and status
 
 The normal customer setup is **Add to Notion** on Eat or Yeet. Vercel runs the website, OAuth and webhook routes. Convex stores installation state and durable review jobs. Customers do not host a service, create API keys or need Notion AI.
 
-The managed flow and local tests are implemented. The entry stays off by default until the public Notion connection and template are registered and the live consent, webhook and multi-workspace checks pass. The deterministic review engine and optional standalone worker from [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) remain useful for owner-run setups. They are not part of the ordinary customer flow.
+The managed flow and local tests are implemented. The template is public and the OAuth connection is registered. Production testing is authorized with the flags enabled; the customer entry requires complete OAuth, backend and webhook configuration. Live acceptance remains a release gate. See the [readiness record](operators/notion-readiness.md). The deterministic review engine and optional standalone worker from [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) remain useful for owner-run setups. They are not part of the ordinary customer flow.
 
 ## Customer flow
 
@@ -28,7 +28,7 @@ Adding or changing an unbought item creates a review job. Bought and blank rows 
 
 ## Same-app architecture
 
-The browser starts OAuth at `/api/notion/connect?region=UK|US`. Vercel handles the fixed callback at `https://eatoryeet.app/api/notion/callback` and the signed Notion webhook at `https://eatoryeet.app/api/notion/webhook`. Management forms post to `/api/notion/manage`; reconnect uses the same connect route and the scoped management cookie to locate the existing installation.
+The browser starts OAuth at `/api/notion/connect?region=UK|US`. Vercel handles the fixed callback at `https://www.eatoryeet.app/api/notion/callback` and the signed Notion webhook at `https://www.eatoryeet.app/api/notion/webhook`. Management forms post to `/api/notion/manage`; reconnect uses the same connect route and the scoped management cookie to locate the existing installation.
 
 Convex stores the installation owner, workspace, Notion bot and copied-list binding, region, lifecycle state, encrypted credentials, management sessions, event deduplication, review queue and bounded counters. The application encrypts OAuth credentials before storing them. The webhook queues work for changed pages in the registered list. Workers read only configured shopping properties, re-fetch current row data before writing, and update only dedicated review properties. They do not fetch full workspaces or page bodies.
 
@@ -40,11 +40,11 @@ The managed connection uses a server-only operator key for the private review to
 
 These are release tasks for the service owner. They are not customer setup instructions.
 
-- Register one public Notion OAuth connection for the customer flow. Set its redirect URL to `https://eatoryeet.app/api/notion/callback` and configure the intended workspace installation scope and content capabilities.
+- Register one public Notion OAuth connection for the customer flow. Set its redirect URL to `https://www.eatoryeet.app/api/notion/callback` and configure the intended workspace installation scope and content capabilities.
 - Publish and configure a clean shopping-list template. Remove private test rows and identifiers. Verify the copied list has the database and fields the worker expects.
-- Create the Notion webhook subscription at `https://eatoryeet.app/api/notion/webhook`, with the supported page-created and page-properties-updated events. Keep the verification token private.
+- Create the Notion webhook subscription at `https://www.eatoryeet.app/api/notion/webhook`, with the supported page-created and page-properties-updated events. Keep the verification token private.
 - Set the OAuth client details, encryption key, webhook verification token, review key and `NEXT_PUBLIC_APP_URL` in the appropriate Vercel and Convex environments. Keep preview and production credentials separate. Configure the public app origin as HTTPS.
-- Deploy Convex schema/functions before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before enabling production.
+- Deploy Convex schema/functions before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before general availability.
 
 The Vercel/Convex deployment owns customer installations and queues. The NAS runs the separate USDA snapshot importer because USDA blocks hosted fetches; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
 
@@ -56,4 +56,4 @@ Verify two separate workspaces and two authorizing users in one workspace. Confi
 
 Repeat the tested Milk, Oreo and Eggs input-change flow through the installer. Verify bought-row skips, result-write loop prevention, stale-source **Unable to review**, review limits and explicit refresh behavior. A generic item must never be described as safe.
 
-Tests use controlled Notion and review responses. They do not prove live public consent, template duplication or webhook delivery. Record those results before enabling the customer entry. Category watches and future-recall alerts remain a separate opt-in feature.
+Tests use controlled Notion and review responses. They do not prove live public consent, template duplication or webhook delivery. Record those results before claiming general availability. Category watches and future-recall alerts remain a separate opt-in feature.

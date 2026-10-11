@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { NotionManagementActions } from "@/components/notion-management-form";
-import { getNotionInstallationOrigin } from "@/lib/integrations/notion-installation";
+import { getNotionSetupOrigin } from "@/lib/integrations/notion-installation";
 import { getNotionDisconnectReceipt, getNotionManagement } from "@/lib/integrations/notion-hosted";
 import { regionNames } from "@/lib/location";
 
@@ -51,7 +51,7 @@ export default async function NotionManagementPage({ searchParams }: { searchPar
   const [params, management] = await Promise.all([searchParams, getNotionManagement()]);
   const notice = queryMessages[firstValue(params.notice) ?? ""];
   const queryError = installationErrors[firstValue(params.error) ?? ""];
-  const enabled = Boolean(getNotionInstallationOrigin());
+  const enabled = Boolean(getNotionSetupOrigin());
 
   if (!management) {
     // Only check a receipt after the live session no longer has an installation.
@@ -60,7 +60,7 @@ export default async function NotionManagementPage({ searchParams }: { searchPar
     if (disconnectReceipt) {
       return (
         <div className="page-shell w-full py-8 sm:py-14">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-[72ch]">
             <p className="text-sm font-bold text-muted-foreground">Eat or Yeet for Notion</p>
             <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">Notion list disconnected</h1>
             <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">Reviews have stopped and the saved Eat or Yeet connection has been removed. Your shopping list remains in Notion.</p>
@@ -77,9 +77,8 @@ export default async function NotionManagementPage({ searchParams }: { searchPar
 
     return (
       <div className="page-shell w-full py-8 sm:py-14">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-sm font-bold text-muted-foreground">Eat or Yeet for Notion</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">Manage your Notion list</h1>
+        <div className="mx-auto max-w-[72ch]">
+          <h1 className="text-4xl font-black tracking-tight sm:text-5xl">Manage your Notion list</h1>
           {notice && <p className="mt-5 rounded-xl border bg-muted/35 p-4 leading-6" role="status" aria-live="polite">{notice}</p>}
           {queryError && <p className="mt-5 rounded-xl border border-destructive/40 bg-destructive/5 p-4 leading-6" role="alert">{queryError}</p>}
           <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">No connected Notion list was found for this browser. Connect through Notion to create a private management session.</p>
@@ -105,9 +104,8 @@ export default async function NotionManagementPage({ searchParams }: { searchPar
 
   return (
     <div className="page-shell w-full py-8 sm:py-14">
-      <div className="mx-auto max-w-3xl">
-        <p className="text-sm font-bold text-muted-foreground">Eat or Yeet for Notion</p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-pretty sm:text-5xl">Manage your Notion list</h1>
+      <div className="mx-auto max-w-[72ch]">
+        <h1 className="text-4xl font-black tracking-tight text-pretty sm:text-5xl">Manage your Notion list</h1>
         {notice && <p className="mt-5 rounded-xl border bg-muted/35 p-4 leading-6" role="status" aria-live="polite">{notice}</p>}
         {queryError && <p className="mt-5 rounded-xl border border-destructive/40 bg-destructive/5 p-4 leading-6" role="alert">{queryError}</p>}
 
