@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { getIncidentBySlug } from "@/db/queries";
+import { rowSuperCategories } from "@/lib/incidents/browse";
 import type { MatchableIncident } from "@/lib/domain/types";
 import { groupAffectedTargets, serializeWarningDetails, serializeWarningSummary } from "@/lib/integrations/serialize";
 import type { GetWarningInput, PublicWarningDetails } from "@/lib/integrations/contracts";
@@ -84,7 +85,7 @@ export async function getWarningDetails(input: GetWarningInput): Promise<PublicW
   }
 
   const incident = await getIncidentBySlug(input.slug);
-  if (!incident) return null;
+  if (!incident || !rowSuperCategories(incident).includes("Food")) return null;
 
   const groups = groupAffectedTargets(incident.targets);
   const incidentRevision = revisionOf(incident, groups);

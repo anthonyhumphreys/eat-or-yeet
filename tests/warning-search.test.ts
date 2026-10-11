@@ -63,6 +63,19 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("complete warning search", () => {
+  it("excludes medicines from food-only integration searches and requests food-only pages", async () => {
+    rows = [
+      makeRow(0, { superCategories: ["Food"] }),
+      makeRow(1, { title: "Chocolate flavoured medicine", categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"] }),
+      makeRow(2), // Legacy food row with no super-category.
+    ];
+    const { searchWarnings } = await import("@/lib/incidents/search");
+    const result = await searchWarnings({ region: "UK", query: "chocolate" });
+    expect(result.items.map((item) => item.slug)).toEqual(["chocolate-warning-0", "chocolate-warning-2"]);
+    expect(result.total).toBe(2);
+    expect(calls("listActivePage")[0][1].foodOnly).toBe(true);
+  });
+
   it("finds a match that exists only on a later backend page", async () => {
     query.mockImplementation(async (ref, args) => {
       if (getFunctionName(ref) === "incidents:getDatasetStatus") return { ...status, version: revision };

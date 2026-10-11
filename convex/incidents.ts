@@ -259,6 +259,7 @@ export const listActivePage = query({
     cursor: v.union(v.string(), v.null()),
     snapshot: v.optional(v.boolean()),
     expectedVersion: v.optional(v.string()),
+    foodOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     if (args.expectedVersion !== undefined && args.expectedVersion !== await datasetVersion(ctx, args.region)) {
@@ -271,7 +272,8 @@ export const listActivePage = query({
       .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor: args.cursor });
     return {
       ...page,
-      page: page.page.filter((row) => args.snapshot ? !row.isDemo : activeMatchData(row, now, false)).map((row) => ({
+      page: page.page.filter((row) => (args.snapshot ? !row.isDemo : activeMatchData(row, now, false))
+        && (!args.foodOnly || rowSuperCategories(row).includes("Food"))).map((row) => ({
         id: row.incidentId,
         title: row.title,
         slug: row.slug,
@@ -598,7 +600,7 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
     const incoming = await source.fetchIncidents(existingSourceIds);
     found = incoming.length;
     const items: ImportItem[] = incoming.map((item) => serialiseIncident(item, source, runId));
-    await attachProductCategoryTags(ctx, items);
+    if (source.superCategory === "Food") await attachProductCategoryTags(ctx, items);
     for (let offset = 0; offset < items.length; offset += UPSERT_BATCH_SIZE) {
       try {
         const result = await ctx.runMutation(internal.incidents.upsertBatch, {

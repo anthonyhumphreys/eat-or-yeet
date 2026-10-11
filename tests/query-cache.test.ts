@@ -55,6 +55,27 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("warning data caches", () => {
+  it("does not reuse food-era cached pages or details after the category shape changes", async () => {
+    const url = "https://test.convex.cloud";
+    entries.set(JSON.stringify([["public-warning-page-v5"], ["UK", null, url, revision]]),
+      Promise.resolve({ page: [{ ...row, id: row.incidentId }], isDone: true, continueCursor: "done" }));
+    entries.set(JSON.stringify([["warning-details-v1"], ["biscuit-recall", false, url, revision]]),
+      Promise.resolve({ ...row, _id: row.incidentId }));
+    const implementation = query.getMockImplementation()!;
+    query.mockImplementation(async (...args) => {
+      const result = await implementation(...args);
+      const name = getFunctionName(args[0]);
+      if (name === "incidents:getBySlug") return { ...result, superCategories: ["Food"] };
+      if (name === "incidents:listActivePage") return { ...result, page: result.page.map((item: typeof row) => ({ ...item, superCategories: ["Food"] })) };
+      return result;
+    });
+    const db = await import("@/db/queries");
+    expect((await db.listActivePublicIncidents("UK"))[0].superCategories).toEqual(["Food"]);
+    expect((await db.getIncidentBySlug("biscuit-recall"))?.superCategories).toEqual(["Food"]);
+    expect(calls("getBySlug")).toHaveLength(1);
+    expect(calls("listActivePage")).toHaveLength(1);
+  });
+
   it("shares unchanged warning pages across requests and server workers", async () => {
     let db = await import("@/db/queries");
     await db.listActivePublicIncidents("UK");

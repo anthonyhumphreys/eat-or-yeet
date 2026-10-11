@@ -109,8 +109,23 @@ describe("browse-only medicine recalls", () => {
     expect(medicine).toMatchObject({ categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"] });
     expect(listed.page.find((row) => row.slug === "biscuit-recall")?.superCategories).toEqual(["Food"]);
 
+    const foodWarnings = await t.query(api.incidents.listActivePage, { region: "US", cursor: null, snapshot: true, foodOnly: true });
+    expect(foodWarnings.page.map((row) => row.slug)).toEqual(["biscuit-recall"]);
+
     const checked = await t.query(api.incidents.getActivePage, { region: "US", cursor: null, snapshot: true });
     expect(checked.page.map((row) => row.slug)).toEqual(["biscuit-recall"]);
+  });
+
+  it("keeps legacy food projections available to food-only consumers", async () => {
+    const t = createBackend();
+    await t.mutation(internal.incidents.upsertBatch, { items: [food()] });
+    await t.run(async (ctx) => {
+      const row = await ctx.db.query("incidentMatchData").first();
+      await ctx.db.patch(row!._id, { superCategories: undefined });
+    });
+    const listed = await t.query(api.incidents.listActivePage, { region: "US", cursor: null, snapshot: true, foodOnly: true });
+    expect(listed.page).toHaveLength(1);
+    expect(listed.page[0].superCategories).toEqual(["Food"]);
   });
 
   it("does not let the drug source gate food checks", async () => {
