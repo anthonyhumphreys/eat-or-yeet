@@ -23,7 +23,7 @@ Verify page contents and public access before adding the URLs to a submission pa
 
 Use [ChatGPT Plugins](https://chatgpt.com/plugins), Add and Add custom MCP server to create a development connection. Enter Eat or Yeet and the package's endpoint, `https://www.eatoryeet.app/mcp`, with No authentication. The original bare-domain address returned a 308 cross-origin redirect that the MCP client refused. The package now uses the canonical hostname. Choose Connect Eat or Yeet, then start a new chat, type @ and select Eat or Yeet. Account and workspace policies may restrict custom connections.
 
-Run these draft review cases. All are **Not run in ChatGPT**. SDK/unit checks are separate evidence and do not prove ChatGPT tool selection or card rendering.
+Five supported scenarios have been exercised in a personal ChatGPT MCP connection. See [actual observations and remaining checks](chatgpt-plugin-test-results.md). Unsupported-request results, CSP enforcement and bundled skills remain unverified. SDK/unit checks are separate evidence.
 
 | Case | User prompt | Observable expectation |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Write the five positive and three negative cases into `extensions.com.openai.rev
 
 ## 3. Build and inspect the final upload
 
-The local preparation copy is `dist/submission-preparation/eat-or-yeet/`, with an incomplete archive at `dist/submission-preparation/eat-or-yeet-public-DRAFT.zip`. It preserves the portable source. The draft has the verified publisher name, a 256-pixel PNG inspected on light and dark backgrounds, five positive and three negative prompts, a no-commerce declaration, release notes and explicitly unrestricted country availability. Its ZIP contents and icon dimensions were inspected. None of its cases has been run in ChatGPT. The final category, support/terms URLs and demo URL remain absent. These local artifacts are ignored by Git and are not a release.
+The local preparation copy is `dist/submission-preparation/eat-or-yeet/`, with an incomplete archive at `dist/submission-preparation/eat-or-yeet-public-DRAFT.zip`. It preserves the portable source. The draft has the verified publisher name, a 256-pixel PNG inspected on light and dark backgrounds, five positive and three negative prompts, a no-commerce declaration, release notes and explicitly unrestricted country availability. Its ZIP contents and icon dimensions were inspected. Five supported scenarios have been exercised through a personal MCP connection; see the host-test report for the verification limits. The final category, support/terms URLs and demo URL remain absent. These local artifacts are ignored by Git and are not a release.
 
 `pnpm package:plugin` builds `dist/eat-or-yeet-plugin.zip` from the current portable source. Its successful build establishes package structure, not public-submission readiness. The public copy must also contain the completed listing, PNG assets and review materials. Update the packaging path or build the separate copy explicitly before calling that upload ready.
 
