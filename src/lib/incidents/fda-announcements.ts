@@ -351,6 +351,7 @@ export const fdaAnnouncementsSource: IncidentSource = {
   name: "FDA recall announcements",
   url: new URL(INDEX_PATH, FDA_ORIGIN).toString(),
   region: "US",
+  superCategory: "Food",
   scope: "Food, beverage and dietary-supplement notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
   async fetchIncidents() {
     const listings = await fetchListings();

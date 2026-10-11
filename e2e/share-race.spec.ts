@@ -17,7 +17,7 @@ test("sharing a filtered US list uses visible filters before the address bar syn
     });
   });
 
-  const snacks = page.getByRole("group", { name: "Filter by food type" }).getByRole("link", { name: /^Snacks & sweets/ });
+  const snacks = page.getByRole("group", { name: "Filter by category" }).getByRole("link", { name: /^Snacks & sweets/ });
   await snacks.click();
   await expect(snacks).toHaveAttribute("aria-current", "true");
   expect(new URL(page.url()).searchParams.has("category")).toBe(false);

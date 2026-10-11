@@ -5,7 +5,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getPublicWarningSnapshot } from "@/db/queries";
 import type { DatasetStatus } from "@/lib/domain/types";
 import type { Region } from "@/lib/domain/schemas";
-import { foodCategories, type FoodCategory } from "@/lib/incidents/browse";
+import { foodCategories, rowSuperCategories, type FoodCategory } from "@/lib/incidents/browse";
 import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/hazard";
 import { normaliseText } from "@/lib/matching/normalise";
 import { securitySecret } from "@/lib/security/config";
@@ -155,7 +155,7 @@ export async function searchWarnings(
     boundaryAt = cursor.boundaryAt;
   }
 
-  const items = snapshot.rows.filter((row) => isActiveAt(row, asOf) && matches(row, filters))
+  const items = snapshot.rows.filter((row) => rowSuperCategories(row).includes("Food") && isActiveAt(row, asOf) && matches(row, filters))
     .sort((a, b) => b.updatedAt - a.updatedAt || a.slug.localeCompare(b.slug));
   const page = items.slice(offset, offset + pageSize);
   const nextOffset = offset + page.length;

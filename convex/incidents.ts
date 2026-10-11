@@ -1,12 +1,12 @@
 import { ConvexError, v } from "convex/values";
 
 import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
-import { fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
+import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
 import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "../src/lib/incidents/types";
-import { browseCategories, namedRetailers } from "../src/lib/incidents/browse";
+import { browseCategories, incidentSuperCategories, medicineBrowseCategories, namedRetailers, rowSuperCategories, type ProductCategory } from "../src/lib/incidents/browse";
 import { buildDatasetStatus, type IngestionRunSummary } from "../src/lib/incidents/dataset-status";
 import { cleanupNeedsContinuation, EPHEMERAL_CLEANUP_BATCH_SIZE } from "../src/lib/incidents/cleanup-batches";
 import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
@@ -20,10 +20,13 @@ import { sameIncidentContent } from "../src/lib/incidents/unchanged";
 import { incidentFingerprint } from "../src/lib/incidents/fingerprint";
 import { IMPORT_ARCHIVE_AUDIT_MS, invalidateImportState } from "./lib/import_state";
 
-const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource];
+const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource, fdaDrugSource];
+// Pack checks only cover food, so only food sources gate a "no match" result.
+const checkSources = sources.filter((source) => source.superCategory === "Food");
 const UPSERT_BATCH_SIZE = 25;
 const DATASET_PAGE_SIZE = 100;
 const LEGACY_FDA_REPAIR_PAGE_SIZE = 25;
+const REPORTED_CURSOR_PREFIX = "reported:";
 
 function normalisedTargetValue(target: NormalisedTarget): string {
   if (target.type === "gtin") return normaliseGtin(target.value);
@@ -130,6 +133,11 @@ function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionIn
     summary: item.summary,
     productCategoryTags: item.productCategoryTags,
   };
+  const sourceKey = item.sourceKey ?? inferSourceKey(item.authority, item.sourceId);
+  const sourceSuperCategory = sources.find((source) => source.id === sourceKey)?.superCategory;
+  const categories: ProductCategory[] = sourceSuperCategory === "Medical"
+    ? medicineBrowseCategories(item.originalSourceData)
+    : browseCategories(browseSource);
 
   return {
     incidentId,
@@ -152,8 +160,9 @@ function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionIn
     severity: item.severity,
     confidence: item.confidence,
     targets: item.targets,
-    sourceKey: item.sourceKey ?? inferSourceKey(item.authority, item.sourceId),
-    categories: browseCategories(browseSource),
+    sourceKey,
+    categories,
+    superCategories: incidentSuperCategories({ source: sourceSuperCategory, title: item.title, summary: item.summary, categories }),
     stores: namedRetailers(browseSource),
   };
 }
@@ -161,7 +170,8 @@ function compactMatchRecord(incidentId: Id<"incidents">, item: MatchProjectionIn
 function inferSourceKey(authority: string, sourceId: string): string | undefined {
   if (authority === "Food Standards Agency") return "fsa";
   if (authority === "U.S. Food and Drug Administration") {
-    return sourceId.startsWith("announcement:") ? "fda-announcements" : "fda";
+    if (sourceId.startsWith("announcement:")) return "fda-announcements";
+    return sourceId.startsWith("D-") ? "fda-drugs" : "fda";
   }
   if (authority.startsWith("U.S. Department of Agriculture") && authority.includes("Food Safety and Inspection Service")) return "fsis";
   return undefined;
@@ -188,6 +198,8 @@ export const getActivePage = query({
       ...page,
       page: page.page
         .filter((row) => args.snapshot ? (args.includeDemo || !row.isDemo) : activeMatchData(row, now, args.includeDemo ?? false))
+        // Pack checks only match food recalls; medicines and other products are browse-only for now.
+        .filter((row) => rowSuperCategories(row).includes("Food"))
         .map((row) => ({
           incidentId: row.incidentId,
           title: row.title,
@@ -237,6 +249,7 @@ export const getBySlug = query({
       severity: row.severity,
       confidence: row.confidence,
       targets: row.targets,
+      superCategories: rowSuperCategories(row),
     };
   },
 });
@@ -247,19 +260,31 @@ export const listActivePage = query({
     cursor: v.union(v.string(), v.null()),
     snapshot: v.optional(v.boolean()),
     expectedVersion: v.optional(v.string()),
+    foodOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     if (args.expectedVersion !== undefined && args.expectedVersion !== await datasetVersion(ctx, args.region)) {
       throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
     }
     const now = args.snapshot ? 0 : Date.now();
+    // Page each indexed status separately so reports do not become active
+    // recalls and browsing does not scan every resolved incident.
+    const reports = !args.foodOnly && args.cursor?.startsWith(REPORTED_CURSOR_PREFIX);
+    const cursor = reports ? args.cursor!.slice(REPORTED_CURSOR_PREFIX.length) || null : args.cursor;
     const page = await ctx.db
       .query("incidentMatchData")
-      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "active"))
-      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor: args.cursor });
+      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", reports ? "reported" : "active"))
+      .paginate({ numItems: DATASET_PAGE_SIZE, maximumBytesRead: 512 * 1024, cursor });
+    const nextReports = !args.foodOnly && !reports && page.isDone && Boolean(await ctx.db
+      .query("incidentMatchData")
+      .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "reported"))
+      .first());
     return {
       ...page,
-      page: page.page.filter((row) => args.snapshot ? !row.isDemo : activeMatchData(row, now, false)).map((row) => ({
+      isDone: page.isDone && !nextReports,
+      continueCursor: nextReports ? REPORTED_CURSOR_PREFIX : reports ? REPORTED_CURSOR_PREFIX + page.continueCursor : page.continueCursor,
+      page: page.page.filter((row) => (args.snapshot ? !row.isDemo : !row.isDemo && row.startsAt <= now && (!row.endsAt || row.endsAt > now))
+        && (!args.foodOnly || rowSuperCategories(row).includes("Food"))).map((row) => ({
         id: row.incidentId,
         title: row.title,
         slug: row.slug,
@@ -275,6 +300,7 @@ export const listActivePage = query({
         publishedAt: row.publishedAt,
         updatedAt: row.updatedAt,
         categories: row.categories,
+        superCategories: rowSuperCategories(row),
         stores: row.stores,
       })),
     };
@@ -289,7 +315,7 @@ export const getDatasetVersion = query({
 export const getDatasetStatus = query({
   args: { region: v.union(v.literal("UK"), v.literal("US")) },
   handler: async (ctx, args) => {
-    const requiredSources = sources.filter((source) => source.region === args.region);
+    const requiredSources = checkSources.filter((source) => source.region === args.region);
     const pairs = await Promise.all(requiredSources.map(async (source) => {
       const [latest, latestSuccessful] = await Promise.all([
         ctx.db
@@ -568,7 +594,7 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
 
   try {
     const existingSourceIds: string[] = [];
-    if (source.id === "fda" || source.id === "fsis") {
+    if (source.id === "fda" || source.id === "fda-drugs" || source.id === "fsis") {
       if (source.id === "fda") await ctx.runAction(internal.incidents.repairLegacyFdaSourceIdsInternal, {});
       let cursor: string | null = null;
       let isDone = false;
@@ -585,7 +611,7 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
     const incoming = await source.fetchIncidents(existingSourceIds);
     found = incoming.length;
     const items: ImportItem[] = incoming.map((item) => serialiseIncident(item, source, runId));
-    await attachProductCategoryTags(ctx, items);
+    if (source.superCategory === "Food") await attachProductCategoryTags(ctx, items);
     for (let offset = 0; offset < items.length; offset += UPSERT_BATCH_SIZE) {
       try {
         const result = await ctx.runMutation(internal.incidents.upsertBatch, {

@@ -1,4 +1,5 @@
 import type { TargetType } from "@/lib/domain/schemas";
+import type { SuperCategory } from "@/lib/incidents/super-categories";
 
 export type NormalisedTarget = {
   type: TargetType;
@@ -17,7 +18,7 @@ export type NormalisedIncident = {
   title: string;
   slug: string;
   region: "UK" | "US";
-  status: "active" | "resolved";
+  status: "active" | "resolved" | "reported";
   hazard: string | null;
   pathogen: string | null;
   summary: string;
@@ -40,6 +41,8 @@ export interface IncidentSource {
   name: string;
   url: string;
   region: "UK" | "US";
+  /** What the source covers. Only food sources feed pack checks and their health gate. */
+  superCategory: SuperCategory;
   scope: string;
   fetchIncidents(existingSourceIds?: string[]): Promise<NormalisedIncident[]>;
 }

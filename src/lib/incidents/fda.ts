@@ -6,8 +6,18 @@ import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "@/lib
 import { isValidGtin, slugify } from "@/lib/matching/normalise";
 
 const FDA_API = "https://api.fda.gov/food/enforcement.json";
+const FDA_DRUG_API = "https://api.fda.gov/drug/enforcement.json";
 const PAGE_SIZE = 1_000;
 const DETAIL_CONCURRENCY = 5;
+
+/** One openFDA enforcement-report endpoint. Food and drug reports share the same record shape. */
+type EnforcementEndpoint = {
+  api: string;
+  label: string;
+  consumerAdvice: string;
+  historicalReports?: boolean;
+  extraTargets?: (record: z.infer<typeof recordSchema>) => NormalisedTarget[];
+};
 
 const recordSchema = z.object({
   status: z.string().trim().min(1),
@@ -131,7 +141,7 @@ function sourceIdForRecord(record: z.infer<typeof recordSchema>): string {
   return record.recall_number.trim() || legacySourceId(record);
 }
 
-export function parseFdaRecord(value: unknown): NormalisedIncident {
+function parseEnforcementRecord(value: unknown, endpoint: EnforcementEndpoint): NormalisedIncident {
   const record = recordSchema.parse(value);
   const productName = record.product_description.trim().slice(0, 300);
   const recallNumber = record.recall_number.trim();
@@ -139,7 +149,7 @@ export function parseFdaRecord(value: unknown): NormalisedIncident {
   const reportedAt = parseFdaDate(record.report_date, "report date");
   const startsAt = parseFdaDate(record.recall_initiation_date, "recall initiation date");
   const officialApiUrl = recallNumber
-    ? `${FDA_API}?search=recall_number:%22${encodeURIComponent(recallNumber)}%22`
+    ? `${endpoint.api}?search=recall_number:%22${encodeURIComponent(recallNumber)}%22`
     : "https://www.accessdata.fda.gov/scripts/ires/index.cfm#/search/";
   const severity = record.classification === "Class I" ? "critical" : record.classification === "Class II" ? "high" : "medium";
   const eventGroup = "record-product";
@@ -147,17 +157,18 @@ export function parseFdaRecord(value: unknown): NormalisedIncident {
     { type: "producer", value: record.recalling_firm, groupId: eventGroup, weight: 45, confidence: 1 },
     { type: "product", value: productName, groupId: eventGroup, weight: 35, confidence: 0.8 },
     ...codeTargets(record),
+    ...(endpoint.extraTargets?.(record) ?? []),
   ];
 
   return {
     title: `${record.recalling_firm} recall: ${productName}`,
     slug: slugify(`fda-${sourceId}`),
     region: "US",
-    status: incidentStatus(record.status),
+    status: endpoint.historicalReports ? "reported" : incidentStatus(record.status),
     hazard: record.reason_for_recall,
     pathogen: pathogenFrom(record.reason_for_recall),
     summary: record.product_description,
-    consumerAdvice: "Do not consume an affected product. Follow the firm's instructions and the latest FDA enforcement report.",
+    consumerAdvice: endpoint.consumerAdvice,
     authority: "U.S. Food and Drug Administration",
     authorityUrl: officialApiUrl,
     sourceId,
@@ -172,15 +183,32 @@ export function parseFdaRecord(value: unknown): NormalisedIncident {
   };
 }
 
-async function fetchStatusPage(status: string, skip: number, requestedLimit: number) {
-  const url = new URL(FDA_API);
+export function parseFdaRecord(value: unknown): NormalisedIncident {
+  return parseEnforcementRecord(value, foodEndpoint);
+}
+
+export function parseFdaDrugRecord(value: unknown): NormalisedIncident {
+  return parseEnforcementRecord(value, drugEndpoint);
+}
+
+// The key is optional: without one openFDA allows 1,000 requests a day per IP.
+// It goes in a header so it never appears in URLs, which are logged in errors.
+function openFdaHeaders(): Record<string, string> {
+  const key = process.env.OPENFDA_API_KEY?.trim();
+  return key
+    ? { Accept: "application/json", Authorization: `Basic ${btoa(`${key}:`)}` }
+    : { Accept: "application/json" };
+}
+
+async function fetchStatusPage(endpoint: EnforcementEndpoint, status: string, skip: number, requestedLimit: number) {
+  const url = new URL(endpoint.api);
   url.searchParams.set("search", `status:\"${status}\"`);
   url.searchParams.set("sort", "report_date:desc");
   url.searchParams.set("limit", String(requestedLimit));
   url.searchParams.set("skip", String(skip));
   const payload = await fetchOfficialJson(url.toString(), {
-    sourceName: "FDA openFDA",
-    headers: { Accept: "application/json" },
+    sourceName: endpoint.label,
+    headers: openFdaHeaders(),
     timeoutMs: 20_000,
     cache: "no-store",
   });
@@ -192,13 +220,13 @@ async function fetchStatusPage(status: string, skip: number, requestedLimit: num
   return parsed.data;
 }
 
-async function fetchAllWithStatus(status: string): Promise<NormalisedIncident[]> {
-  const firstPage = await fetchStatusPage(status, 0, PAGE_SIZE);
+async function fetchAllWithStatus(endpoint: EnforcementEndpoint, status: string): Promise<NormalisedIncident[]> {
+  const firstPage = await fetchStatusPage(endpoint, status, 0, PAGE_SIZE);
   const total = firstPage.meta.results.total;
   const pages = [firstPage.results];
   for (let skip = PAGE_SIZE; skip < total; skip += PAGE_SIZE) {
     const limit = Math.min(PAGE_SIZE, total - skip);
-    const page = await fetchStatusPage(status, skip, limit);
+    const page = await fetchStatusPage(endpoint, status, skip, limit);
     if (page.meta.results.total !== total) throw new Error(`FDA ${status} total changed while paging (${total} to ${page.meta.results.total})`);
     pages.push(page.results);
   }
@@ -211,16 +239,16 @@ async function fetchAllWithStatus(status: string): Promise<NormalisedIncident[]>
     if (ids.has(id)) throw new Error(`FDA ${status} query repeated recall ${id}`);
     ids.add(id);
   }
-  return records.map(parseFdaRecord);
+  return records.map((record) => parseEnforcementRecord(record, endpoint));
 }
 
-async function fetchRecallByNumber(recallNumber: string): Promise<NormalisedIncident> {
-  const url = new URL(FDA_API);
+async function fetchRecallByNumber(endpoint: EnforcementEndpoint, recallNumber: string): Promise<NormalisedIncident> {
+  const url = new URL(endpoint.api);
   url.searchParams.set("search", `recall_number:\"${recallNumber}\"`);
   url.searchParams.set("limit", "2");
   const payload = await fetchOfficialJson(url.toString(), {
-    sourceName: "FDA openFDA status lookup",
-    headers: { Accept: "application/json" },
+    sourceName: `${endpoint.label} status lookup`,
+    headers: openFdaHeaders(),
     timeoutMs: 20_000,
     cache: "no-store",
   });
@@ -228,12 +256,12 @@ async function fetchRecallByNumber(recallNumber: string): Promise<NormalisedInci
   if (!parsed.success || parsed.data.results.length !== 1) {
     throw new Error(`FDA status lookup for ${recallNumber} was missing or ambiguous`);
   }
-  const incident = parseFdaRecord(parsed.data.results[0]);
+  const incident = parseEnforcementRecord(parsed.data.results[0], endpoint);
   if (incident.sourceId !== recallNumber) throw new Error(`FDA status lookup returned a different recall for ${recallNumber}`);
   return incident;
 }
 
-async function resolvePreviouslyActive(existingSourceIds: string[], current: NormalisedIncident[]): Promise<NormalisedIncident[]> {
+async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSourceIds: string[], current: NormalisedIncident[]): Promise<NormalisedIncident[]> {
   const currentIds = new Set(current.map((incident) => incident.sourceId));
   const missingIds = [...new Set(existingSourceIds)].filter((sourceId) => !currentIds.has(sourceId));
   const needsLegacyAliases = missingIds.some((sourceId) => sourceId.startsWith("unclassified-"));
@@ -270,7 +298,7 @@ async function resolvePreviouslyActive(existingSourceIds: string[], current: Nor
 
   for (let index = 0; index < lookupIds.length; index += DETAIL_CONCURRENCY) {
     const group = lookupIds.slice(index, index + DETAIL_CONCURRENCY);
-    const results = await Promise.allSettled(group.map(fetchRecallByNumber));
+    const results = await Promise.allSettled(group.map((recallNumber) => fetchRecallByNumber(endpoint, recallNumber)));
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (failures.length) {
       const reason = failures[0].reason;
@@ -281,24 +309,71 @@ async function resolvePreviouslyActive(existingSourceIds: string[], current: Nor
   return lookedUp;
 }
 
+async function fetchEnforcementIncidents(endpoint: EnforcementEndpoint, existingSourceIds: string[]): Promise<NormalisedIncident[]> {
+  const ongoing = await fetchAllWithStatus(endpoint, "Ongoing");
+  const statusChecks = await resolvePreviouslyActive(endpoint, existingSourceIds, ongoing);
+  const combined = [...ongoing, ...statusChecks];
+  const byId = new Map<string, NormalisedIncident>();
+  for (const incident of combined) {
+    const existing = byId.get(incident.sourceId);
+    if (existing && existing.status !== incident.status) {
+      throw new Error(`FDA returned conflicting statuses for recall ${incident.sourceId}`);
+    }
+    byId.set(incident.sourceId, incident);
+  }
+  return [...byId.values()];
+}
+
+const foodEndpoint: EnforcementEndpoint = {
+  api: FDA_API,
+  label: "FDA openFDA",
+  consumerAdvice: "Do not consume an affected product. Follow the firm's instructions and the latest FDA enforcement report.",
+};
+
+const openFdaFieldsSchema = z.object({
+  brand_name: z.array(z.string()).optional().default([]),
+  upc: z.array(z.string()).optional().default([]),
+}).passthrough();
+
+// openFDA adds harmonised brand names and package barcodes to drug reports
+// when it can link them to a listed product.
+function drugTargets(record: z.infer<typeof recordSchema>): NormalisedTarget[] {
+  const parsed = openFdaFieldsSchema.safeParse(record.openfda ?? {});
+  if (!parsed.success) return [];
+  const brands = [...new Set(parsed.data.brand_name.map((brand) => brand.trim()).filter(Boolean))];
+  const gtins = [...new Set(parsed.data.upc.map((upc) => upc.replace(/\D/g, "")).filter(isValidGtin))];
+  return [
+    ...brands.map((value): NormalisedTarget => ({ type: "brand", value, groupId: "record-product", weight: 28, confidence: 0.9 })),
+    ...gtins.map((value, index): NormalisedTarget => ({ type: "gtin", value, groupId: `openfda-upc-${index}`, weight: 70, confidence: 0.9 })),
+  ];
+}
+
+const drugEndpoint: EnforcementEndpoint = {
+  api: FDA_DRUG_API,
+  label: "FDA openFDA drugs",
+  // FDA freezes drug-enforcement status after publication. This is evidence
+  // of a published recall, not evidence that the recall is still ongoing.
+  historicalReports: true,
+  consumerAdvice: "Check the lot number on your pack against this recall and follow the firm's instructions. Do not stop taking a prescribed medicine without talking to a pharmacist or doctor first.",
+  extraTargets: drugTargets,
+};
+
 export const fdaSource: IncidentSource = {
   id: "fda",
   name: "U.S. Food and Drug Administration",
   url: FDA_API,
   region: "US",
+  superCategory: "Food",
   scope: "All openFDA Food Enforcement Reports with status Ongoing, plus explicit status checks for previously active recalls absent from that set.",
-  async fetchIncidents(existingSourceIds = []) {
-    const ongoing = await fetchAllWithStatus("Ongoing");
-    const statusChecks = await resolvePreviouslyActive(existingSourceIds, ongoing);
-    const combined = [...ongoing, ...statusChecks];
-    const byId = new Map<string, NormalisedIncident>();
-    for (const incident of combined) {
-      const existing = byId.get(incident.sourceId);
-      if (existing && existing.status !== incident.status) {
-        throw new Error(`FDA returned conflicting statuses for recall ${incident.sourceId}`);
-      }
-      byId.set(incident.sourceId, incident);
-    }
-    return [...byId.values()];
-  },
+  fetchIncidents: (existingSourceIds = []) => fetchEnforcementIncidents(foodEndpoint, existingSourceIds),
+};
+
+export const fdaDrugSource: IncidentSource = {
+  id: "fda-drugs",
+  name: "FDA drug recalls",
+  url: FDA_DRUG_API,
+  region: "US",
+  superCategory: "Medical",
+  scope: "Published openFDA Drug Enforcement Reports marked Ongoing at publication. Current recall status is unverified because FDA does not update this field after publication.",
+  fetchIncidents: () => fetchAllWithStatus(drugEndpoint, "Ongoing"),
 };

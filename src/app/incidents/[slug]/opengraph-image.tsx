@@ -31,7 +31,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex" }}>
-          <div style={{ display: "flex", padding: "8px 20px", borderRadius: 999, background: "#9e1b14", color: "white", fontSize: 28, fontWeight: 800 }}>{hazard ? `Recall · ${hazard}` : "Recall"}</div>
+          <div style={{ display: "flex", padding: "8px 20px", borderRadius: 999, background: "#9e1b14", color: "white", fontSize: 28, fontWeight: 800 }}>{hazard ? `${incident?.status === "reported" ? "Published report" : "Recall"} · ${hazard}` : "Recall"}</div>
         </div>
         <div style={{ marginTop: 26, maxWidth: 1060, fontSize: 64, fontWeight: 900, letterSpacing: "-2px", lineHeight: 1.06 }}>{clip(incident?.title ?? "Current food recall", 90)}</div>
         {incident?.consumerAdvice ? <div style={{ marginTop: 22, maxWidth: 1000, fontSize: 32, lineHeight: 1.25, color: "#4a443b" }}>{clip(incident.consumerAdvice, 120)}</div> : null}

@@ -10,9 +10,9 @@ import { WarningFeed } from "@/components/incidents/warning-feed";
 import { RegionalNews } from "@/components/news/regional-news";
 
 const rows = [
-  { id: "1", slug: "chocolate", title: "Waitrose recalls milk chocolate", summary: "An affected batch", hazard: "Undeclared milk", pathogen: null, region: "UK", authority: "Food Standards Agency", categories: ["Snacks & sweets", "Dairy & eggs"], stores: ["Waitrose"], updatedAt: new Date("2026-10-07T12:00:00Z") },
-  { id: "2", slug: "bread", title: "Bread recall", summary: "Check the batch", hazard: "Contamination of product with Listeria monocytogenes", pathogen: "Listeria monocytogenes", region: "UK", authority: "Food Standards Agency", categories: ["Bakery & grains"], stores: ["Tesco"], updatedAt: new Date("2026-10-06T12:00:00Z") },
-  { id: "3", slug: "us-eggs", title: "US eggs recalled", summary: "Salmonella", hazard: "Salmonella", pathogen: "Salmonella", region: "US", authority: "FDA", categories: ["Dairy & eggs"], stores: [], updatedAt: new Date("2026-10-05T12:00:00Z") },
+  { id: "1", slug: "chocolate", title: "Waitrose recalls milk chocolate", summary: "An affected batch", hazard: "Undeclared milk", pathogen: null, region: "UK", authority: "Food Standards Agency", categories: ["Snacks & sweets", "Dairy & eggs"], superCategories: ["Food"], stores: ["Waitrose"], updatedAt: new Date("2026-10-07T12:00:00Z") },
+  { id: "2", slug: "bread", title: "Bread recall", summary: "Check the batch", hazard: "Contamination of product with Listeria monocytogenes", pathogen: "Listeria monocytogenes", region: "UK", authority: "Food Standards Agency", categories: ["Bakery & grains"], superCategories: ["Food"], stores: ["Tesco"], updatedAt: new Date("2026-10-06T12:00:00Z") },
+  { id: "3", slug: "us-eggs", title: "US eggs recalled", summary: "Salmonella", hazard: "Salmonella", pathogen: "Salmonella", region: "US", authority: "FDA", categories: ["Dairy & eggs"], superCategories: ["Food"], stores: [], updatedAt: new Date("2026-10-05T12:00:00Z") },
 ];
 
 // The recall list itself, after the top alert.
@@ -37,6 +37,31 @@ async function render(params = {}, region: "UK" | "US" = "UK") {
 }
 
 describe("warnings landing feed", () => {
+  it("adds a kind-of-product row once a region has more than food, and filters by it", async () => {
+    const medicine = { ...rows[2], id: "4", slug: "infant-drops", title: "Infant drops recalled", hazard: "Subpotent drug", pathogen: null, categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"], updatedAt: new Date("2026-10-04T12:00:00Z") };
+    listWarnings.mockResolvedValue([...rows, medicine]);
+
+    const uk = await render();
+    expect(uk).not.toContain('aria-label="Filter by kind of product"');
+
+    const everything = await render({}, "US");
+    expect(everything).toContain('aria-label="Filter by kind of product"');
+    expect(everything).toContain('href="/?region=US&amp;type=Medical"');
+    expect(everything).not.toContain("type=Cosmetics");
+    expect(warningLinks(everything)).toHaveLength(2);
+
+    const medical = await render({ type: "Medical" }, "US");
+    expect(warningLinks(medical)).toEqual(['href="/incidents/infant-drops"']);
+    expect(medical).toContain('href="/?region=US&amp;type=Medical&amp;category=Over-the-counter+medicines"');
+    expect(medical).not.toContain("category=Supplements");
+    expect(medical).toContain("Published report · current status unverified");
+    const empty = await render({ type: "Medical", q: "not-a-real-medicine" }, "US");
+    expect(empty).not.toContain("Check its codes and dates");
+    expect(empty).toContain("ask a pharmacist");
+    listWarnings.mockResolvedValue([medicine]);
+    expect(await render({ type: "Medical" }, "US")).not.toContain("Top alert");
+  });
+
   it("renders stable September abbreviations and keeps London date boundaries", async () => {
     listWarnings.mockResolvedValue([
       { ...rows[0], updatedAt: new Date("2026-09-30T12:00:00Z") },
@@ -53,7 +78,7 @@ describe("warnings landing feed", () => {
     expect(html).not.toContain("US eggs recalled");
     expect(warningLinks(html)).toHaveLength(2);
     expect(list(html).indexOf("Waitrose recalls milk chocolate")).toBeLessThan(list(html).indexOf("Bread recall"));
-    expect(html).toContain('aria-label="Filter by food type"');
+    expect(html).toContain('aria-label="Filter by category"');
     expect(html).toContain('href="/?region=UK&amp;category=Bakery+%26+grains"');
     expect(html).toContain('href="/?region=UK&amp;category=Supplements"');
   });

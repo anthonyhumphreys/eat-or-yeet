@@ -69,6 +69,12 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("warning details service", () => {
+  it("keeps medicines browse-only even when an integration supplies their exact slug", async () => {
+    getIncidentBySlug.mockResolvedValue({ ...incident, superCategories: ["Baby", "Medical"] });
+    const { getWarningDetails } = await import("@/lib/incidents/details");
+    expect(await getWarningDetails({ slug: incident.slug, pageSize: 20 })).toBeNull();
+  });
+
   it("paginates whole affected groups and keeps source codes and dates intact", async () => {
     const { getWarningDetails } = await import("@/lib/incidents/details");
     const first = await getWarningDetails({ slug: incident.slug, pageSize: 20 });

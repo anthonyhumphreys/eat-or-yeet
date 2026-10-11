@@ -7,6 +7,7 @@ import { cache } from "react";
 
 import { api } from "@convex/_generated/api";
 import type { DatasetStatus, MatchableIncident } from "@/lib/domain/types";
+import { rowSuperCategories } from "@/lib/incidents/super-categories";
 
 const MATCH_DATA_CACHE_TTL_MS = 5 * 60 * 1_000;
 const MAX_MATCH_DATA_CACHE_ENTRIES = 4;
@@ -149,7 +150,7 @@ const cachedIncidentBySlug = unstable_cache(
     void version;
     return incidentBySlug(slug, includeDemo, url);
   },
-  ["warning-details-v1"],
+  ["warning-details-v3"],
   { revalidate: false },
 );
 
@@ -157,15 +158,15 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   const url = deploymentUrl();
   const version = await fetchQuery(api.incidents.getDatasetVersion, {}, { url });
   const row = await cachedIncidentBySlug(slug, includeDemo, url, version);
-  return row ? mapIncident(row) : null;
+  return row ? { ...mapIncident(row), status: row.status, superCategories: rowSuperCategories(row) } : null;
 });
 
 const cachedPublicListPage = unstable_cache(
-  async (region: Region, cursor: string | null, url: string, version: string) => {
+  async (region: Region, cursor: string | null, url: string, version: string, foodOnly: boolean) => {
     void version;
-    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version }, { url });
+    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version, foodOnly }, { url });
   },
-  ["public-warning-page-v5"],
+  ["public-warning-page-v7"],
   { revalidate: false },
 );
 
@@ -186,7 +187,7 @@ async function listPublicRegion(
   region: Region,
   url: string,
   requestedVersion?: string,
-  options: { signal?: AbortSignal; budget?: SnapshotReadBudget } = {},
+  options: { signal?: AbortSignal; budget?: SnapshotReadBudget; foodOnly?: boolean } = {},
 ) {
   const version = requestedVersion ?? await fetchQuery(api.incidents.getDatasetVersion, { region }, { url });
   const rows: Array<Awaited<ReturnType<typeof cachedPublicListPage>>["page"][number]> = [];
@@ -202,7 +203,7 @@ async function listPublicRegion(
     }
     revisionPages += 1;
     if (budget) budget.pages += 1;
-    const page = await cachedPublicListPage(region, cursor, url, version);
+    const page = await cachedPublicListPage(region, cursor, url, version, options.foodOnly ?? false);
     options.signal?.throwIfAborted();
     if (budget && (
       revisionRows + page.page.length > MAX_PUBLIC_SNAPSHOT_ROWS_PER_REVISION ||
@@ -232,7 +233,7 @@ async function currentPublicRegion(region: Region, url: string) {
   }
 }
 
-/** A complete, revision-keyed public snapshot with eligibility boundaries retained. */
+/** A complete food-warning snapshot for integrations, with eligibility boundaries retained. */
 export async function getPublicWarningSnapshot(region: Region, options: { signal?: AbortSignal } = {}): Promise<{
   rows: PublicIncidentRow[];
   revision: string;
@@ -246,7 +247,7 @@ export async function getPublicWarningSnapshot(region: Region, options: { signal
     const { version: revision, ...status } = await fetchQuery(api.incidents.getDatasetStatus, { region }, { url });
     options.signal?.throwIfAborted();
     try {
-      const rows = await listPublicRegion(region, url, revision, { signal: options.signal, budget });
+      const rows = await listPublicRegion(region, url, revision, { signal: options.signal, budget, foodOnly: true });
       return { rows, revision, asOf: Date.now(), status };
     } catch (error) {
       if (options.signal?.aborted) options.signal.throwIfAborted();
@@ -278,7 +279,7 @@ export async function listActivePublicIncidents(region?: Region) {
       void authorityUrl;
       void sourceId;
       void publishedAt;
-      return { ...row, updatedAt: new Date(row.updatedAt) };
+      return { ...row, superCategories: rowSuperCategories(row), updatedAt: new Date(row.updatedAt) };
     });
 }
 

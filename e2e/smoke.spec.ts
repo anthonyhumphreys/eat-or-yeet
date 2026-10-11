@@ -5,7 +5,7 @@ const location = (page: Page) => page.getByRole("combobox", { name: "Warning loc
 const chooseRegion = (page: Page, label: "United Kingdom" | "United States") => location(page).selectOption({ label });
 const searchBox = (page: Page) => page.getByRole("searchbox", { name: /^Search (UK|US) recalls$/ });
 const checkLink = (page: Page) => page.getByRole("link", { name: "Check a product", exact: true });
-const foodTab = (page: Page, name: string) => page.getByRole("group", { name: "Filter by food type" }).getByRole("link", { name: new RegExp(`^${name}`) });
+const foodTab = (page: Page, name: string) => page.getByRole("group", { name: "Filter by category" }).getByRole("link", { name: new RegExp(`^${name}`) });
 
 // First-visit country questions are covered in region.spec.ts; these tests start with a saved choice.
 test.beforeEach(async ({ context, baseURL }) => {
@@ -16,7 +16,7 @@ test("home leads with recalls and one way to check a product", async ({ page }) 
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "UK food recalls", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UK recalls", level: 1 })).toBeVisible();
   await expect(checkLink(page)).toBeVisible();
   await expect(checkLink(page)).toHaveAttribute("href", "/search");
   await expect(page.getByRole("search")).toBeVisible();
@@ -34,7 +34,7 @@ test("system dark mode hydrates without a framework error", async ({ page }) => 
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "UK food recalls", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UK recalls", level: 1 })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   expect(consoleErrors).toEqual([]);
 });
@@ -237,7 +237,7 @@ test("warning browsing works with reduced motion and without view transition sup
   await expect(listHeading(page, "US")).toBeVisible();
   await page.getByLabel("Hazard", { exact: true }).selectOption("allergen");
   await searchBox(page).fill("no such food warning");
-  await expect(page.getByText("No current warnings match.")).toBeVisible();
+  await expect(page.getByText("No recall reports match.")).toBeVisible();
   await page.getByRole("button", { name: "Remove “no such food warning”" }).click();
   await expect(page.getByRole("heading", { name: /recalls? found$/ })).toBeVisible();
   await expect(page.getByLabel("Hazard", { exact: true })).toHaveValue("allergen");
