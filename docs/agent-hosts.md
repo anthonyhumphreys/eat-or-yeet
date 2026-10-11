@@ -29,7 +29,7 @@ The public [integration guide](https://www.eatoryeet.app/integrations) prioritiz
 
 - [Grok Bot plugins](https://docs.x.ai/grok-bot/team-bots#plugins): custom Remote HTTPS servers are supported. Bot owners or managers can use Setup → Plugins; team connector policies apply.
 - [OpenClaw MCP](https://docs.openclaw.ai/tools/mcp): Control UI → Settings → MCP → Add server, using Streamable HTTP and the canonical endpoint.
-- [Meta Muse connectors](https://www.meta.com/help/artificial-intelligence/1687253048996149/): ask Muse to create a custom connector. Compatibility with this anonymous MCP endpoint remains unverified.
+- [Meta Muse connectors](https://www.meta.com/help/artificial-intelligence/1687253048996149/): Eat or Yeet is not available as a Muse connector. Use the website until a connector is approved and tested.
 - [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp): remote HTTP servers use a `url` entry inside `mcp_servers` in `~/.hermes/config.yaml`. Restart the session or use `/reload-mcp` after adding it.
 
 ### Codex CLI and desktop
@@ -119,7 +119,7 @@ Grok's official docs describe a manual custom MCP connector: open `grok.com/conn
 
 This means Meta's personal AI agent and its **Muse Connector Platform** at `muse.ai`, not Muse Code or an unrelated product named Muse. Meta's official platform describes submission for functional, security, legal, and end-to-end review before a connector appears in Muse. Its guidelines require endpoint/authentication and tool documentation, privacy/data processing information, legal and support contacts, business verification, a test account, test data, and a demo. Start at [Muse Connector Platform](https://muse.ai/platform) and follow its current submission form and guidelines.
 
-Meta also documents asking Muse to create a custom connector. That route has not been tested against this MCP server; do not claim that Muse accepts its anonymous authentication configuration. No Muse account, connector submission, review, or live compatibility has been performed. Treat this as a post-release submission/acceptance gate, not a ready-to-use connection recipe. Do not substitute Muse Code documentation or unrelated projects called Muse.
+No Muse account, connector submission, review, or live compatibility has been performed. The official connector help does not establish that shoppers can add an arbitrary anonymous MCP endpoint. Treat this as a future submission and acceptance step. Do not substitute Muse Code documentation or unrelated projects called Muse.
 
 ## Acceptance walkthrough
 
