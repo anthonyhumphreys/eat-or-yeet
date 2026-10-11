@@ -85,10 +85,12 @@ export function classifyHazard({ title, hazard, pathogen, superCategories }: { t
   if (/break apart|pop off|injury|burn risk/i.test(text)) return { kind: "other", label: "Injury risk" };
   // Medicine recalls (FDA drug enforcement) are mostly about quality, not contamination of food.
   if (/microbial contamination|lack of (?:assurance of )?sterility|non-?sterile|sterility assurance/i.test(text)) return { kind: "spoilage", label: "Contamination" };
-  if (/sub-?potent|super-?potent|\bpotency\b/i.test(text)) return { kind: "other", label: "Wrong strength" };
-  if (/nitrosamine|\bndma\b|\bndea\b|impurit/i.test(text)) return { kind: "other", label: "Impurity" };
-  if (/child[- ]resistant/i.test(text)) return { kind: "other", label: "Not child-resistant" };
-  if (/\bcgmp\b|good manufacturing practice|dissolution|stability|out of specification/i.test(text)) return { kind: "other", label: "Quality failure" };
+  if (superCategories?.includes("Medical")) {
+    if (/sub-?potent|super-?potent|\bpotency\b/i.test(text)) return { kind: "other", label: "Wrong strength" };
+    if (/nitrosamine|\bndma\b|\bndea\b|impurit/i.test(text)) return { kind: "other", label: "Impurity" };
+    if (/child[- ]resistant/i.test(text)) return { kind: "other", label: "Not child-resistant" };
+    if (/\bcgmp\b|good manufacturing practice|dissolution|stability|out of specification/i.test(text)) return { kind: "other", label: "Quality failure" };
+  }
   if (/label|packag|translation|english|declared nutrients|sugar intake|vitamin/i.test(text)) return { kind: "other", label: "Labelling error" };
   return { kind: "other", label: "See notice" };
 }

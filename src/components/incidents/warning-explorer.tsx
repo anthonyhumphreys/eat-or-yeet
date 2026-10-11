@@ -332,7 +332,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
                 ))}
               </div>
             ) : null}
-            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a product is safe. Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</p>
+            <p className="mt-4 max-w-[60ch] text-sm leading-6 text-muted-foreground">No match here does not mean a product is safe.{!type || type === "Food" || type === "Baby" ? <> Have the pack? <Link href="/search" className="font-semibold text-link underline underline-offset-4">Check its codes and dates</Link>.</> : null}</p>
           </div>
         </div>
       )}

@@ -22,11 +22,16 @@ describe("hazard tags", () => {
 
   it("names common medicine recall reasons", () => {
     expect(classifyHazard({ title: "Penicillin V potassium tablets", hazard: "Subpotent drug", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Wrong strength" });
-    expect(classifyHazard({ title: "Example Pharma recall: Infants' Acetaminophen", hazard: "Subpotent drug" })).toEqual({ kind: "other", label: "Wrong strength" });
-    expect(classifyHazard({ title: "Example Pharma recall: Metformin", hazard: "CGMP Deviations: NDMA impurity above the acceptable intake limit" })).toEqual({ kind: "other", label: "Impurity" });
-    expect(classifyHazard({ title: "Example Pharma recall: Saline Nasal Spray", hazard: "Microbial contamination of non-sterile products" })).toEqual({ kind: "spoilage", label: "Contamination" });
-    expect(classifyHazard({ title: "Example Pharma recall: Lidocaine cream", hazard: "Failed child-resistant packaging requirements" })).toEqual({ kind: "other", label: "Not child-resistant" });
-    expect(classifyHazard({ title: "Example Pharma recall: Tablets", hazard: "Failed dissolution specifications" })).toEqual({ kind: "other", label: "Quality failure" });
+    expect(classifyHazard({ title: "Example Pharma recall: Infants' Acetaminophen", hazard: "Subpotent drug", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Wrong strength" });
+    expect(classifyHazard({ title: "Example Pharma recall: Metformin", hazard: "CGMP Deviations: NDMA impurity above the acceptable intake limit", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Impurity" });
+    expect(classifyHazard({ title: "Example Pharma recall: Saline Nasal Spray", hazard: "Microbial contamination of non-sterile products", superCategories: ["Medical"] })).toEqual({ kind: "spoilage", label: "Contamination" });
+    expect(classifyHazard({ title: "Example Pharma recall: Lidocaine cream", hazard: "Failed child-resistant packaging requirements", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Not child-resistant" });
+    expect(classifyHazard({ title: "Example Pharma recall: Tablets", hazard: "Failed dissolution specifications", superCategories: ["Medical"] })).toEqual({ kind: "other", label: "Quality failure" });
+  });
+
+  it("keeps medicine-only reasons off food notices", () => {
+    expect(classifyHazard({ title: "Protein bars recalled", hazard: "Product failed stability testing" })).toEqual({ kind: "other", label: "See notice" });
+    expect(classifyHazard({ title: "Vitamin gummies recalled", hazard: "Bottles are not child-resistant", superCategories: ["Food"] }).label).not.toBe("Not child-resistant");
   });
 
   it("names veterinary medicine residues rather than calling them an allergen", () => {
