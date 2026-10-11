@@ -2,8 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  outputFileTracingIncludes: { "/mcp": ["./public/mcp-app/result-v1.html"] },
   async headers() {
     return [
+      {
+        source: "/.well-known/openai-apps-challenge",
+        headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }],
+      },
       {
         source: "/(.*)",
         headers: [

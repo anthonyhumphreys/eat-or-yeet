@@ -137,3 +137,7 @@ pnpm convex:deploy
 Deployment is separate from this local implementation. See the revised cost assessment for assumptions and remaining production checks.
 
 See [Convex usage](docs/convex-usage.md) for cache freshness, index storage, unchanged imports and keeping test deployments small.
+
+## Notion shopping integration
+
+The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Convex installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. It is implemented and tested locally, but stays default-off until the public connection, template and live multi-workspace acceptance pass. The NAS runs the separate USDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).

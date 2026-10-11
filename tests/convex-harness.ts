@@ -5,6 +5,8 @@ import schema from "@convex/schema";
 const modules = {
   "../convex/_generated/api.js": () => import("@convex/_generated/api"),
   "../convex/incidents.ts": () => import("@convex/incidents"),
+  "../convex/notion.ts": () => import("@convex/notion"),
+  "../convex/notionActions.ts": () => import("@convex/notionActions"),
   "../convex/products.ts": () => import("@convex/products"),
   "../convex/rateLimits.ts": () => import("@convex/rateLimits"),
   "../convex/seed.ts": () => import("@convex/seed"),

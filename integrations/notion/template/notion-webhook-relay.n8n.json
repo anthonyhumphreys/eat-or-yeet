@@ -1,0 +1,124 @@
+{
+  "name": "Eat or Yeet Notion webhook relay",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "eat-or-yeet-notion-shopping",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [0, 0],
+      "id": "7bc1a12a-135b-4dbb-9552-fb8e8f640001",
+      "name": "Receive Notion webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-WORKER-HOST/webhooks/notion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $json.headers['content-type'] || 'application/json' }}"
+            },
+            {
+              "name": "X-Notion-Signature",
+              "value": "={{ $json.headers['x-notion-signature'] || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0],
+      "id": "7bc1a12a-135b-4dbb-9552-fb8e8f640002",
+      "name": "Forward signed bytes to worker"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode) }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [560, 0],
+      "id": "7bc1a12a-135b-4dbb-9552-fb8e8f640003",
+      "name": "Return worker response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Notion webhook": {
+      "main": [
+        [
+          {
+            "node": "Forward signed bytes to worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forward signed bytes to worker": {
+      "main": [
+        [
+          {
+            "node": "Return worker response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "versionId": "7bc1a12a-135b-4dbb-9552-fb8e8f640004",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "eat-or-yeet",
+  "version": "0.1.0",
+  "description": "Check packaged food against published UK and US warnings by barcode or label details. Results show source coverage and are not a safety guarantee.",
+  "homepage": "https://eatoryeet.app",
+  "keywords": [
+    "food-safety",
+    "recalls",
+    "barcode",
+    "United Kingdom",
+    "United States"
+  ],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md",
+      "interface": {
+        "displayName": "Eat or Yeet",
+        "shortDescription": "Check food warning coverage",
+        "longDescription": "Check packaged food against published UK and US warnings by barcode or explicitly supplied packet details. Results show source coverage and are not a safety guarantee. Eat or Yeet has no stored check history or continuous monitoring.",
+        "websiteURL": "https://eatoryeet.app",
+        "brandColor": "#71852f",
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg",
+        "defaultPrompt": [
+          "Check barcode 044000061494 against US food warnings."
+        ]
+      }
+    }
+  }
+}

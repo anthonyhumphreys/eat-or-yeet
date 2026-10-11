@@ -12,6 +12,8 @@ import type * as crons from "../crons.js";
 import type * as incidents from "../incidents.js";
 import type * as lib_dataset_version from "../lib/dataset_version.js";
 import type * as lib_import_state from "../lib/import_state.js";
+import type * as notion from "../notion.js";
+import type * as notionActions from "../notionActions.js";
 import type * as products from "../products.js";
 import type * as rateLimits from "../rateLimits.js";
 import type * as security from "../security.js";
@@ -29,6 +31,8 @@ declare const fullApi: ApiFromModules<{
   incidents: typeof incidents;
   "lib/dataset_version": typeof lib_dataset_version;
   "lib/import_state": typeof lib_import_state;
+  notion: typeof notion;
+  notionActions: typeof notionActions;
   products: typeof products;
   rateLimits: typeof rateLimits;
   security: typeof security;
