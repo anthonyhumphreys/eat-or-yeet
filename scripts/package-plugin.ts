@@ -223,8 +223,8 @@ export async function createPluginArchive(packageDirectory = pluginRoot): Promis
   if (serverEntries.length !== 1) throw new Error("The initial plugin package must declare exactly one MCP server");
   const [serverName, serverConfiguration] = serverEntries[0]!;
   const server = assertRecord(serverConfiguration, `mcpServers.${serverName}`);
-  if (serverName !== "eat-or-yeet" || server.type !== "streamable-http" || typeof server.url !== "string" || server.url !== "https://eatoryeet.app/mcp") {
-    throw new Error("The MCP server must be the anonymous Streamable HTTP endpoint https://eatoryeet.app/mcp");
+  if (serverName !== "eat-or-yeet" || server.type !== "streamable-http" || typeof server.url !== "string" || server.url !== "https://www.eatoryeet.app/mcp") {
+    throw new Error("The MCP server must be the anonymous Streamable HTTP endpoint https://www.eatoryeet.app/mcp");
   }
   if (Object.keys(server).some((key) => key !== "type" && key !== "url")) {
     throw new Error("The initial MCP server entry must not contain credentials, headers, or extra configuration");

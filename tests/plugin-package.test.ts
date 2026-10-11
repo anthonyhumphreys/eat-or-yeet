@@ -48,7 +48,7 @@ describe("portable plugin package", () => {
     expect(plugin.name).toBe("eat-or-yeet");
     expect(plugin.extensions["com.openai"].onboardingSkill).toBe("./skills/setup/SKILL.md");
     expect(mcp.mcpServers).toEqual({
-      "eat-or-yeet": { type: "streamable-http", url: "https://eatoryeet.app/mcp" },
+      "eat-or-yeet": { type: "streamable-http", url: "https://www.eatoryeet.app/mcp" },
     });
     for (const skillPath of ["skills/checking/SKILL.md", "skills/setup/SKILL.md"]) {
       expect(Buffer.from(files[skillPath]!).toString("utf8")).toMatch(/^---\nname: [a-z0-9-]+\ndescription: .+\n---\n/);
