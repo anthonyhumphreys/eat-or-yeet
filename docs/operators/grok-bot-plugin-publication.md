@@ -37,7 +37,7 @@ Verification completed on 11 October 2026:
 - Licence: MIT for the standalone plugin files
 - Release notes: Initial Grok Bot package with UK and US food warning checks, warning search and detail, source coverage, and setup/checking skills.
 
-The native manifest now references the actual public repository. Its initial commit is `b4f9089`. The publisher form in Safari currently shows an individual owner account; OpenAI business verification does not verify a Cursor publisher. Confirm the intended owner before submission.
+The native manifest now references the actual public repository. Its initial commit is `b4f9089`. The publisher form in Safari shows an individual owner account. On 11 October 2026, Anth approved using this existing Cursor account to manage the Lexio application. Organization name and contact remain Lexio Apps Ltd. and anthony@lexio.app. OpenAI business verification does not verify a Cursor publisher.
 
 ## Endpoint verification
 
@@ -51,7 +51,7 @@ Grok Bot for macOS installed the anonymous custom Remote HTTPS MCP connection an
 
 Grok Bot version 0.68.1 was inspected in the app. The following cases passed on 11 October 2026 before the compatibility fix: missing region, US barcode, unknown UK packet fields, no safety guarantee, declined packet details, no diagnosis, no plugin monitoring and unsupported vehicle recall. The missing-region response at 15:04:29 asked UK or US before checking. Product responses preserved the selected region, qualifications and coverage.
 
-Search and detail initially failed. Grok received the short text summary without warning IDs or official links, could not open the first result and reported that limitation. PR #19 changed both MCP servers to return the full validated JSON as text alongside structured results. All automated checks passed and the fix deployed to production. Direct text-only search and detail now pass. Grok search/detail retests and the host coverage case remain pending because the Mac locked again.
+Search and detail initially failed. Grok received the short text summary without warning IDs or official links, could not open the first result and reported that limitation. PR #19 changed both MCP servers to return the full validated JSON as text alongside structured results. All automated checks passed and the fix deployed to production. Direct text-only search and detail passed. Grok retests also passed at 18:00:36 and 18:01:06 London time. Search returned official FSA links, pagination and the first warning ID; detail opened that returned warning and matched both affected products, dates and advice in the live server record. US coverage passed at 18:01:46, reporting all three actual sources, their scope and successful refresh times. All 11 host cases below are now complete.
 
 Ask UK or US once, then reuse that explicit choice in the conversation until the user changes it. The plugin does not read a Grok profile. Profile location should not silently select the warning region, since a user may be checking food bought elsewhere.
 
@@ -75,8 +75,8 @@ The app transcript did not expose raw tool arguments, so the observed model resp
 
 The standalone public repository contains exactly seven exported plugin files, with no application source or application Git history. The initial release is `v0.1.0`; GitHub's uploaded archive digest matches the local SHA-256 above. The final manifest references the actual repository. The package passed Cursor's official validator again after this change.
 
-1. Rerun Grok warning search and detail against the deployed fix, then run the host US coverage case after the Mac is unlocked.
-2. The form at https://cursor.com/marketplace/publish is filled with the listing copy above, organization handle `lexio-apps`, the public repository URL and its raw `assets/icon.svg` URL. The description requests Grok Bot availability. Its Owner field is locked to the signed-in individual Cursor account. Confirm that this owner is acceptable for the Lexio listing before submission.
+1. All 11 host cases passed using the custom connection and private skills in Grok Bot 0.68.1. No marketplace installation has been tested yet.
+2. The form at https://cursor.com/marketplace/publish is filled with the listing copy above, organization handle `lexio-apps`, the public repository URL and its raw `assets/icon.svg` URL. The description requests Grok Bot availability. Its Owner field is locked to the signed-in individual Cursor account. Anth approved using that account to manage the Lexio listing.
 3. The form says clicking Submit Application acknowledges and agrees to the Publisher Terms. The authorized developer must complete this legal acceptance. No application has been submitted yet.
 4. After approval, verify installation and the cases from Grok Bot's marketplace. Update listing status only when the actual listing is live.
 
