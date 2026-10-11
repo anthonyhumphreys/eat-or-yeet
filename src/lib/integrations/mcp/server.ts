@@ -87,35 +87,6 @@ function errorResult(error: unknown): CallToolResult {
   };
 }
 
-function conciseText(name: McpToolName, value: unknown): string {
-  switch (name) {
-    case "check_product": {
-      const result = PublicCheckResultSchema.parse(value);
-      const coverage = result.coverage.healthy ? "" : `Coverage is not current for ${result.coverage.region}.`;
-      return [result.label, result.qualification, coverage].filter(Boolean).join("\n");
-    }
-    case "search_warnings": {
-      const result = PublicSearchResultSchema.parse(value);
-      const headlines = result.warnings.slice(0, 3).map((warning) => warning.title);
-      const count = `${result.total} warning${result.total === 1 ? "" : "s"} found`;
-      return [count, ...headlines, result.qualification].join("\n");
-    }
-    case "get_warning": {
-      const result = PublicWarningDetailsSchema.parse(value);
-      const count = `${result.affectedGroupCount} affected product group${result.affectedGroupCount === 1 ? "" : "s"}`;
-      const pagination = result.nextCursor
-        ? "More affected groups are available on the next page."
-        : result.affectedGroupsComplete ? "" : "Some affected groups are omitted from this page.";
-      return [result.warning.title, result.consumerAdvice, count, pagination].filter(Boolean).join("\n");
-    }
-    case "get_coverage": {
-      const result = PublicCoverageSchema.parse(value);
-      const status = result.healthy ? "Coverage is current" : "Coverage is incomplete or needs attention";
-      return `${status} for ${result.region}. ${result.sources.length} required source${result.sources.length === 1 ? "" : "s"} reported.`;
-    }
-  }
-}
-
 function toolCallback<Name extends McpToolName, InputSchema extends z.ZodType>(
   name: Name,
   inputSchema: InputSchema,
@@ -134,8 +105,10 @@ function toolCallback<Name extends McpToolName, InputSchema extends z.ZodType>(
         network,
       }));
 
+      // Some hosts only forward text to the model. Mirror the validated public
+      // result so warning links, cursors, restrictions and coverage stay usable.
       return {
-        content: [{ type: "text", text: conciseText(name, output) }],
+        content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
       };
     } catch (error) {

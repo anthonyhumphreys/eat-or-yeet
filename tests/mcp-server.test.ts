@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/mcp/server";
 import { IntegrationToolError } from "@/lib/integrations/mcp/services";
 import { MCP_APP_RESOURCE_URI } from "@/lib/integrations/mcp/app-resource";
+import { AgentObservationSchema, type PublicSearchResult, type PublicWarningDetails } from "@/lib/integrations/contracts";
 
 const coverage = {
   contractVersion: "1" as const,
@@ -106,7 +107,7 @@ describe("MCP server transport", () => {
     expect(result.structuredContent).toEqual(coverage);
     expect(result.content).toEqual([{
       type: "text",
-      text: "Coverage is current for US. 1 required source reported.",
+      text: JSON.stringify(coverage),
     }]);
     expect(executor).toHaveBeenCalledWith("get_coverage", { region: "US" }, expect.objectContaining({
       network: "test-network",
@@ -123,6 +124,67 @@ describe("MCP server transport", () => {
     const result = await client.callTool({ name: "get_coverage", arguments: { region: "US" } });
     expect(result.structuredContent).toEqual(coverage);
     expect(executor).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["legacy", "modern"] as const)("keeps search and packet evidence usable by a text-only %s host", async (mode) => {
+    const warnings = Array.from({ length: 4 }, (_, index) => ({
+      slug: `milk-warning-${index + 1}`,
+      title: `Milk warning ${index + 1}`,
+      region: "US" as const,
+      summary: "Compare the packet with the official notice.",
+      hazard: null,
+      hazardKind: "allergen" as const,
+      hazardLabel: "Allergen",
+      authority: "US FDA",
+      publishedAt: "2026-10-08T12:00:00.000Z",
+      updatedAt: "2026-10-09T12:00:00.000Z",
+      websiteUrl: `https://eatoryeet.app/incidents/milk-warning-${index + 1}`,
+      officialSource: { url: `https://www.fda.gov/notice/${index + 1}`, label: "US FDA" },
+    }));
+    const search: PublicSearchResult = {
+      contractVersion: "1", qualification: "Search is discovery, not a product verdict.",
+      asOf: "2026-10-09T12:00:00.000Z", coverage, warnings,
+      total: 12, nextCursor: "search-next-page", complete: false,
+    };
+    const details: PublicWarningDetails = {
+      contractVersion: "1", warning: warnings[0], consumerAdvice: "Do not eat the affected batch.",
+      affectedGroups: [{ key: "group-1", association: "source_group", targets: [{
+        type: "batch", value: "LOT-42", matchType: "exact", dateFrom: null, dateTo: null, notes: null,
+      }] }],
+      affectedGroupCount: 3, affectedGroupsComplete: false, nextCursor: "groups-next-page",
+    };
+    const evidence = AgentObservationSchema.parse({ productName: "Milk", batchCode: "LOT-42" });
+    const check = {
+      contractVersion: "1", status: "possible_match", label: "Possible warning match",
+      qualification: "Review the packet and official notice. This is not a safety guarantee.",
+      checkedAt: "2026-10-09T12:00:00.000Z", matchLevel: "possible",
+      submittedEvidence: evidence, checkedEvidence: evidence, enrichedFields: [], coverage,
+      inconclusiveReason: null,
+      warnings: [{ warning: warnings[0], level: "possible", reasons: [{ type: "batch", message: "Compare the batch.", evidence: "LOT-42" }],
+        affectedGroups: details.affectedGroups, affectedGroupCount: 3, affectedGroupsComplete: false, packetReviewRequired: true }],
+      matchCount: 1, matchesComplete: false,
+    };
+    const executor = executorFor({ search_warnings: search, get_warning: details, check_product: check });
+    const { client } = await connect(executor, mode === "legacy" ? "legacy" : { pin: "2026-07-28" });
+
+    // Deliberately ignore structuredContent, as the observed Grok Bot host does.
+    const searchResult = await client.callTool({ name: "search_warnings", arguments: { region: "US", query: "milk" } });
+    const searchText = searchResult.content[0];
+    if (searchText.type !== "text") throw new Error("Missing text fallback");
+    const fromText = JSON.parse(searchText.text) as PublicSearchResult;
+    expect(fromText).toEqual(search);
+    expect(fromText.warnings[3].officialSource.url).toBe("https://www.fda.gov/notice/4");
+    expect(fromText.nextCursor).toBe("search-next-page");
+    const detailResult = await client.callTool({ name: "get_warning", arguments: { slug: fromText.warnings[0].slug } });
+    const detailText = detailResult.content[0];
+    if (detailText.type !== "text") throw new Error("Missing detail fallback");
+    expect(JSON.parse(detailText.text)).toEqual(details);
+    expect(executor).toHaveBeenCalledWith("get_warning", expect.objectContaining({ slug: "milk-warning-1" }), expect.anything());
+
+    const checkResult = await client.callTool({ name: "check_product", arguments: { region: "US", observation: evidence } });
+    const checkText = checkResult.content[0];
+    if (checkText.type !== "text") throw new Error("Missing packet fallback");
+    expect(JSON.parse(checkText.text)).toEqual(check);
   });
 
   it("rejects unknown nested fields before invoking the executor", async () => {
