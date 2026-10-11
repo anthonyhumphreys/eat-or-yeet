@@ -5,7 +5,7 @@ import { getNotionSetupOrigin, notionTemplateUrl } from "@/lib/integrations/noti
 
 export const metadata: Metadata = {
   title: "Integrations",
-  description: "Set up Eat or Yeet in Grok Bot, ChatGPT, OpenClaw or Hermes, or get the Notion shopping-list template. Check published UK and US food warnings.",
+  description: "Connect Eat or Yeet to a Notion shopping list, OpenClaw, Hermes or another MCP-compatible assistant. Check published UK and US food warnings.",
 };
 
 const mcpUrl = "https://www.eatoryeet.app/mcp";
@@ -27,50 +27,16 @@ export default function IntegrationsPage() {
         </p>
         <p className="mt-3 leading-7 text-muted-foreground">Eat or Yeet&apos;s public food checks are free and need no account or API key. Your assistant&apos;s own plan or workspace rules may apply.</p>
         <nav aria-label="Integration guides" className="mt-6 flex flex-wrap gap-x-6 gap-y-1">
-          <a className={linkClass} href="#grok-bot">Grok Bot</a>
-          <a className={linkClass} href="#chatgpt">ChatGPT</a>
           <a className={linkClass} href="#notion">Notion</a>
           <a className={linkClass} href="#openclaw">OpenClaw</a>
           <a className={linkClass} href="#hermes">Hermes</a>
-          <a className={linkClass} href="#muse">Meta Muse</a>
+          <a className={linkClass} href="#other-tools">Other assistants</a>
         </nav>
 
         <section aria-labelledby="first-check" className="mt-8 rounded-xl bg-muted/35 p-5 sm:p-6">
           <h2 id="first-check" className="text-xl font-bold">Once connected, try a check</h2>
           <blockquote className="mt-3 leading-7">“Use Eat or Yeet to check barcode 044000061494 against US food warnings. Show the source coverage and explain the result.”</blockquote>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">Replace the example with your barcode and choose UK or US. You can give a product name, brand and batch instead. Leave details you don&apos;t know empty.</p>
-        </section>
-
-        <section id="grok-bot" aria-labelledby="grok-bot-title" className={sectionClass}>
-          <h2 id="grok-bot-title" className="text-2xl font-black tracking-tight">Grok Bot</h2>
-          <p className="mt-3 leading-7 text-muted-foreground">The custom setup below has been tested in Grok Bot for macOS. Our publisher application is submitted; marketplace installation is still pending.</p>
-          <ol className={stepsClass}>
-            <li>Download the ZIP from the <a className={linkClass} href="https://github.com/anthonyhumphreys/eat-or-yeet/releases/tag/grok-bot-v0.1.0">Grok Bot plugin release</a>.</li>
-            <li>Attach the ZIP to a chat with your Bot. Send the setup message below and follow its connection prompts.</li>
-            <li>Open <strong className="text-foreground">Connect apps → Your plugins → Private skills</strong>. Check that setup and checking are there, then try the example above.</li>
-          </ol>
-          <details className="mt-4 border-y">
-            <summary className={summaryClass}>Show the Grok Bot setup message</summary>
-            <p className="pb-5 leading-7">“Add a custom Remote HTTPS MCP server named eat-or-yeet at https://www.eatoryeet.app/mcp with no authentication or headers. Keep my existing connections. Install the ZIP&apos;s setup and checking SKILL.md files as private skills, preserving their contents. Confirm the connection and four discovered tools.”</p>
-          </details>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Choose UK or US when the Bot asks. It uses that country for this chat; tell it when you want to switch. A team administrator may need to allow custom connections.</p>
-          <a className={`${linkClass} mt-2`} href="https://cursor.com/help/grok-bot/connect-plugins">Grok Bot connection help</a>
-        </section>
-
-        <section id="chatgpt" aria-labelledby="chatgpt-title" className={sectionClass}>
-          <h2 id="chatgpt-title" className="text-2xl font-black tracking-tight">ChatGPT plugin</h2>
-          <p className="mt-3 leading-7 text-muted-foreground">Our public plugin is submitted for review. You can use a custom connection now if your ChatGPT account allows it.</p>
-          <ol className={stepsClass}>
-            <li>Open <a className={linkClass} href="https://chatgpt.com/plugins">ChatGPT Plugins</a>. Select the plus button, then <strong className="text-foreground">Add custom MCP server</strong>.</li>
-            <li>Name it Eat or Yeet. Paste <code className="select-all break-all text-foreground">{mcpUrl}</code> into Server URL and choose <strong className="text-foreground">No authentication</strong>.</li>
-            <li>Read the connection notice. If you agree, choose <strong className="text-foreground">Create as a plugin</strong> and connect Eat or Yeet.</li>
-            <li>Start a new chat, type <strong className="text-foreground">@</strong> and select Eat or Yeet. Try the example above.</li>
-          </ol>
-          <details className="mt-4 border-y">
-            <summary className={summaryClass}>Can&apos;t see “Add custom MCP server”?</summary>
-            <p className="pb-5 leading-7 text-muted-foreground">Your account or workspace may not allow custom connections. You can <Link className={linkClass} href="/search">check your packet on this site</Link> while the public listing is in review.</p>
-          </details>
-          <a className={`${linkClass} mt-2`} href="https://developers.openai.com/plugins/quickstart#connect-your-mcp-server">ChatGPT connection help</a>
         </section>
 
         <section id="notion" aria-labelledby="notion-title" className={sectionClass}>
@@ -118,12 +84,6 @@ export default function IntegrationsPage() {
           </details>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">These steps follow Hermes&apos; guide. We haven&apos;t tested Eat or Yeet in this app yet.</p>
           <a className={`${linkClass} mt-2`} href="https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp">Hermes connection help</a>
-        </section>
-
-        <section id="muse" aria-labelledby="muse-title" className={sectionClass}>
-          <h2 id="muse-title" className="text-2xl font-black tracking-tight">Meta Muse</h2>
-          <p className="mt-3 leading-7 text-muted-foreground">Eat or Yeet is not available as a Muse connector yet. For now, <Link className={linkClass} href="/search">check your packet on this site</Link>.</p>
-          <a className={`${linkClass} mt-2`} href="https://www.meta.com/help/artificial-intelligence/1687253048996149/">How Muse connectors work</a>
         </section>
 
         <section id="other-tools" aria-labelledby="other-tools-title" className={sectionClass}>
