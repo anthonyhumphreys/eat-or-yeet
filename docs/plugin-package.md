@@ -31,3 +31,13 @@ This is a credential-free build artifact, not the public-submission ZIP. OpenAI'
 Follow the [publication preparation guide](operators/chatgpt-plugin-publication.md) for the current gaps, draft review cases and publishing steps.
 
 The standard JSON schemas validate portable structure, not every semantic requirement or target-host behavior. Test installation and tool selection in each intended client, and test MCP Apps UI support host by host. No host smoke tests or public submission are represented by this package build.
+
+## Grok Bot distribution
+
+Run `pnpm package:plugin:grok-bot` to export a standalone Cursor-format package to `dist/grok-bot/eat-or-yeet/`, with an archive at `dist/grok-bot/eat-or-yeet-grok-bot.zip` and a SHA-256 sidecar. The ZIP includes the `eat-or-yeet/` directory and its hidden `.cursor-plugin/plugin.json`.
+
+The exporter reuses the validated portable files, preserves both skills and the icon byte-for-byte, and writes a native Cursor manifest with Lexio publisher details and a relative logo reference. It includes the Grok Bot README and the MIT licence approved for this standalone distribution. The application repository is not relicensed. OpenAI-specific metadata, registered App bindings, schemas and application code are not exported. The existing portable source and the ChatGPT submission are not changed.
+
+The export directory must not already exist. Move an earlier export aside before rebuilding; this prevents stale files or local edits from silently entering a release. The command prepares local files only. It does not create a repository, install a plugin, submit a listing or deploy the service.
+
+See [Grok Bot publication preparation](operators/grok-bot-plugin-publication.md) for the test cases, listing copy and remaining publication steps.

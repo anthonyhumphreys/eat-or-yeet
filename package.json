@@ -12,6 +12,7 @@
     "prebuild": "pnpm build:mcp-app",
     "build:mcp-app": "tsx scripts/build-mcp-app.ts",
     "package:plugin": "tsx scripts/package-plugin.ts",
+    "package:plugin:grok-bot": "tsx scripts/package-grok-bot-plugin.ts",
     "build:vercel": "convex deploy --cmd 'pnpm build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL",
     "start": "next start",
     "lint": "eslint .",
