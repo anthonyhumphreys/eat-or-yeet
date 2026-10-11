@@ -23,9 +23,11 @@ Cancelling reconnect consent left the existing installation active. Retrying rec
 
 After an active US input edit, the row received a new fingerprint, review time and US source coverage. Two item reviews were charged in total for the UK and US reviews; result-only writes did not start additional reviews during observation. The temporary local OAuth secret, signing token and capture private key were deleted after live use confirmed production storage.
 
+An edit to the bought US item produced an accepted signed event and drained without another review charge or timestamp change. Disconnect completed with **Notion list disconnected** and **Notion access was revoked**; the installation, sessions, fingerprints and event/job/quota records were removed. Reloading the private Notion list confirmed the item and entered packet details remained accessible.
+
 ## Remaining live checks
 
-Bought-item skipping, already-queued work across pause/resume, disconnect, callback replay and multiple-workspace/user tests remain outstanding. Update this record only from observed results. Edits first received while paused intentionally do not start new reviews.
+Already-queued work across pause/resume, callback replay and multiple-workspace/user tests remain outstanding as live checks. Those boundaries remain covered by automated fixtures. Update this record only from observed results. Edits first received while paused intentionally do not start new reviews.
 
 The application now withholds connection setup unless all required OAuth, backend and webhook settings exist. The template remains usable independently. A bounded, expiring encrypted verification capture supports webhook registration without logging its plaintext token or automatically trusting a received candidate. Follow the [runbook](./notion-managed-service.md).
 
