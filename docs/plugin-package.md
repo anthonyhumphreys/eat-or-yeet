@@ -2,7 +2,7 @@
 
 The portable package lives in [`plugins/eat-or-yeet/`](../plugins/eat-or-yeet/). It contains an Agent Plugins root manifest, one remote Streamable HTTP MCP configuration, checking and setup skills, and the app-icon SVG. The OpenAI-specific `onboardingSkill` points to the setup skill. The manifest and connection use the Agent Plugins 1.0.0 format.
 
-The configured endpoint is `https://eatoryeet.app/mcp`, with no auth headers. It is the planned public URL; this package build does not call it or prove that it is reachable. The MCP route remains subject to the server's feature flag and production safeguards. Do not claim a live host installation, public submission, or marketplace approval until those are separately tested and completed.
+The configured endpoint is `https://www.eatoryeet.app/mcp`, with no auth headers. Use the canonical `www` hostname: the bare domain returns a cross-origin redirect that MCP clients can refuse. The MCP route remains subject to the server's feature flag and production safeguards. The package build does not call it or prove host compatibility. Do not claim a live host installation, public submission, or marketplace approval until those are separately tested and completed.
 
 ## Build and contents
 
@@ -27,5 +27,7 @@ The skills require the user to select UK or US, let a barcode alone trigger a ch
 ## Distribution status
 
 This is a credential-free build artifact, not the public-submission ZIP. OpenAI's current MCP review uses verified publisher identity and listing support, privacy and terms URLs; initial review also requires five positive cases, three negative cases and an accessible walkthrough. Those values must come from the real publisher and completed review materials, not placeholders. Public publishing is a separate authorized action. OpenAI also currently rejects plugin ZIPs containing `.app.json`/registered app references or lifecycle hooks for public submission. See [package format](https://developers.openai.com/plugins/build/plugins) and [submission requirements](https://developers.openai.com/plugins/deploy/submission).
+
+Follow the [publication preparation guide](operators/chatgpt-plugin-publication.md) for the current gaps, draft review cases and publishing steps.
 
 The standard JSON schemas validate portable structure, not every semantic requirement or target-host behavior. Test installation and tool selection in each intended client, and test MCP Apps UI support host by host. No host smoke tests or public submission are represented by this package build.

@@ -3,7 +3,7 @@
   "mcpServers": {
     "eat-or-yeet": {
       "type": "streamable-http",
-      "url": "https://eatoryeet.app/mcp"
+      "url": "https://www.eatoryeet.app/mcp"
     }
   }
 }

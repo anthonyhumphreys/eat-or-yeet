@@ -13,10 +13,10 @@ export function SiteFooter() {
             <a href="https://twitter.com/aphumphreys" target="_blank" rel="noopener noreferrer" aria-label="@aphumphreys on Twitter, opens in a new tab" className="inline-block rounded-sm py-1 underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">@aphumphreys</a>
           </p>
         </div>
-        <nav className="flex gap-4" aria-label="Footer navigation">
+        <nav className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Footer navigation">
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/privacy">Privacy</Link>
           <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/incidents">Current warnings</Link>
-          <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/integrations/notion">Notion</Link>
+          <Link className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href="/integrations">Integrations</Link>
         </nav>
       </div>
     </footer>
