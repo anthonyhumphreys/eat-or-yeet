@@ -305,6 +305,9 @@ describe("hosted Notion HTTP handlers", () => {
     const validChallenge = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", body: challenge }), app.deps);
     expect(validChallenge.status).toBe(200);
     expect(await validChallenge.json()).toEqual({ verification_token: WEBHOOK_TOKEN });
+    const signedChallenge = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", headers: { "x-notion-signature": webhookSignature(challenge) }, body: challenge }), app.deps);
+    expect(signedChallenge.status).toBe(200);
+    expect(await signedChallenge.json()).toEqual({ verification_token: WEBHOOK_TOKEN });
     const invalidJson = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", body: "{" }), app.deps);
     const extraChallengeField = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", body: JSON.stringify({ verification_token: WEBHOOK_TOKEN, extra: true }) }), app.deps);
     const wrongChallengeToken = await handleNotionRequest("webhook", request("/integrations/notion/webhook", { method: "POST", body: JSON.stringify({ verification_token: "wrong" }) }), app.deps);

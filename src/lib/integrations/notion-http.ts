@@ -40,13 +40,17 @@ export async function captureNotionWebhookVerification(request: Request, environ
   const expiresAt = Number(environment.NOTION_WEBHOOK_SETUP_EXPIRES_AT);
   const remaining = expiresAt - Date.now();
   if (!origin || environment.NOTION_WEBHOOK_VERIFICATION_TOKEN?.trim() || !publicKey || !Number.isFinite(remaining) || remaining <= 0 || remaining > 15 * 60_000) return null;
-  if (new URL(request.url).origin !== origin || request.headers.has("x-notion-signature")) return json(400, { error: "invalid_verification_request" });
+  if (new URL(request.url).origin !== origin) return json(400, { error: "invalid_verification_request" });
   if (!request.headers.get("content-type")?.startsWith("application/json")) return json(400, { error: "invalid_verification_request" });
   try {
     const raw = await readBody(request, 2_048);
     if (!raw) return json(413, { error: "body_too_large" });
     const payload: unknown = JSON.parse(new TextDecoder().decode(raw));
     if (!record(payload) || Object.keys(payload).length !== 1 || typeof payload.verification_token !== "string" || !/^secret_[A-Za-z0-9_-]{20,120}$/.test(payload.verification_token)) return json(400, { error: "invalid_verification_request" });
+    // Notion may sign the bootstrap request with the candidate it contains.
+    // This proves consistency only; the portal still has to verify the candidate.
+    const signature = request.headers.get("x-notion-signature");
+    if (signature !== null && !same(signature, `sha256=${createHmac("sha256", payload.verification_token).update(raw).digest("hex")}`)) return json(400, { error: "invalid_verification_request" });
     const key = createPublicKey(publicKey);
     if (key.asymmetricKeyType !== "rsa" || !key.asymmetricKeyDetails?.modulusLength || key.asymmetricKeyDetails.modulusLength < 2_048) return json(503, { error: "temporarily_unavailable" });
     const encrypted = publicEncrypt({ key, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256", oaepLabel: Buffer.from(notionWebhookCaptureLabel) }, Buffer.from(payload.verification_token)).toString("base64");
@@ -131,8 +135,8 @@ async function webhook(request: Request, deps: NotionHttpDependencies): Promise<
   const expected = `sha256=${createHmac("sha256", deps.webhookToken).update(raw).digest("hex")}`;
   let payload: unknown;
   try { payload = JSON.parse(new TextDecoder().decode(raw)); } catch { return json(400, { error: "invalid_json" }); }
+  if (record(payload) && Object.keys(payload).length === 1 && typeof payload.verification_token === "string" && same(payload.verification_token, deps.webhookToken)) return json(200, { verification_token: deps.webhookToken });
   if (!same(signature, expected)) {
-    if (record(payload) && Object.keys(payload).length === 1 && typeof payload.verification_token === "string" && same(payload.verification_token, deps.webhookToken)) return json(200, { verification_token: deps.webhookToken });
     return json(401, { error: "invalid_signature" });
   }
   if (!record(payload) || payload.integration_id !== deps.integrationId || payload.subscription_id !== deps.subscriptionId || !shortString(payload.workspace_id) || !shortString(payload.id) || !record(payload.entity) || payload.entity.type !== "page" || !shortString(payload.entity.id)) return json(400, { error: "invalid_event" });
