@@ -1,8 +1,8 @@
 # Agent host compatibility and release guide
 
-Status: **ready for review**, not a release sign-off. These recipes describe documented host setup. A local MCP protocol test does not prove that a host product, plan, account, or model can connect or present the optional UI.
+Status: production testing enabled on 11 October 2026; public-directory publication remains pending. These recipes describe documented host setup. A protocol test does not prove compatibility with every host, account or model. See [ChatGPT host observations](operators/chatgpt-plugin-test-results.md) for the tested workflows and remaining checks.
 
-The endpoint intended for client configuration is `https://eatoryeet.app/mcp`. Production currently keeps MCP disabled by default. Do not submit, connect, or tell external hosts to use that URL until the release gate enables it after review. For local host acceptance, use a reachable test deployment and a dedicated test account where required. Never put tokens in checked-in configuration examples.
+The endpoint intended for client configuration is `https://www.eatoryeet.app/mcp`. The operator enabled production MCP for testing. The bare hostname redirects and can be refused by MCP clients; use the canonical `www` endpoint. Future deployments still require their own feature-flag and release checks. For local host acceptance, use a reachable test deployment and a dedicated test account where required. Never put tokens in checked-in configuration examples.
 
 ## Scope and evidence
 
@@ -15,13 +15,22 @@ The server currently exposes four anonymous, read-only MCP tools: `check_product
 | Fixture exercise | Oreo US barcode `044000061494` returned an inconclusive result because coverage was missing. FDA fixture barcode `100001000297` is available for controlled missing/matching/wrong batch/date cases. | A current live-source recall result, a safety conclusion, or validation of the historical recall against today's upstream feed |
 | OpenAI portable package | Root `plugin.json` and `mcp.json` ZIP passed schema validation in the existing package check. | OpenAI directory approval, a ChatGPT/Codex live connection, publication, or UI rendering |
 | MCP Apps resource | Built HTML is approximately 632 KiB. Local modern/legacy HTTP resource responses were approximately 670 KiB each without Content-Encoding. Official AppBridge browser tests pass on mobile and desktop. | Host display, bridge behavior, CSP acceptance, or final compressed/served payload size |
-| Production deployment | `https://eatoryeet.app/mcp` is the intended stable endpoint; production enablement remains off by default. | That the endpoint is enabled, reachable, correctly attributed through Vercel context, or protected by a configured edge firewall |
+| Production deployment | The canonical public endpoint is enabled for operator-authorized testing. Public tool discovery and US coverage were exercised with the SDK; supported ChatGPT workflows were observed through a personal connection. | A public directory release, all-host compatibility, or a configured edge firewall |
 
-No host-specific release version or account tier has been tested. Record the exact app/client version, OS, plan/tier, endpoint build, transport, and date after a human performs each acceptance run. Do not infer a host test from a shared MCP SDK test.
+Host-specific version and account-tier details have not been recorded. Record the exact app/client version, OS, plan/tier, endpoint build, transport, and date after a human performs each acceptance run. Do not infer a host test from a shared MCP SDK test.
 
 ## Host setup recipes
 
-Use the endpoint only after a reviewer confirms the release gate is open. All snippets use an environment placeholder and contain no credential. The present public endpoint is anonymous, so omit auth headers. The separate `/mcp/notion` route requires an owner-scoped key and is outside these public recipes. If a future private server requires auth, use the host's credential store or its documented environment-backed secret mechanism rather than committing a token.
+The operator authorized production testing; check the release gate for any other deployment. Snippets use either the canonical endpoint or an environment placeholder and contain no credential. The present public endpoint is anonymous, so omit auth headers. The separate `/mcp/notion` route requires an owner-scoped key and is outside these public recipes. If a future private server requires auth, use the host's credential store or its documented environment-backed secret mechanism rather than committing a token.
+
+### Everyday assistants
+
+The public [integration guide](https://www.eatoryeet.app/integrations) prioritizes Grok Bot, OpenClaw, Meta Muse and Hermes, with separate ChatGPT and Notion instructions. The coding-tool recipes below are optional operator references.
+
+- [Grok Bot plugins](https://docs.x.ai/grok-bot/team-bots#plugins): custom Remote HTTPS servers are supported. Bot owners or managers can use Setup → Plugins; team connector policies apply.
+- [OpenClaw MCP](https://docs.openclaw.ai/tools/mcp): Control UI → Settings → MCP → Add server, using Streamable HTTP and the canonical endpoint.
+- [Meta Muse connectors](https://www.meta.com/help/artificial-intelligence/1687253048996149/): ask Muse to create a custom connector. Compatibility with this anonymous MCP endpoint remains unverified.
+- [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp): remote HTTP servers use a `url` entry inside `mcp_servers` in `~/.hermes/config.yaml`. Restart the session or use `/reload-mcp` after adding it.
 
 ### Codex CLI and desktop
 
@@ -36,7 +45,7 @@ Or add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.eat_or_yeet]
-url = "https://eatoryeet.app/mcp"
+url = "https://www.eatoryeet.app/mcp"
 ```
 
 Then restart/reload the MCP client if needed, inspect the discovered tool names, and run the acceptance cases below. Configuring the URL does not make the production endpoint available while its release gate is off. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
@@ -62,7 +71,7 @@ Cursor documents remote Streamable HTTP MCP servers in `mcp.json`. Add to user `
 {
   "mcpServers": {
     "eat-or-yeet": {
-      "url": "https://eatoryeet.app/mcp"
+      "url": "https://www.eatoryeet.app/mcp"
     }
   }
 }
@@ -78,7 +87,7 @@ Gemini CLI uses `mcpServers` in `~/.gemini/settings.json` or workspace `.gemini/
 {
   "mcpServers": {
     "eat-or-yeet": {
-      "httpUrl": "https://eatoryeet.app/mcp"
+      "httpUrl": "https://www.eatoryeet.app/mcp"
     }
   }
 }
@@ -88,7 +97,7 @@ Alternatively run `gemini mcp add --transport http eat-or-yeet "$MCP_URL"`. Chec
 
 ### n8n
 
-n8n's **MCP Client** node connects to an external MCP server as a regular workflow node. For an AI Agent, use **MCP Client Tool**. In the node UI, choose Streamable HTTP, set MCP endpoint URL to `https://eatoryeet.app/mcp`, set Authentication to None for the current anonymous endpoint, and use a bounded node timeout. The node fetches its tool list; select one tool and use JSON input mode for nested arguments. Run a manual execution first and inspect the execution result for accidental persistence of entered product data.
+n8n's **MCP Client** node connects to an external MCP server as a regular workflow node. For an AI Agent, use **MCP Client Tool**. In the node UI, choose Streamable HTTP, set MCP endpoint URL to `https://www.eatoryeet.app/mcp`, set Authentication to None for the current anonymous endpoint, and use a bounded node timeout. The node fetches its tool list; select one tool and use JSON input mode for nested arguments. Run a manual execution first and inspect the execution result for accidental persistence of entered product data.
 
 n8n documents Bearer, generic header, multiple-header, and OAuth2 credentials for its MCP Client node. Do not create or embed a token for this public anonymous service. The separate **MCP Server Trigger** node exposes n8n workflows; it is not the node for consuming this service. No n8n version, hosting tier, or actual workflow run has been tested. [MCP Client](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcpclient/) · [MCP Client Tool](https://docs.n8n.io/integrations/builtin/cluster-nodes/sub-nodes/n8n-nodes-langchain.toolmcp/) · [n8n MCP Server Trigger](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcptrigger/)
 
@@ -98,23 +107,23 @@ For a manual private acceptance connection, use ChatGPT's **Add custom MCP serve
 
 ChatGPT web needs a reachable test endpoint or a configured secure MCP tunnel. Its `localhost` cannot reach the developer's machine. The direct loopback recipe above applies to the local desktop MCP client. [Secure MCP tunnels](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
 
-The portable package uses root `plugin.json` and root `mcp.json`; `mcp.json` declares `type: "streamable-http"` and the server URL. Its manifest points to `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`; the MCP file points to `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`. OpenAI-specific metadata belongs under `extensions.com.openai`. Keep the OpenAI compatibility layer on the shared MCP Apps `ui/*` JSON-RPC `postMessage` bridge and `_meta.ui.resourceUri`; do not make `window.openai` required for core rendering. A ChatGPT UI acceptance run still needs to exercise this app through a real account.
+The portable package uses root `plugin.json` and root `mcp.json`; `mcp.json` declares `type: "streamable-http"` and the server URL. Its manifest points to `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`; the MCP file points to `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`. OpenAI-specific metadata belongs under `extensions.com.openai`. Keep the OpenAI compatibility layer on the shared MCP Apps `ui/*` JSON-RPC `postMessage` bridge and `_meta.ui.resourceUri`; do not make `window.openai` required for core rendering. A personal ChatGPT MCP connection has exercised five supported workflows and rendered product and warning cards. Unsupported requests, CSP enforcement and the bundled skills remain unverified; see the host-test report.
 
 OpenAI's current extension peer dependency mismatch is a release gate for any native extension-specific layer. Do not force an SDK major override to build optional native extensions. [Package a plugin](https://developers.openai.com/plugins/build/plugins) · [Connect and test in ChatGPT](https://developers.openai.com/plugins/deploy/connect-chatgpt) · [ChatGPT UI and MCP Apps bridge](https://developers.openai.com/plugins/build/chatgpt-ui)
 
 ### Grok
 
-Grok's official docs describe a manual custom MCP connector: open `grok.com/connectors`, choose **New Connector** then **Custom**, enter the public MCP URL, and complete any authentication flow. The server must be reachable from the public internet. Use a dedicated acceptance account and verify all four discovered tools and the positive/negative cases below. The public route is not available until production is explicitly enabled; a private local server cannot be entered directly without a public tunnel, and a temporary tunnel is not a release endpoint. No Grok product version, subscription tier, connector, or tool call has been tested. [Grok custom MCP connectors](https://docs.x.ai/grok/connectors) · [Grok public reachability guidance](https://docs.x.ai/grok/connectors/custom-mcp-tunneling)
+Grok's official docs describe a manual custom MCP connector: open `grok.com/connectors`, choose **New Connector** then **Custom**, enter the public MCP URL, and complete any authentication flow. The server must be reachable from the public internet. Use a dedicated acceptance account and verify all four discovered tools and the positive/negative cases below. Production testing is enabled by the operator; a private local server cannot be entered directly without a public tunnel, and a temporary tunnel is not a release endpoint. No Grok product version, subscription tier, connector, or tool call has been tested. [Grok custom MCP connectors](https://docs.x.ai/grok/connectors) · [Grok public reachability guidance](https://docs.x.ai/grok/connectors/custom-mcp-tunneling)
 
 ### Meta Muse Connector Platform
 
 This means Meta's personal AI agent and its **Muse Connector Platform** at `muse.ai`, not Muse Code or an unrelated product named Muse. Meta's official platform describes submission for functional, security, legal, and end-to-end review before a connector appears in Muse. Its guidelines require endpoint/authentication and tool documentation, privacy/data processing information, legal and support contacts, business verification, a test account, test data, and a demo. Start at [Muse Connector Platform](https://muse.ai/platform) and follow its current submission form and guidelines.
 
-The public docs establish a submit-for-review route, not a verified self-serve “add arbitrary MCP URL” flow. No Muse account, connector submission, review, or live compatibility has been performed. Treat this as a post-release submission/acceptance gate, not a ready-to-use connection recipe. Do not substitute Muse Code documentation or unrelated projects called Muse.
+Meta also documents asking Muse to create a custom connector. That route has not been tested against this MCP server; do not claim that Muse accepts its anonymous authentication configuration. No Muse account, connector submission, review, or live compatibility has been performed. Treat this as a post-release submission/acceptance gate, not a ready-to-use connection recipe. Do not substitute Muse Code documentation or unrelated projects called Muse.
 
 ## Acceptance walkthrough
 
-Use deterministic fixtures in a local/staging deployment with mocked upstreams when possible. For public host acceptance, use the approved non-production endpoint and dedicated reviewer accounts. Capture a redacted result, endpoint build ID, client app/version, OS, account tier, date, tool names, and whether the UI rendered. Do not record raw request bodies, user-entered labels, auth material, or personal account data.
+Use deterministic fixtures in a local/staging deployment with mocked upstreams when possible. For public host acceptance, use an operator-approved endpoint and dedicated reviewer accounts. The operator has authorized limited production testing. Capture a redacted result, endpoint build ID, client app/version, OS, account tier, date, tool names, and whether the UI rendered. Do not record raw request bodies, user-entered labels, auth material, or personal account data.
 
 Positive cases:
 
