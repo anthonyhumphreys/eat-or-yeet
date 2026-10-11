@@ -32,6 +32,7 @@ export default async function NotionInstallationPage({ searchParams }: { searchP
         {ready ? (
           <section className="mt-8" aria-labelledby="connect-list">
             <h2 id="connect-list" className="text-2xl font-black tracking-tight">Connect your list</h2>
+            <p className="mt-3 leading-7 text-muted-foreground">Connecting lets Eat or Yeet read configured shopping fields and write review results. We store Notion account and list identifiers, encrypted credentials and review state. We do not save your profile name or email address. <Link className={linkClass} href="/privacy">Read the privacy details</Link> before connecting.</p>
             <ol className="mt-4 list-decimal space-y-3 pl-6 leading-7 text-muted-foreground">
               <li>Choose the warning country below, then select Add to Notion.</li>
               <li>Approve access in Notion and choose the Eat or Yeet template. This creates your connected shopping list.</li>
@@ -67,9 +68,14 @@ export default async function NotionInstallationPage({ searchParams }: { searchP
         <section className="mt-10 border-t pt-8" aria-labelledby="notion-requirements">
           <h2 id="notion-requirements" className="text-2xl font-black tracking-tight">You control the connection</h2>
           <p className="mt-3 leading-7 text-muted-foreground">No Notion AI subscription or API token is needed. Eat or Yeet reads the connected list&apos;s packet fields and writes its review fields. Connection credentials are encrypted.</p>
-          <p className="mt-3 leading-7 text-muted-foreground">Use the management page to pause reviews, change country or disconnect. Your shopping list stays in Notion when you disconnect.</p>
+          <p className="mt-3 leading-7 text-muted-foreground">Use the management page to pause or resume reviews, change country or disconnect. Pausing keeps your connection and credentials. Edits first received while paused do not start reviews; after resuming, edit an item to request a new review. A review already in progress may finish before pausing or disconnecting completes. Your shopping list stays in Notion when you disconnect.</p>
           <Link className={`${linkClass} mt-3`} href="/integrations/notion/manage">Manage a connected list</Link>
           <p className="mt-2 text-sm leading-6 text-muted-foreground"><Link className={linkClass} href="/privacy">How connected-list data is handled</Link></p>
+        </section>
+
+        <section className="mt-10 border-t pt-8" aria-labelledby="manual-checks">
+          <h2 id="manual-checks" className="text-2xl font-black tracking-tight">Check without connecting</h2>
+          <p className="mt-3 leading-7 text-muted-foreground">You can use the template without giving us access to your Notion account or list. Open <Link className={linkClass} href="/search">Check a product</Link>, choose UK or US and enter its barcode or choose Label details. We receive the product details you submit for that check. Results appear on this website; you can copy them into Notion yourself.</p>
         </section>
       </div>
     </div>
