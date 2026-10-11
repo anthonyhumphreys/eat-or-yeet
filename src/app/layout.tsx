@@ -8,6 +8,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AnalyticsConsent } from "@/components/analytics-consent";
+import { analyticsEnabled } from "@/lib/analytics/server";
 
 import "./globals.css";
 
@@ -46,6 +48,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <SiteHeader />
             <RegionPrompt />
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
+            <AnalyticsConsent enabled={analyticsEnabled()} />
             <SiteFooter />
           </LocationProvider>
         </ThemeProvider>

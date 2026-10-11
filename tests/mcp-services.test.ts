@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/analytics/server", () => ({ recordMcpOperation: vi.fn() }));
 vi.mock("@/db/queries", () => ({
   getRegionCoverage: vi.fn(),
   WarningSnapshotLimitError: class extends Error {},
@@ -14,6 +15,7 @@ vi.mock("@/lib/security/integration-rate-limit", () => ({ takeIntegrationRateLim
 vi.mock("@/lib/integrations/serialize", () => ({ serializeCoverage: vi.fn((value) => value), serializeCheckResult: vi.fn((value) => value), serializeSearchResult: vi.fn((value) => value), PublicResponseTooLargeError: class extends Error {} }));
 vi.mock("@/lib/integrations/shopping/review", () => ({ reviewShoppingItems: vi.fn() }));
 
+import { recordMcpOperation } from "@/lib/analytics/server";
 import { getRegionCoverage } from "@/db/queries";
 import { checkProduct } from "@/lib/checks/service";
 import { getWarningDetails } from "@/lib/incidents/details";
@@ -66,8 +68,11 @@ describe("MCP application boundary", () => {
     expect(takeIntegrationRateLimits).not.toHaveBeenCalled();
 
     const connection = { id: "notion-shopping", dailyLimit: 40 };
-    vi.mocked(reviewShoppingItems).mockResolvedValueOnce({ items: [] } as never);
-    await expect(executeTool("review_shopping_items", input, { ...context(), connection })).resolves.toEqual({ items: [] });
+    const reviewed = { items: [{ id: "one", status: "skipped" }, { id: "two", status: "related_warnings" }] };
+    vi.mocked(reviewShoppingItems).mockResolvedValueOnce(reviewed as never);
+    await expect(executeTool("review_shopping_items", input, { ...context(), connection })).resolves.toEqual(reviewed);
+    // Item-level discovery statuses never become the batch operation outcome.
+    expect(recordMcpOperation).toHaveBeenLastCalledWith("review_shopping_items", "ok", expect.any(Number), true);
     expect(takeIntegrationRateLimits).toHaveBeenCalledWith(context().network, "mcp_shopping", 2, connection);
     expect(reviewShoppingItems).toHaveBeenCalledWith({ region: "US", items: [
       { id: "one", name: "Milk", bought: false }, { id: "two", name: "Bread", bought: false },

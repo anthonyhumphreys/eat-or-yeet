@@ -19,8 +19,11 @@ import {
 } from "@/lib/integrations/contracts";
 import { validatePublicResponse } from "@/lib/integrations/serialize";
 import { executeTool, IntegrationToolError } from "./services";
-import type { z } from "zod";
+import { z } from "zod";
 import { MCP_APP_RESOURCE_URI, registerResultApp } from "./app-resource";
+import { AppCaptureSchema } from "@/lib/analytics/contracts";
+import { analyticsEnabled, scheduleEvent } from "@/lib/analytics/server";
+import { takeRateLimits } from "@/lib/security/rate-limit";
 
 export const MCP_TOOL_NAMES = [
   "check_product",
@@ -158,6 +161,23 @@ export function createMcpServer(executor: ToolExecutor, network: string): McpSer
     annotations: toolAnnotations("get_coverage"),
     _meta: { securitySchemes: [{ type: "noauth" }], ui: { visibility: ["model", "app"] } },
   }, toolCallback("get_coverage", GetCoverageInputSchema, PublicCoverageSchema, executor, network));
+
+  server.registerTool("record_app_event", {
+    title: "Record consented app usage", description: "Only for the embedded app after the person chooses Allow analytics. Accepts no product, conversation or identity fields.",
+    inputSchema: AppCaptureSchema, outputSchema: z.object({ recorded: z.boolean() }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    _meta: { securitySchemes: [{ type: "noauth" }], ui: { visibility: ["app"] } },
+  }, async (args) => {
+    let recorded = false;
+    if (analyticsEnabled()) try {
+      const [limit] = await takeRateLimits([{ subject: network, scope: "network" }], "analytics");
+      if (limit?.allowed) {
+        scheduleEvent(args.event, { source: "embedded_app", host: args.host, ...(args.tool ? { tool: args.tool } : {}) });
+        recorded = true;
+      }
+    } catch { /* Usage reporting cannot affect checker availability. */ }
+    return { content: [{ type: "text", text: JSON.stringify({ recorded }) }], structuredContent: { recorded } };
+  });
 
   return server;
 }

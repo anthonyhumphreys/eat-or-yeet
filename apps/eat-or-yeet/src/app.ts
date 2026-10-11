@@ -2,6 +2,7 @@ import { App, PostMessageTransport, applyDocumentTheme, applyHostStyleVariables 
 
 import { logoSvg } from "../../../src/lib/brand/logo";
 import { isValidGtin } from "../../../src/lib/domain/gtin";
+import { AppCaptureSchema } from "../../../src/lib/analytics/contracts";
 import {
   AgentObservationSchema,
   PublicCheckResultSchema,
@@ -53,6 +54,41 @@ let nextRequestId = 1;
 let activeController: AbortController | null = null;
 let requestOrigin: "app" | "host" | null = null;
 let requestFocusKey: string | null = null;
+let analyticsChoice: "accepted" | "declined" | null = null;
+
+function analyticsBlocked(): boolean {
+  return navigator.doNotTrack === "1" || (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
+}
+function reportAppUsage(event: "app_opened" | "app_tool_requested", tool?: ToolName): void {
+  if (!connected || analyticsBlocked() || analyticsChoice !== "accepted") return;
+  const host = /chatgpt/i.test(app.getHostVersion()?.name ?? "") ? "chatgpt" : "other";
+  const args = AppCaptureSchema.parse({ consent: true, host, event, ...(tool ? { tool } : {}) });
+  // Only this small event crosses the bridge. No input/result object or model-context update.
+  void app.callServerTool({ name: "record_app_event", arguments: args }, { timeout: 5_000 }).catch(() => undefined);
+}
+
+function renderAnalyticsChoice(): HTMLElement {
+  const panel = node("section", "analytics-choice");
+  panel.setAttribute("aria-label", "Usage analytics");
+  paragraph(panel, "Optional PostHog analytics helps us improve this app. No product details, conversations or screen recordings.", "field-hint");
+  if (analyticsBlocked()) {
+    paragraph(panel, "Analytics is off because your browser sends a privacy preference.", "field-hint");
+  } else {
+    paragraph(panel, analyticsChoice === "accepted" ? "Analytics is on for this view only. You can turn it off below." : "Analytics is off. This choice does not affect checks.", "field-hint");
+    const controls = node("div", "form-actions");
+    controls.append(button("No analytics", () => { analyticsChoice = "declined"; render(); }));
+    controls.append(button("Allow analytics", () => {
+      if (analyticsChoice === "accepted") return;
+      analyticsChoice = "accepted"; reportAppUsage("app_opened"); render();
+    }));
+    controls.querySelectorAll("button").forEach((control) => { control.dataset.analytics = "true"; });
+    panel.append(controls);
+  }
+  const privacy = node("a", undefined, "Privacy details");
+  privacy.href = "https://www.eatoryeet.app/privacy#analytics"; privacy.target = "_blank"; privacy.rel = "noopener noreferrer";
+  panel.append(privacy);
+  return panel;
+}
 
 const status = node("p", "status-line");
 status.setAttribute("role", "status");
@@ -311,6 +347,7 @@ async function callTool(tool: ToolName, args: Record<string, unknown>): Promise<
     return;
   }
   if (state.pending) return;
+  reportAppUsage("app_tool_requested", tool);
   const id = startRequest(tool, args, "app", activeFocusKey());
   const controller = new AbortController();
   activeController = controller;
@@ -403,9 +440,10 @@ function render(focusKey?: string | null, focusStatus = false): void {
   if (view === "detail") shell.append(renderDetailView());
   if (view === "coverage") shell.append(renderCoverageView());
   shell.append(renderWebsiteLinks());
+  shell.append(renderAnalyticsChoice());
   shell.append(status);
   if (state.pending) shell.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button,input,select").forEach((control) => {
-    if (control.dataset.cancel !== "true") control.disabled = true;
+    if (control.dataset.cancel !== "true" && control.dataset.analytics !== "true") control.disabled = true;
   });
   if (!connected) shell.querySelectorAll<HTMLButtonElement>("button[data-requires-connection='true']").forEach((control) => { control.disabled = true; });
   root.append(shell);
@@ -1021,6 +1059,7 @@ syncHostTheme();
 render();
 void app.connect(new PostMessageTransport(window.parent, window.parent)).then(() => {
   connected = true;
+  reportAppUsage("app_opened");
   syncHostTheme();
   const tool = app.getHostContext()?.toolInfo?.tool.name;
   if (isToolName(tool)) currentTool = tool;

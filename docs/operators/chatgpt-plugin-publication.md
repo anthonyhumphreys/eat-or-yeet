@@ -67,3 +67,7 @@ The integrations page should link to the real directory listing only after publi
 The user completed the publisher attestations and submitted version 0.1.1. [Manage the submission](https://platform.openai.com/plugins/manage/plugin_asdk_app_6acb7e8271548191a8ffc8c209438357). The portal showed In review and Not published on 11 October 2026. Check for reviewer requests there; do not resubmit or cancel the review as part of a documentation refresh.
 
 The final 5:10 walkthrough was uploaded Unlisted with the user’s approval. Signed-out playback was verified. Its reviewer URL is stored in the submission; keep the video out of the shopper setup guide.
+
+## Analytics update
+
+The v2 embedded resource adds optional usage analytics with equal Allow analytics and No analytics controls. Analytics is off until chosen, lasts only for the view and excludes conversation and product details. The bridge advertises an app-only `record_app_event` tool with strict consent and property validation. Public tool operations also produce unlinked server metrics. The privacy URL remains `/privacy`; it now explains both paths. Check the live portal's privacy/data declarations and test v2 controls in ChatGPT when submitting the next release. Existing host installation tests predate this change. See [analytics operations](analytics.md).

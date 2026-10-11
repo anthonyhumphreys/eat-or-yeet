@@ -8,7 +8,7 @@ import {
 import { readResponseText } from "../src/lib/http/bounded-response";
 import { MAX_APP_RESPONSE_BYTES } from "../src/lib/integrations/mcp/app-limits";
 
-const APP_RESOURCE_URI = "ui://eat-or-yeet/result-v1.html";
+const APP_RESOURCE_URI = "ui://eat-or-yeet/result-v2.html";
 const TOOL_NAMES = ["check_product", "search_warnings", "get_warning", "get_coverage"] as const;
 const PROTOCOLS = [
   { label: "2026-07-28", mode: { pin: "2026-07-28" } },

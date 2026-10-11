@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import type { JSHandle, Page } from "@playwright/test";
 
-const appHtml = readFile(new URL("../../public/mcp-app/result-v1.html", import.meta.url), "utf8");
+const appHtml = readFile(new URL("../../public/mcp-app/result-v2.html", import.meta.url), "utf8");
 let bridgeBundle: Promise<string> | undefined;
 
 async function getBridgeBundle(): Promise<string> {

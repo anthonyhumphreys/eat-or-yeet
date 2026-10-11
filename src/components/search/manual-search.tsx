@@ -15,6 +15,7 @@ import { VerdictView } from "@/components/verdict/verdict-view";
 import { emptyObservation, type ProductObservation } from "@/lib/domain/schemas";
 import { isValidGtin } from "@/lib/domain/gtin";
 import type { VerdictResult } from "@/lib/domain/types";
+import { trackWebsiteEvent } from "@/lib/analytics/browser";
 
 type SearchMode = "barcode" | "details";
 
@@ -37,6 +38,7 @@ export function ManualSearch({ initialMode = "barcode" }: { initialMode?: Search
     : Boolean(observation.productName || observation.brand || observation.barcode || observation.batchCode || observation.lotCode || observation.producer || observation.establishmentNumber || observation.eggMark?.producerCode);
 
   async function check() {
+    trackWebsiteEvent({ event: "website_check_started", method: mode, region });
     setPending(true);
     setError(null);
     try {
@@ -48,7 +50,9 @@ export function ManualSearch({ initialMode = "barcode" }: { initialMode?: Search
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "The check failed.");
       setResult(payload);
+      trackWebsiteEvent({ event: "website_check_finished", method: mode, region, outcome: payload.verdict });
     } catch (cause) {
+      trackWebsiteEvent({ event: "website_check_finished", method: mode, region, outcome: "error" });
       setError(cause instanceof Error ? cause.message : "The check failed.");
     } finally {
       setPending(false);
