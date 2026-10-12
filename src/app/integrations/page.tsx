@@ -5,10 +5,11 @@ import { getNotionSetupOrigin, notionTemplateUrl } from "@/lib/integrations/noti
 
 export const metadata: Metadata = {
   title: "Integrations",
-  description: "Connect Eat or Yeet to a Notion shopping list, OpenClaw, Hermes or another MCP-compatible assistant. Check published UK and US food warnings.",
+  description: "Install Eat or Yeet in ChatGPT, connect a Notion shopping list, or use OpenClaw, Hermes and other assistants to check published UK and US food warnings.",
 };
 
 const mcpUrl = "https://www.eatoryeet.app/mcp";
+const chatgptPluginUrl = "https://chatgpt.com/plugins/plugin_asdk_app_6acb7e8271548191a8ffc8c209438357";
 const linkClass = "inline-flex min-h-11 items-center rounded-sm font-semibold underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 const stepsClass = "mt-4 list-decimal space-y-3 pl-6 leading-7 text-muted-foreground";
 const promptClass = "mt-4 rounded-xl bg-muted/35 p-4 leading-7";
@@ -27,6 +28,7 @@ export default function IntegrationsPage() {
         </p>
         <p className="mt-3 leading-7 text-muted-foreground">Eat or Yeet&apos;s public food checks are free and need no account or API key. Your assistant&apos;s own plan or workspace rules may apply.</p>
         <nav aria-label="Integration guides" className="mt-6 flex flex-wrap gap-x-6 gap-y-1">
+          <a className={linkClass} href="#chatgpt">ChatGPT</a>
           <a className={linkClass} href="#notion">Notion</a>
           <a className={linkClass} href="#openclaw">OpenClaw</a>
           <a className={linkClass} href="#hermes">Hermes</a>
@@ -37,6 +39,19 @@ export default function IntegrationsPage() {
           <h2 id="first-check" className="text-xl font-bold">Once connected, try a check</h2>
           <blockquote className="mt-3 leading-7">“Use Eat or Yeet to check barcode 044000061494 against US food warnings. Show the source coverage and explain the result.”</blockquote>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">Replace the example with your barcode and choose UK or US. You can give a product name, brand and batch instead. Leave details you don&apos;t know empty.</p>
+        </section>
+
+        <section id="chatgpt" aria-labelledby="chatgpt-title" className={sectionClass}>
+          <h2 id="chatgpt-title" className="text-2xl font-black tracking-tight">ChatGPT</h2>
+          <p className="mt-3 leading-7 text-muted-foreground">Install the Eat or Yeet plugin to check a packet, search food warnings or ask which official sources cover your country.</p>
+          <a className="mt-4 inline-flex min-h-11 items-center rounded-full bg-primary px-5 font-bold text-primary-foreground transition-colors hover:bg-primary/85 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" href={chatgptPluginUrl}>Install in ChatGPT</a>
+          <ol className={stepsClass}>
+            <li>Open the plugin page, sign in to ChatGPT and select <strong className="text-foreground">Install plugin</strong>. Follow any setup prompts.</li>
+            <li>Start a new chat. Type <strong className="text-foreground">@Eat or Yeet</strong> in the message box and select the plugin from the menu.</li>
+            <li>Send the example above with your barcode and UK or US. Add a brand, batch or date from the packet if you know it.</li>
+          </ol>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">You need a ChatGPT account, but no separate Eat or Yeet account or API key. If the plugin is unavailable in your workspace, <Link className={linkClass} href="/search">check a product on this site</Link>.</p>
+          <a className={`${linkClass} mt-2`} href="https://learn.chatgpt.com/docs/plugins">ChatGPT plugin help</a>
         </section>
 
         <section id="notion" aria-labelledby="notion-title" className={sectionClass}>
