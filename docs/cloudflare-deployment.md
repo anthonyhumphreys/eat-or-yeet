@@ -12,7 +12,7 @@ The transactional job outbox closes the gap between D1 writes and Queue publicat
 
 Source archives are validated before imports are prepared in private R2. Each Queue delivery applies at most 25 notices and commits its progress, warning projections and next job together. Redelivery cannot double-count a committed batch. A newer source refresh fences older batches. Indexed reads are fetched together, while unchanged notices retain the compact-projection fast path. One consumer avoids contention on the database revision; delivery leases last 20 minutes, longer than Queue's 15-minute invocation limit. Nested operations use the Worker's SELF binding, and durable batches keep request chains below its invocation limit.
 
-Configure R2 lifecycle rules for `source-imports/` at seven days and `fsis/` at one day. Committed batches and upload objects are deleted immediately; these rules remove abandoned objects after a failed preparation or superseded refresh.
+Configure R2 lifecycle rules for `source-imports/` at seven days and `fsis/` and `fda-announcements/` at one day. Committed batches and upload objects are deleted immediately; these rules remove abandoned objects after a failed preparation or superseded refresh.
 
 ## Provision an isolated stage
 
@@ -40,11 +40,14 @@ Generate independent random 32-byte values per environment. Store operator files
 - `BACKEND_SECRET`: required in the Worker and corresponding Vercel environment. It permits declared website operations only.
 - `BACKEND_ADMIN_TOKEN`: required for `/admin/rpc`; permits internal operations. Keep it in operator tooling, never Vercel.
 - `FSIS_UPLOAD_TOKEN`: only permits `/admin/fsis`. Give this token to the NAS importer.
+- `FDA_UPLOAD_TOKEN`: only permits `/admin/fda-announcements`. Give this separate token to the same NAS importer. It cannot upload USDA data or call general operations.
 - `NOTION_CREDENTIAL_KEY`: preserve the existing encryption key when restoring encrypted credentials. It must agree in Vercel and the Worker.
 - `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_REVIEW_CONNECTION_KEY`: needed in the Worker for enabled hosted Notion jobs. Keep the website's existing OAuth/webhook settings in Vercel.
 - `OPENFDA_API_KEY`: optional Worker secret for source fetching.
 
 Local Wrangler uses `.dev.vars`; hosted stages use `.dev.vars.staging` or `.dev.vars.production` for local emulation only. These files are ignored. Production secrets must be explicitly provisioned remotely. Worker logs record operation identifiers and error classes, not request contents or credential envelopes.
+
+USDA and FDA announcements use `snapshot` fetch modes. The NAS validates the complete official FDA food/supplement listing and every detail page, then uploads normalized records. The Worker validates their age, schema, FDA origin, source IDs and announcement paragraphs before preparing imports. A Worker-side live test received a regional FDA "Page Not Found" response for an announcement reachable from the home connection, so the NAS fetches this source too. FSA and openFDA food/drug enforcement feeds remain on Workers. The NAS health check covers both snapshot imports, and the application's uncached source-health gate still expires missing or failed coverage.
 
 ## Restore a Convex export
 

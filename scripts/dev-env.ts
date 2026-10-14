@@ -27,7 +27,7 @@ export function ensureLocalEnvironment(directory: string, env: DevelopmentEnv): 
   if (!existsSync(filename)) writeFileSync(filename, readFileSync(path.join(directory, ".env.example")), { mode: 0o600, flag: "wx" });
   const resolved = { ...parseEnv(readFileSync(filename, "utf8")), ...env };
   const additions: string[] = [];
-  for (const name of ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "RATE_LIMIT_SALT", "CRON_SECRET"]) {
+  for (const name of ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "FDA_UPLOAD_TOKEN", "RATE_LIMIT_SALT", "CRON_SECRET"]) {
     if (!resolved[name]) {
       resolved[name] = randomBytes(32).toString("hex");
       additions.push(`${name}=${resolved[name]}`);
@@ -38,11 +38,14 @@ export function ensureLocalEnvironment(directory: string, env: DevelopmentEnv): 
   }
   if (additions.length) appendFileSync(filename, `\n# Generated local development values.\n${additions.join("\n")}\n`);
   const workerFile = path.join(directory, ".dev.vars");
-  const names = ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "NOTION_CREDENTIAL_KEY", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET", "NOTION_REVIEW_CONNECTION_KEY", "OPENFDA_API_KEY"];
+  const names = ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "FDA_UPLOAD_TOKEN", "NOTION_CREDENTIAL_KEY", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET", "NOTION_REVIEW_CONNECTION_KEY", "OPENFDA_API_KEY"];
   if (!existsSync(workerFile)) {
     writeFileSync(workerFile, names.filter((name) => resolved[name]).map((name) => `${name}=${JSON.stringify(resolved[name])}`).join("\n") + "\n", { mode: 0o600, flag: "wx" });
   } else {
     const workerEnv = parseEnv(readFileSync(workerFile, "utf8"));
-    for (const name of names.slice(0, 3)) if (workerEnv[name] !== resolved[name]) throw new Error(`${name} differs between .dev.vars and the Next.js environment. Align the local credentials before starting.`);
+    for (const name of names.slice(0, 4)) {
+      if (!workerEnv[name] && resolved[name]) appendFileSync(workerFile, `${name}=${JSON.stringify(resolved[name])}\n`);
+      else if (workerEnv[name] !== resolved[name]) throw new Error(`${name} differs between .dev.vars and the Next.js environment. Align the local credentials before starting.`);
+    }
   }
 }

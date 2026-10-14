@@ -73,6 +73,7 @@ export const internal = {
     processImportBatch: ref<typeof incidents.processImportBatch>("incidents.processImportBatch"),
     refreshSourceInternal: ref<typeof incidents.refreshSourceInternal>("incidents.refreshSourceInternal"),
     importFsisSnapshotInternal: ref<typeof incidents.importFsisSnapshotInternal>("incidents.importFsisSnapshotInternal"),
+    importFdaSnapshotInternal: ref<typeof incidents.importFdaSnapshotInternal>("incidents.importFdaSnapshotInternal"),
     refreshAllInternal: ref<typeof incidents.refreshAllInternal>("incidents.refreshAllInternal"),
     queueSourceRefresh: ref<typeof incidents.queueSourceRefresh>("incidents.queueSourceRefresh"),
     refreshScheduledInternal: ref<typeof incidents.refreshScheduledInternal>("incidents.refreshScheduledInternal"),

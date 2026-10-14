@@ -22,24 +22,25 @@ const worker = {
     }
     const nested = url.pathname === "/internal/rpc";
     const admin = nested || url.pathname.startsWith("/admin/");
+    const snapshotSource = url.pathname === "/admin/fsis" ? "fsis" : url.pathname === "/admin/fda-announcements" ? "fda-announcements" : null;
     const secret = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-    const credential = url.pathname === "/admin/fsis" ? env.FSIS_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
+    const credential = snapshotSource === "fsis" ? env.FSIS_UPLOAD_TOKEN : snapshotSource === "fda-announcements" ? env.FDA_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
     if (!equalSecrets(secret, credential)) return json({ error: "Unauthorized" }, 401);
     try {
-      if (url.pathname === "/admin/fsis" && request.method === "GET") {
+      if (snapshotSource && request.method === "GET") {
         const runId = z.string().min(1).max(200).safeParse(url.searchParams.get("runId"));
         if (!runId.success) return json({ error: "Invalid run identifier" }, 400);
         const result = await workerRuntime(env).invoke(internal.incidents.getImportResult, { runId: runId.data as import("./values").Id<"ingestionRuns"> });
-        return result?.source === "fsis" ? json({ result }) : json({ error: "Not found" }, 404);
+        return result?.source === snapshotSource ? json({ result }) : json({ error: "Not found" }, 404);
       }
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       const body = await readResponseJson(new Response(request.body, { headers: request.headers }), admin ? 20 * 1024 * 1024 : 1024 * 1024);
-      if (url.pathname === "/admin/fsis") {
+      if (snapshotSource) {
         const snapshot = z.strictObject({ fetchedAt: z.number().nonnegative(), payload: z.array(z.unknown()).max(20_000) }).parse(body);
-        const key = `fsis/${crypto.randomUUID()}.json`;
+        const key = `${snapshotSource}/${crypto.randomUUID()}.json`;
         await env.SNAPSHOTS.put(key, JSON.stringify(snapshot.payload), { httpMetadata: { contentType: "application/json" } });
         try {
-          const result = await workerRuntime(env).invoke(internal.incidents.importFsisSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
+          const result = await workerRuntime(env).invoke(snapshotSource === "fsis" ? internal.incidents.importFsisSnapshotInternal : internal.incidents.importFdaSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
           ctx.waitUntil(publishDueJobs(env));
           return json({ result }, result.status === "queued" ? 202 : 200);
         } finally { await env.SNAPSHOTS.delete(key); }

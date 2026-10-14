@@ -40,7 +40,7 @@ describe("contributor development setup", () => {
     writeFileSync(filename, contents);
     ensureLocalEnvironment(directory, {
       BACKEND_SECRET: "existing-server", BACKEND_ADMIN_TOKEN: "existing-admin", FSIS_UPLOAD_TOKEN: "existing-upload", BACKEND_URL: "http://localhost:8787", RATE_LIMIT_SALT: "existing-salt", CRON_SECRET: "existing-cron",
-      NEXT_PUBLIC_APP_URL: "http://localhost:4000",
+      NEXT_PUBLIC_APP_URL: "http://localhost:4000", FDA_UPLOAD_TOKEN: "fda-test-token",
     });
     expect(readFileSync(filename, "utf8")).toBe(contents);
   });

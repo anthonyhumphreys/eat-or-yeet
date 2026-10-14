@@ -47,7 +47,8 @@
     "required": [
       "BACKEND_SECRET",
       "BACKEND_ADMIN_TOKEN",
-      "FSIS_UPLOAD_TOKEN"
+      "FSIS_UPLOAD_TOKEN",
+      "FDA_UPLOAD_TOKEN"
     ]
   },
   "vars": {
@@ -55,7 +56,8 @@
     "PRODUCT_CATEGORY_LOOKUPS": "false",
     "FSIS_FETCH_MODE": "snapshot",
     "ALLOW_DEMO_DATA": "true",
-    "BACKEND_RESTORE_ENABLED": "false"
+    "BACKEND_RESTORE_ENABLED": "false",
+    "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
   },
   "env": {
     "staging": {
@@ -99,7 +101,8 @@
         "required": [
           "BACKEND_SECRET",
           "BACKEND_ADMIN_TOKEN",
-          "FSIS_UPLOAD_TOKEN"
+          "FSIS_UPLOAD_TOKEN",
+          "FDA_UPLOAD_TOKEN"
         ]
       },
       "vars": {
@@ -107,7 +110,8 @@
         "PRODUCT_CATEGORY_LOOKUPS": "false",
         "FSIS_FETCH_MODE": "snapshot",
         "ALLOW_DEMO_DATA": "false",
-        "BACKEND_RESTORE_ENABLED": "false"
+        "BACKEND_RESTORE_ENABLED": "false",
+        "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
       },
       "preview_urls": false,
       "services": [
@@ -162,7 +166,8 @@
         "required": [
           "BACKEND_SECRET",
           "BACKEND_ADMIN_TOKEN",
-          "FSIS_UPLOAD_TOKEN"
+          "FSIS_UPLOAD_TOKEN",
+          "FDA_UPLOAD_TOKEN"
         ]
       },
       "vars": {
@@ -170,7 +175,8 @@
         "PRODUCT_CATEGORY_LOOKUPS": "true",
         "FSIS_FETCH_MODE": "snapshot",
         "ALLOW_DEMO_DATA": "false",
-        "BACKEND_RESTORE_ENABLED": "false"
+        "BACKEND_RESTORE_ENABLED": "false",
+        "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
       },
       "preview_urls": false,
       "services": [

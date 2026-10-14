@@ -9,8 +9,10 @@ export interface CloudflareBindings {
 	FSIS_FETCH_MODE: "snapshot";
 	ALLOW_DEMO_DATA: "false" | "true";
 	BACKEND_RESTORE_ENABLED: "false";
+	FDA_ANNOUNCEMENTS_FETCH_MODE: "snapshot";
 	BACKEND_SECRET: string;
 	BACKEND_ADMIN_TOKEN: string;
 	FSIS_UPLOAD_TOKEN: string;
+	FDA_UPLOAD_TOKEN: string;
 	SELF: Fetcher /* eat-or-yeet-backend-staging */ | Fetcher /* eat-or-yeet-backend */ | Service<typeof import("../backend/worker").default>;
 }

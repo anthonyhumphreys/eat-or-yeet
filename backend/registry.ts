@@ -29,6 +29,7 @@ export const operations = {
   "incidents.processImportBatch": incidents.processImportBatch,
   "incidents.refreshSourceInternal": incidents.refreshSourceInternal,
   "incidents.importFsisSnapshotInternal": incidents.importFsisSnapshotInternal,
+  "incidents.importFdaSnapshotInternal": incidents.importFdaSnapshotInternal,
   "incidents.refreshAllInternal": incidents.refreshAllInternal,
   "incidents.queueSourceRefresh": incidents.queueSourceRefresh,
   "incidents.refreshScheduledInternal": incidents.refreshScheduledInternal,

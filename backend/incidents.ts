@@ -7,11 +7,12 @@ import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/f
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
-import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "../src/lib/incidents/types";
+import type { IncidentSource, NormalisedIncident } from "../src/lib/incidents/types";
 import { browseCategories, incidentSuperCategories, medicineBrowseCategories, namedRetailers, rowSuperCategories, type ProductCategory } from "../src/lib/incidents/browse";
 import { buildDatasetStatus, type IngestionRunSummary } from "../src/lib/incidents/dataset-status";
 import { cleanupNeedsContinuation, EPHEMERAL_CLEANUP_BATCH_SIZE } from "../src/lib/incidents/cleanup-batches";
-import { normaliseCode, normaliseGtin, normaliseText } from "../src/lib/matching/normalise";
+import { serialiseSourceIncident } from "../src/lib/incidents/serialise";
+import { readFdaSnapshot } from "./fda-snapshot";
 import { pendingLookupDue, productCategoryTagsFor } from "../src/lib/products/open-food-facts";
 import { internal } from "./api";
 import type { Doc, Id } from "./model";
@@ -33,38 +34,8 @@ const READ_PAGE_BYTES = 1536 * 1024;
 const LEGACY_FDA_REPAIR_PAGE_SIZE = 25;
 const REPORTED_CURSOR_PREFIX = "reported:";
 
-function normalisedTargetValue(target: NormalisedTarget): string {
-  if (target.type === "gtin") return normaliseGtin(target.value);
-  if (["batch", "lot", "establishment", "approval", "eggProducerCode"].includes(target.type)) return normaliseCode(target.value);
-  return normaliseText(target.value);
-}
-
 function serialiseIncident(item: NormalisedIncident, source: IncidentSource, runId: Id<"ingestionRuns">) {
-  return {
-    ...item,
-    sourceKey: source.id,
-    sourceRunId: runId,
-    hazard: item.hazard ?? undefined,
-    pathogen: item.pathogen ?? undefined,
-    publishedAt: item.publishedAt.getTime(),
-    updatedAt: item.updatedAt.getTime(),
-    startsAt: item.startsAt.getTime(),
-    endsAt: item.endsAt?.getTime(),
-    retrievedAt: Date.now(),
-    isDemo: false,
-    targets: item.targets.map((target) => ({
-      type: target.type,
-      value: target.value,
-      valueNormalized: normalisedTargetValue(target),
-      matchType: target.matchType ?? "exact",
-      dateFrom: target.dateFrom?.getTime(),
-      dateTo: target.dateTo?.getTime(),
-      notes: target.notes ?? undefined,
-      groupId: target.groupId ?? undefined,
-      weight: target.weight ?? 25,
-      confidence: target.confidence ?? 1,
-    })),
-  };
+  return { ...serialiseSourceIncident(item), sourceKey: source.id, sourceRunId: runId };
 }
 
 type ImportItem = Omit<Doc<"incidents">, "_id" | "_creationTime">;
@@ -730,7 +701,7 @@ export const refreshSourceInternal = internalAction({
   handler: async (ctx, { sourceId }): Promise<ImportResult | { source: string; status: "external" }> => {
     // An external fetch keeps USDA's hosted-IP block out of the daily cron.
     // Missing external updates still expire through the normal health gate.
-    if (sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") return { source: sourceId, status: "external" };
+    if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot")) return { source: sourceId, status: "external" };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) throw new Error(`Unknown incident source: ${sourceId}`);
     return await ingestSource(ctx, source);
@@ -752,6 +723,15 @@ export const importFsisSnapshotInternal = internalAction({
     } finally {
       await ctx.storage.delete(storageId);
     }
+  },
+});
+
+export const importFdaSnapshotInternal = internalAction({
+  args: { storageId: v.string(), fetchedAt: v.number() },
+  handler: async (ctx, { storageId, fetchedAt }): Promise<ImportResult> => {
+    try {
+      return await ingestSource(ctx, { ...fdaAnnouncementsSource, fetchIncidents: async () => readFdaSnapshot(await ctx.storage.get(storageId), fetchedAt) });
+    } finally { await ctx.storage.delete(storageId); }
   },
 });
 
@@ -778,7 +758,7 @@ export const queueSourceRefresh = internalMutation({
 });
 
 function scheduledSources() {
-  return sources.filter((source) => source.id !== "fsis" || process.env.FSIS_FETCH_MODE !== "snapshot");
+  return sources.filter(source => !(source.id === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") && !(source.id === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot"));
 }
 
 export const refreshScheduledInternal = internalAction({

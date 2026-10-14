@@ -1,4 +1,4 @@
-# USDA snapshot sync
+# NAS USDA and FDA announcement sync
 
 USDA's public FSIS Recall API returns an Akamai 403 from our Convex backend, a Vercel function in `iad1`, standard GitHub Linux/ARM/macOS runners, and a Cloudflare Worker in Amsterdam. Curl and Chrome on GitHub also fail. A fetch from the maintainer's home network succeeds. The exact upstream blocking rule is unknown.
 
@@ -18,13 +18,13 @@ The script validates the complete official archive before sending its English re
 
 Only active notices and tracked closures create database records. Missing previously active notices fail the refresh. Snapshots must be fetched within 15 minutes and fit the existing size limit. Failed or stale coverage blocks negative results after the same 48-hour freshness gate.
 
-`FSIS_FETCH_MODE=snapshot` is already configured in Wrangler. Other source refreshes run on the Worker schedule. An external importer is still required; the migration does not bypass USDA's hosted-IP block.
+`FSIS_FETCH_MODE=snapshot` and `FDA_ANNOUNCEMENTS_FETCH_MODE=snapshot` are configured in Wrangler. The NAS also fetches the full FDA food and supplement announcement listing and validates every detail page. Cloudflare received a regional error page for a current FDA announcement that was readable from the home connection. The separate FDA snapshot endpoint accepts only fresh, validated records with canonical FDA URLs and source IDs. FSA and openFDA enforcement refreshes run on the Worker schedule.
 
 ## NAS container
 
 Use a Linux NAS with Docker Compose and an ARM64 or x86-64 CPU. The image contains Node and only the two dependencies needed for fetching and importing; it does not run the website or a second database. No inbound ports are exposed. The home connection must reach both USDA and the Cloudflare Worker.
 
-The worker imports immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to 17 minutes for an import already in progress to finish. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
+The worker imports USDA and FDA announcements immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to 35 minutes for an import already in progress to finish. Its health status covers both imports. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
 
 ### Create a separate key
 
@@ -36,11 +36,14 @@ chmod 700 deploy/fsis-sync/secrets
 openssl rand -hex 32 > deploy/fsis-sync/secrets/fsis-upload-token
 pnpm exec wrangler secret put FSIS_UPLOAD_TOKEN --env production < deploy/fsis-sync/secrets/fsis-upload-token
 chmod 444 deploy/fsis-sync/secrets/fsis-upload-token
+openssl rand -hex 32 > deploy/fsis-sync/secrets/fda-upload-token
+pnpm exec wrangler secret put FDA_UPLOAD_TOKEN --env production < deploy/fsis-sync/secrets/fda-upload-token
+chmod 444 deploy/fsis-sync/secrets/fda-upload-token
 ```
 
 Transfer the file privately to the same path on the NAS. The private directory restricts host access and the readable file lets the unprivileged container user read the mounted secret. Git and the Docker build exclude this directory. Set `FSIS_BACKEND_URL` to the intended production Worker URL in the NAS Compose environment. Compose requires an explicit URL and has no production default.
 
-The token only authorizes USDA snapshot uploads, and can be rotated independently of the website and operator credentials. The worker rejects insecure target URLs and malformed tokens before fetching.
+Each token authorizes only its own source upload and status endpoint. They can be rotated independently of the website and operator credentials. Compose mounts both tokens and enables the FDA announcement sync. The worker rejects insecure target URLs and malformed tokens before fetching.
 
 ### Start and check
 
@@ -60,7 +63,7 @@ Look for `"status":"success"` with the imported record count in the logs. A runn
 docker compose -f deploy/fsis-sync/compose.yaml exec fsis-sync node --import tsx scripts/fsis-sync-worker.ts --healthcheck
 ```
 
-Exit code 0 means the most recent attempt succeeded and its success is less than 36 hours old. Missing status, an import failure or stale success returns 1. Docker checks this every five minutes, with ten minutes allowed for initial startup. Configure your NAS's container monitoring to alert on unhealthy status if it supports this; Docker health status itself does not send a notification. The app independently stops treating USDA coverage as complete after 48 hours without a successful import.
+Exit code 0 means the most recent combined attempt succeeded and its success is less than 36 hours old. Missing status, an import failure or stale success returns 1. Docker checks this every five minutes, with 35 minutes allowed for initial startup. Configure your NAS's container monitoring to alert on unhealthy status if it supports this; Docker health status itself does not send a notification. The app independently stops treating USDA coverage as complete after 48 hours without a successful import.
 
 The restart policy brings the worker back after a crash or NAS restart. Normal request failures stay in the worker's hourly retry loop. If the first fetch is blocked on the NAS too, the logs will report HTTP 403 and the worker will be unhealthy; the original home-machine test does not guarantee every home network works.
 

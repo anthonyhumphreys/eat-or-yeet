@@ -46,6 +46,15 @@ describe("USDA fetcher transport", () => {
     await expect(syncFsis({ prod: true, env })).resolves.toMatchObject(success);
     expect(String(vi.mocked(fetch).mock.calls[2][0])).toBe("https://backend.example.test/admin/fsis?runId=ingestionRuns%3Aone");
   });
+  it("recovers from transient polling failures without resubmitting or exposing credentials", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json([record]))
+      .mockResolvedValueOnce(Response.json({ result: { ...success, status: "queued", runId: "ingestionRuns:one" } }, { status: 202 }))
+      .mockRejectedValueOnce(new Error("secret token must not appear"))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ result: { ...success, runId: "ingestionRuns:one" } }));
+    await expect(syncFsis({ prod: true, env })).resolves.toMatchObject(success);
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
 
   it.each(["failed", "partial"])("reports a %s import", async (status) => {
     vi.mocked(fetch).mockResolvedValueOnce(Response.json([record])).mockResolvedValueOnce(Response.json({ result: { ...success, status } }));

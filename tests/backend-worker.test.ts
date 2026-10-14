@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { parseFdaAnnouncementDetail, parseFdaAnnouncementRows } from "../src/lib/incidents/fda-announcements";
+import { serialiseSourceIncident } from "../src/lib/incidents/serialise";
 
 const secret = "worker-test-server-secret";
 const admin = "worker-test-admin-secret";
@@ -13,7 +15,7 @@ beforeAll(async () => {
   const bundle = await build({ entryPoints: ["backend/worker.ts"], bundle: true, write: false, format: "esm", platform: "neutral", target: "es2022", external: ["node:*"], conditions: ["workerd", "worker", "browser"], tsconfig: "tsconfig.json" });
   mf = new Miniflare({ name: "backend-test", serviceBindings: { SELF: "backend-test" }, modules: true, script: bundle.outputFiles[0].text, compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"],
     d1Databases: { DB: "worker-test-db" }, r2Buckets: ["SNAPSHOTS"], queueProducers: { JOBS: "worker-test-jobs" }, queueConsumers: { "worker-test-jobs": { maxBatchSize: 1, maxBatchTimeout: 0 } },
-    bindings: { BACKEND_SECRET: secret, BACKEND_ADMIN_TOKEN: admin, FSIS_UPLOAD_TOKEN: "uploader-only", ALLOW_DEMO_DATA: "true", BACKEND_RESTORE_ENABLED: "false", SCHEDULED_SOURCE_REFRESH: "false", PRODUCT_CATEGORY_LOOKUPS: "false", FSIS_FETCH_MODE: "snapshot" },
+    bindings: { BACKEND_SECRET: secret, BACKEND_ADMIN_TOKEN: admin, FSIS_UPLOAD_TOKEN: "uploader-only", FDA_UPLOAD_TOKEN: "fda-uploader-only", ALLOW_DEMO_DATA: "true", BACKEND_RESTORE_ENABLED: "false", SCHEDULED_SOURCE_REFRESH: "false", PRODUCT_CATEGORY_LOOKUPS: "false", FSIS_FETCH_MODE: "snapshot", FDA_ANNOUNCEMENTS_FETCH_MODE: "snapshot" },
   });
   const db = await mf.getD1Database("DB");
   for (const statement of readFileSync("backend/migrations/0001_backend.sql", "utf8").split(";")) if (statement.trim()) await db.prepare(statement).run();
@@ -97,6 +99,26 @@ describe("Cloudflare Worker with native D1 and R2", () => {
     expect(await (await rpc("incidents.applyImportBatch", { runId: result.runId, index: 1, items: payload }, admin, "/admin/rpc")).json()).toMatchObject({ error: "Invalid arguments" });
     expect(await (await rpc("incidents.applyImportBatch", { runId: result.runId, index: 1, items: [] }, admin, "/admin/rpc")).json()).toEqual({ result: { applied: false } });
     expect(await (await rpc("incidents.getDatasetVersion", { region: "US" })).json()).toEqual(before);
+    await vi.waitFor(async () => expect((await (await mf.getR2Bucket("SNAPSHOTS")).list()).objects).toEqual([]));
+  });
+  it("restricts FDA snapshots to their own credential and canonical food announcement records", async () => {
+    const [listing] = parseFdaAnnouncementRows({ data: [[ '<time datetime="2026-10-01T00:00:00Z">10/01/2026</time>',
+      '<a href="/safety/recalls-market-withdrawals-safety-alerts/native-test">Brand</a>', "Sprouts", "Food &amp; Beverages", "Salmonella", "Example Foods", "", "" ]] });
+    const item = serialiseSourceIncident(parseFdaAnnouncementDetail(listing, '<h2 id="recall-announcement">Company Announcement</h2><p>Consumers should return this product.</p>'));
+    const upload = (payload: unknown[], token: string) => mf.dispatchFetch("https://backend.test/admin/fda-announcements", {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fetchedAt: Date.now(), payload }),
+    });
+    expect((await upload([item], "uploader-only")).status).toBe(401);
+    expect((await rpc("incidents.getDatasetVersion", {}, "fda-uploader-only", "/admin/rpc")).status).toBe(401);
+    expect(await (await upload([{ ...item, authorityUrl: "https://example.test/fake" }], "fda-uploader-only")).json()).toMatchObject({ result: { status: "failed" } });
+    const response = await upload([item], "fda-uploader-only");
+    expect(response.status).toBe(202);
+    const { result } = await response.json() as { result: { runId: string } };
+    await vi.waitFor(async () => {
+      const status = await mf.dispatchFetch(`https://backend.test/admin/fda-announcements?runId=${encodeURIComponent(result.runId)}`, { headers: { Authorization: "Bearer fda-uploader-only" } });
+      expect(await status.json()).toMatchObject({ result: { status: "success", found: 1, created: 1 } });
+    });
+    expect((await mf.dispatchFetch(`https://backend.test/admin/fsis?runId=${encodeURIComponent(result.runId)}`, { headers: { Authorization: "Bearer uploader-only" } })).status).toBe(404);
     await vi.waitFor(async () => expect((await (await mf.getR2Bucket("SNAPSHOTS")).list()).objects).toEqual([]));
   });
 });
