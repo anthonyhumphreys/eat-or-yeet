@@ -42,10 +42,13 @@ export function ensureLocalEnvironment(directory: string, env: DevelopmentEnv): 
   if (!existsSync(workerFile)) {
     writeFileSync(workerFile, names.filter((name) => resolved[name]).map((name) => `${name}=${JSON.stringify(resolved[name])}`).join("\n") + "\n", { mode: 0o600, flag: "wx" });
   } else {
-    const workerEnv = parseEnv(readFileSync(workerFile, "utf8"));
+    const workerContents = readFileSync(workerFile, "utf8");
+    const workerEnv = parseEnv(workerContents);
+    const additions: string[] = [];
     for (const name of names.slice(0, 4)) {
-      if (!workerEnv[name] && resolved[name]) appendFileSync(workerFile, `${name}=${JSON.stringify(resolved[name])}\n`);
+      if (!workerEnv[name] && resolved[name]) additions.push(`${name}=${JSON.stringify(resolved[name])}`);
       else if (workerEnv[name] !== resolved[name]) throw new Error(`${name} differs between .dev.vars and the Next.js environment. Align the local credentials before starting.`);
     }
+    if (additions.length) appendFileSync(workerFile, `${workerContents.endsWith("\n") ? "" : "\n"}${additions.join("\n")}\n`);
   }
 }

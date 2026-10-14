@@ -45,6 +45,20 @@ describe("contributor development setup", () => {
     expect(readFileSync(filename, "utf8")).toBe(contents);
   });
 
+  it("separates appended Worker credentials when the existing file has no final newline", () => {
+    const directory = workspace();
+    const workerFile = path.join(directory, ".dev.vars");
+    writeFileSync(workerFile, "UNRELATED=keep-me");
+    ensureLocalEnvironment(directory, {});
+    const workerEnv = parseEnv(readFileSync(workerFile, "utf8"));
+    const webEnv = parseEnv(readFileSync(path.join(directory, ".env.local"), "utf8"));
+    expect(workerEnv.UNRELATED).toBe("keep-me");
+    for (const name of ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "FDA_UPLOAD_TOKEN"]) {
+      expect(workerEnv[name]).toBe(webEnv[name]);
+      expect(workerEnv[name]).toMatch(/^[a-f0-9]{64}$/);
+    }
+  });
+
   it("defaults to local and allows explicit staging", () => {
     expect(developmentTarget({})).toBe("local");
     expect(developmentTarget({ BACKEND_ENV: "local" })).toBe("local");

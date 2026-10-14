@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { syncFsis } from "./lib/fsis-sync";
-import { syncFdaAnnouncements } from "./lib/fda-sync";
+import { syncFoodSources } from "./lib/food-source-sync";
 import { fsisUploadEnvironment, fsisWorkerHealthy, runFsisWorker } from "./lib/fsis-worker";
 
 async function main() {
@@ -32,10 +31,7 @@ async function main() {
   try {
     const ok = await runFsisWorker({
       stateFile, signal: controller.signal, once: args[0] === "--once",
-      sync: async () => {
-        const fsis = await syncFsis({ env });
-        return syncFDA ? { fsis, fda: await syncFdaAnnouncements(env) } : fsis;
-      },
+      sync: () => syncFoodSources(env, syncFDA),
     });
     if (args[0] === "--once" && !ok) process.exitCode = 1;
   } finally {
