@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("convex/nextjs", () => ({ fetchMutation: vi.fn(async (_reference, args) => args.buckets.map(() => 1)) }));
+vi.mock("@backend/client", () => ({ fetchMutation: vi.fn(async (_reference, args) => args.buckets.map(() => 1)) }));
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 import { anonymousSubject, trustedNetworkSubject } from "@/lib/security/anonymous";
 import { securitySecret } from "@/lib/security/config";
 import { readBoundedJson } from "@/lib/security/request-body";
@@ -12,7 +12,7 @@ import { takeRateLimit, takeRateLimits } from "@/lib/security/rate-limit";
 const originalNodeEnv = process.env.NODE_ENV;
 const originalVercel = process.env.VERCEL;
 const originalSalt = process.env.RATE_LIMIT_SALT;
-const originalConvexSecret = process.env.CONVEX_SERVER_SECRET;
+const originalBackendSecret = process.env.BACKEND_SECRET;
 
 function request(url: string, headers?: HeadersInit) {
   return new NextRequest(url, { headers });
@@ -22,7 +22,7 @@ describe("security boundaries", () => {
   beforeEach(() => {
     Reflect.set(process.env, "NODE_ENV", "test");
     process.env.RATE_LIMIT_SALT = "test-only-security-secret";
-    process.env.CONVEX_SERVER_SECRET = "test-only-convex-secret";
+    process.env.BACKEND_SECRET = "test-only-backend-secret";
     vi.clearAllMocks();
   });
 
@@ -34,8 +34,8 @@ describe("security boundaries", () => {
     else process.env.VERCEL = originalVercel;
     if (originalSalt === undefined) delete process.env.RATE_LIMIT_SALT;
     else process.env.RATE_LIMIT_SALT = originalSalt;
-    if (originalConvexSecret === undefined) delete process.env.CONVEX_SERVER_SECRET;
-    else process.env.CONVEX_SERVER_SECRET = originalConvexSecret;
+    if (originalBackendSecret === undefined) delete process.env.BACKEND_SECRET;
+    else process.env.BACKEND_SECRET = originalBackendSecret;
   });
 
   it("replaces a signed cookie with non-ASCII signature bytes without throwing", () => {

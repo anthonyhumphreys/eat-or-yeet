@@ -2,9 +2,9 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import { securitySecret } from "./config";
 
 export type RateLimitAction = "check" | "share" | "analytics";
@@ -32,7 +32,7 @@ export async function takeRateLimits(subjects: RateLimitSubject[], action: RateL
   const bucket = Math.floor(now / windowMs);
   const windowStartedAt = bucket * windowMs;
   const expiresAt = (bucket + 2) * windowMs;
-  const secret = process.env.CONVEX_SERVER_SECRET ?? "";
+  const secret = process.env.BACKEND_SECRET ?? "";
   const salt = securitySecret();
   const buckets = subjects.map(({ subject, scope }) => {
     const subjectHash = createHash("sha256")

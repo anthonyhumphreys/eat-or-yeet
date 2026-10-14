@@ -15,13 +15,13 @@ const stateSchema = z.object({
 });
 type WorkerState = z.infer<typeof stateSchema>;
 
-export function fsisDeployKeyEnvironment(key: string, deployment: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function fsisUploadEnvironment(key: string, backendUrl: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const trimmed = key.trim();
-  const expected = /^(prod|dev):[a-z0-9-]+$/.test(deployment);
-  if (!expected || !trimmed.startsWith(`${deployment}|`) || /\s/.test(trimmed) || trimmed.length <= deployment.length + 1) {
-    throw new Error("The mounted Convex deployment key does not match FSIS_DEPLOYMENT");
+  const url = new URL(backendUrl);
+  if (!/^[a-f0-9]{64}$/.test(trimmed) || url.protocol !== "https:" || url.username || url.password) {
+    throw new Error("Use an HTTPS backend URL and its 64-character FSIS upload token");
   }
-  return { ...env, CONVEX_DEPLOY_KEY: trimmed };
+  return { ...env, BACKEND_URL: url.origin, FSIS_UPLOAD_TOKEN: trimmed };
 }
 
 export async function readFsisWorkerState(stateFile: string): Promise<WorkerState | null> {

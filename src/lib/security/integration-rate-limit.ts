@@ -2,9 +2,9 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import { securitySecret } from "./config";
 
 export type IntegrationRateLimitAction = "mcp_check" | "mcp_browse" | "mcp_coverage" | "mcp_shopping";
@@ -47,7 +47,7 @@ function validCounts(counts: unknown, expectedLength: number): counts is number[
 
 /**
  * Consume an integration request's network and shared global allowance in one
- * atomic Convex mutation. `network` must come from the server's trusted proxy
+ * atomic backend mutation. `network` must come from the server's trusted proxy
  * parsing; callers must not pass a client-supplied host or user identifier.
  */
 export async function takeIntegrationRateLimits(
@@ -76,7 +76,7 @@ export async function takeIntegrationRateLimits(
   const salt = securitySecret();
   const networkHash = hashIdentity(salt, `network:${network}`);
   const globalHash = hashIdentity(salt, "global");
-  const secret = process.env.CONVEX_SERVER_SECRET ?? "";
+  const secret = process.env.BACKEND_SECRET ?? "";
   const connectionHash = connection ? hashIdentity(salt, `connection:${connection.id}`) : null;
   const buckets = [
     {

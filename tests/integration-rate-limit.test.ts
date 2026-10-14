@@ -1,25 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("convex/nextjs", () => ({ fetchMutation: vi.fn() }));
+vi.mock("@backend/client", () => ({ fetchMutation: vi.fn() }));
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import { takeRateLimits } from "@/lib/security/rate-limit";
 import { takeIntegrationRateLimits } from "@/lib/security/integration-rate-limit";
-import { createBackend } from "./convex-harness";
+import { createBackend } from "./backend-harness";
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalSalt = process.env.RATE_LIMIT_SALT;
-const originalConvexSecret = process.env.CONVEX_SERVER_SECRET;
-const secret = "test-convex-secret";
+const originalBackendSecret = process.env.BACKEND_SECRET;
+const secret = "test-backend-secret";
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-03-04T23:30:00.000Z"));
   Reflect.set(process.env, "NODE_ENV", "test");
   process.env.RATE_LIMIT_SALT = "test-integration-rate-limit-salt";
-  process.env.CONVEX_SERVER_SECRET = secret;
+  process.env.BACKEND_SECRET = secret;
   vi.mocked(fetchMutation).mockReset();
 });
 
@@ -29,8 +29,8 @@ afterEach(() => {
   else Reflect.set(process.env, "NODE_ENV", originalNodeEnv);
   if (originalSalt === undefined) delete process.env.RATE_LIMIT_SALT;
   else process.env.RATE_LIMIT_SALT = originalSalt;
-  if (originalConvexSecret === undefined) delete process.env.CONVEX_SERVER_SECRET;
-  else process.env.CONVEX_SERVER_SECRET = originalConvexSecret;
+  if (originalBackendSecret === undefined) delete process.env.BACKEND_SECRET;
+  else process.env.BACKEND_SECRET = originalBackendSecret;
 });
 
 describe("integration rate limits", () => {

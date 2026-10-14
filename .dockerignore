@@ -11,3 +11,7 @@ test-results
 deploy/fsis-sync/secrets
 *.pem
 **/*.key
+
+.wrangler
+.local-backups
+.dev.vars*

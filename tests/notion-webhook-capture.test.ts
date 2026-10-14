@@ -19,7 +19,7 @@ function request(body: unknown = { verification_token: token }, headers: Record<
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("operator-controlled Notion webhook verification capture", () => {
-  it("captures through the real webhook route before OAuth configuration exists, without contacting Convex", async () => {
+  it("captures through the real webhook route before OAuth configuration exists, without contacting the backend", async () => {
     for (const [name, value] of Object.entries(environment())) vi.stubEnv(name, value);
     vi.stubEnv("NOTION_CLIENT_SECRET", "");
     vi.stubEnv("NOTION_WEBHOOK_VERIFICATION_TOKEN", "");

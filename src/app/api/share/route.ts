@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import { anonymousSubject, attachAnonymousCookie, trustedNetworkSubject } from "@/lib/security/anonymous";
 import { readBoundedJson } from "@/lib/security/request-body";
 import { takeRateLimits } from "@/lib/security/rate-limit";
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     const id = randomBytes(9).toString("base64url");
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     await fetchMutation(api.shares.create, {
-      secret: process.env.CONVEX_SERVER_SECRET ?? "",
+      secret: process.env.BACKEND_SECRET ?? "",
       shareId: id,
       verdict: verified.verdict,
       matchLevel: verified.matchLevel,

@@ -1,6 +1,6 @@
 import { constants, createHash, createHmac, createPublicKey, publicEncrypt, randomBytes, timingSafeEqual } from "node:crypto";
 
-import type { Id } from "@convex/_generated/dataModel";
+import type { Id } from "@backend/model";
 import { encryptCredentials } from "../../../integrations/notion/hosted/crypto.ts";
 import type { Authorization, InstallationStatus, Region } from "../../../integrations/notion/managed/types.ts";
 import { getNotionInstallationOrigin } from "./notion-installation";

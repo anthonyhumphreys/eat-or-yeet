@@ -7,7 +7,7 @@ import { containsWords, words } from "./words";
 // say what the food is ("Doritos Chilli Heatwave", "Capri Sun Orange"). Each
 // product's food type comes from the first of:
 //   1. Open Food Facts categories for the product's barcode, looked up and
-//      cached by the importer (see convex/products.ts);
+//      cached by the importer (see backend/products.ts);
 //   2. known single-format product lines ("Pot Noodle" is a snack meal even
 //      when it says "Chicken Flavour");
 //   3. generic food words, ordered so what a product *is* (a sauce, a bun, a

@@ -9,7 +9,7 @@ vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn() }));
 
 import {
   FSIS_HEALTH_MAX_AGE_MS, FSIS_RETRY_INTERVAL_MS, FSIS_SYNC_INTERVAL_MS,
-  fsisDeployKeyEnvironment, fsisWorkerHealthy, readFsisWorkerState, runFsisWorker,
+  fsisUploadEnvironment, fsisWorkerHealthy, readFsisWorkerState, runFsisWorker,
 } from "../scripts/lib/fsis-worker";
 
 describe("NAS USDA worker", () => {
@@ -104,13 +104,13 @@ describe("NAS USDA worker", () => {
     expect(await fsisWorkerHealthy(stateFile, now)).toBe(false);
   });
 
-  it("requires a deployment-scoped key for exactly the configured target", () => {
-    const key = "prod:silent-raven-365|test-only-token";
-    expect(fsisDeployKeyEnvironment(`${key}\n`, "prod:silent-raven-365", { NODE_ENV: "production" }))
-      .toEqual({ NODE_ENV: "production", CONVEX_DEPLOY_KEY: key });
-    for (const invalid of ["", "prod:another-deployment|token", "dev:silent-raven-365|token", "preview:project|token", "prod:silent-raven-365|", `${key}\nextra`]) {
-      expect(() => fsisDeployKeyEnvironment(invalid, "prod:silent-raven-365", { NODE_ENV: "test" })).toThrow("does not match");
+  it("requires a dedicated upload token and HTTPS target", () => {
+    const key = "a".repeat(64);
+    expect(fsisUploadEnvironment(`${key}\n`, "https://backend.example.test", { NODE_ENV: "production" }))
+      .toEqual({ NODE_ENV: "production", BACKEND_URL: "https://backend.example.test", FSIS_UPLOAD_TOKEN: key });
+    for (const invalid of ["", "too-short", `${key}\nextra`]) {
+      expect(() => fsisUploadEnvironment(invalid, "https://backend.example.test", { NODE_ENV: "test" })).toThrow(/upload token/);
     }
-    expect(() => fsisDeployKeyEnvironment(key, "preview:project", { NODE_ENV: "test" })).toThrow("does not match");
+    expect(() => fsisUploadEnvironment(key, "http://example.test", { NODE_ENV: "test" })).toThrow(/HTTPS/);
   });
 });

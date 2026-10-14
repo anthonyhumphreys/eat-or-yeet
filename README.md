@@ -13,76 +13,49 @@ The internal `EAT` enum remains for stored-result compatibility. It is not the p
 
 ## Stack and setup
 
-Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4, shadcn/ui components, Convex Cloud, native BarcodeDetector with a ZXing fallback, Zod, Vitest and Playwright.
+Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4, shadcn/ui components, Cloudflare Workers, D1, Queues and R2, native BarcodeDetector with a ZXing fallback, Zod, Vitest and Playwright.
 
 Requires Node.js 24+ and pnpm 10+. Choose the setup that matches how you contribute.
 
-### Community contributors
+### Local development
 
-Fork the repository and submit pull requests. You do not need a seat on our Convex team, a Vercel account or production credentials. Run the full account-free local stack with:
+You do not need a Cloudflare or Vercel account to contribute. Run:
 
-```bash
+```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The launcher creates local configuration and secrets, starts Convex and Next.js, and seeds fictional examples. Existing configuration is preserved. Ctrl-C stops both servers. The unit suite can run without a backend. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, development data, checks and PR guidance.
+The launcher creates missing local secrets, applies D1 migrations, starts Wrangler and Next.js, and seeds fictional examples when enabled. Existing configuration is preserved. Local data stays in `.wrangler/state/`. Ctrl-C stops both servers. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and development data.
 
-### Core contributors
-
-Maintainers with access to the shared Convex project use their own development deployment for hosted integration work and manage preview/production releases. This setup requires a Convex account and project access. Core contributors can also use the community local setup. With an existing personal cloud development selector, `pnpm dev` watches that backend and starts Next.js without changing cloud secrets or seeding cloud data.
-
-To configure your hosted development deployment:
-
-```bash
-pnpm install
-cp .env.example .env.local
-pnpm exec convex dev --once
-```
-
-Generate separate random secrets for `CONVEX_SERVER_SECRET`, `RATE_LIMIT_SALT` and `CRON_SECRET`, and put them in `.env.local`. Set the same server secret on the development Convex deployment:
-
-```bash
-pnpm exec convex env set CONVEX_SERVER_SECRET
-pnpm dev
-```
-
-Next loads `.env.development.local` only in development. Values needed by both `pnpm dev` and `pnpm start` belong in `.env.local`, or must be supplied by the hosting environment. Keep development and production credentials separate.
-
-For hosted development, fictional data is opt-in and does not establish source health. Set local `ALLOW_DEMO_DATA=true`, then:
-
-```bash
-pnpm exec convex env set ALLOW_DEMO_DATA true
-pnpm data:seed
-```
-
-Never enable demo data in production. Use `pnpm dev:web` to start only Next.js when managing the backend separately.
+For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `BACKEND_URL` and its `BACKEND_SECRET`. `pnpm dev` then starts only Next.js. Production targets are rejected by this launcher.
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
-| `CONVEX_DEPLOYMENT` | Convex CLI deployment selection |
-| `CONVEX_DEPLOY_KEY` | Vercel build credential, scoped separately to production/preview |
-| `NEXT_PUBLIC_CONVEX_URL` | Matching Convex deployment URL |
-| `CONVEX_SERVER_SECRET` | Server-only mutations/refreshes; must agree in Next and Convex |
-| `RATE_LIMIT_SALT` | Required signing/hash secret for identity, rate limits and shares |
-| `CRON_SECRET` | Protects manual incident refresh |
-| `NEXT_PUBLIC_APP_URL` | Canonical deployed HTTPS origin |
-| `ALLOW_DEMO_DATA` | Fictional development incidents only |
-| `FSIS_FETCH_MODE` | Convex only: `snapshot` uses an external USDA fetcher; unset uses direct fetching |
+| `BACKEND_URL` | Private server-to-server Worker URL, shared by the selected Vercel environment |
+| `BACKEND_SECRET` | Website credential; must agree in Next.js and the Worker |
+| `BACKEND_ADMIN_TOKEN` | Separate operator credential; keep out of Vercel and browsers |
+| `FSIS_UPLOAD_TOKEN` | Dedicated USDA importer credential; cannot call general backend operations |
+| `BACKEND_ENV` | Local launcher selection: `local` or `staging` |
+| `RATE_LIMIT_SALT` | Website identity, rate-limit and share hashing |
+| `CRON_SECRET` | Website manual refresh route |
+| `NEXT_PUBLIC_APP_URL` | Canonical website origin |
+| `ALLOW_DEMO_DATA` | Fictional development incidents only; false in hosted stages |
+| `FSIS_FETCH_MODE` | Worker setting: `snapshot` uses the external USDA fetcher |
 
-There are no model credentials. Remove obsolete OpenRouter variables and revoke unused credentials in the provider dashboard during rollout.
+All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
 ## Coverage and operations
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
-FDA drug enforcement records are imported for browsing under Medical (and Baby, for infant medicines). These are published reports, not verified current recalls: [FDA does not update drug-enforcement status after publication](https://open.fda.gov/apis/drug/enforcement/). They use a separate `reported` status, carry an unverified-current-status notice and never become the top alert. Pack checks, MCP/Notion warning tools and their source-health gate cover food sources only. Set `OPENFDA_API_KEY` on the Convex production deployment, not just Vercel, to lift openFDA's shared 1,000-requests-a-day limit.
+FDA drug enforcement records are imported for browsing under Medical (and Baby, for infant medicines). These are published reports, not verified current recalls: [FDA does not update drug-enforcement status after publication](https://open.fda.gov/apis/drug/enforcement/). They use a separate `reported` status, carry an unverified-current-status notice and never become the top alert. Pack checks, MCP/Notion warning tools and their source-health gate cover food sources only. Set `OPENFDA_API_KEY` on the Cloudflare production Worker, not just Vercel, to lift openFDA's shared 1,000-requests-a-day limit.
 
 Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 
-Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. Convex refreshes each source independently every day. Cleanup runs separately in bounded batches.
+Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. The Worker refreshes each source independently every day. Cleanup runs separately in bounded batches.
 
 USDA currently blocks requests from our hosted runtimes. `pnpm data:sync:fsis --prod` fetches the complete official archive from a working connection and imports it through an admin-only snapshot action. The [NAS container](docs/usda-sync.md#nas-container) runs this daily from a home connection, retries failures hourly and reports import health. Only active notices and tracked closures create rows. External sync mode keeps the failed direct fetch out of the daily cron; source freshness still expires after 48 hours. See [USDA snapshot sync](docs/usda-sync.md) for setup and limitations.
 
@@ -98,7 +71,7 @@ A barcode with a product name and brand from lookup can identify a one-word name
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/incidents
 ```
 
-The route returns HTTP 202 when jobs are queued; this does not mean an import succeeded. Watch completed/failed runs in Convex and investigate before treating coverage as healthy. External alerts and billing caps require hosting-account configuration; local code does not enable them.
+The route returns HTTP 202 when jobs are queued; this does not mean an import succeeded. Watch completed/failed runs in D1 and investigate before treating coverage as healthy. External alerts and billing caps require hosting-account configuration; local code does not enable them.
 
 ## Privacy and limits
 
@@ -123,24 +96,17 @@ Browser tests use deterministic fixtures. Importer tests cover pagination and pa
 
 ## Rollout
 
-For Git-triggered Vercel builds, use `pnpm build:vercel` as the Vercel Build Command. This invokes Convex deployment and supplies the matching backend URL to Next. Dashboard credentials, preview isolation and the first import are covered in [Convex deployment automation](docs/convex-deployment.md). Local `pnpm build` remains a frontend-only build.
+Keep Next.js on Vercel. `pnpm build:vercel` builds only the frontend. Deploy the matching Worker and apply D1 migrations separately before changing Vercel's `BACKEND_URL` and `BACKEND_SECRET`.
 
-Deploy the Convex schema/functions to a preview/development deployment first. Run a complete import to populate the compact matching table and source ledger; old incident rows alone do not satisfy the health gate. Verify both regions, a known warning, insufficient evidence, a failed refresh, camera denial and public sharing against the preview.
+The migration restores opaque identifiers and creation timestamps from a private Convex export. Validate all tables before writing, check table counts and foreign keys after restoring, then disable the operator restore flag. A fresh source import is still required whenever the restored source ledger is stale or incomplete.
 
-Configure production secrets and canonical origin. Deploy Convex before Next, run and inspect the initial source refresh, and confirm rate limits/spend alerts in the dashboards. Do not promote while required source health is missing or failing.
+Verify both regions, a known warning, insufficient evidence, stale and failed source coverage, public sharing, quotas and queued jobs before promotion. Keep the original backend and Vercel deployment for rollback. Preview deployments must use staging credentials and keep hosted Notion consent disabled until a separate live acceptance run succeeds.
 
-```bash
-pnpm convex:dev
-pnpm convex:deploy
-```
-
-Deployment is separate from this local implementation. See the revised cost assessment for assumptions and remaining production checks.
-
-See [Convex usage](docs/convex-usage.md) for cache freshness, index storage, unchanged imports and keeping test deployments small.
+Commands and the production cutover sequence are in [Cloudflare deployment](docs/cloudflare-deployment.md).
 
 ## Notion shopping integration
 
-The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Convex installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. Production pilot tests have verified consent, signed events, reviews and disconnect. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
+The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Cloudflare installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. Production pilot tests have verified consent, signed events, reviews and disconnect. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
 
 Connected lists require stored Notion identifiers and encrypted credentials. Our backend decrypts credentials to run reviews; pausing retains them and disconnect removes the connection. We do not save profile names, emails or shopping text as a history, but configured item fields can contain personal information supplied by a shopper. The public [privacy notice](https://www.eatoryeet.app/privacy) and [terms](https://www.eatoryeet.app/terms) describe these boundaries. Using the template without connecting gives Eat or Yeet no access to the Notion account or list.
 

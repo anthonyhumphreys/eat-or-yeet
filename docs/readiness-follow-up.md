@@ -1,3 +1,5 @@
+> This record describes the previous Convex deployment. Cloudflare rollout and its separate acceptance checks are documented in [Cloudflare deployment](cloudflare-deployment.md).
+
 # Readiness review follow-up
 
 Updated 2026-10-07. Implementation is local; the public deployment has not been updated by this work.

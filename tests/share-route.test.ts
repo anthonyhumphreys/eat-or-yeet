@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("convex/nextjs", () => ({ fetchMutation: vi.fn(async () => undefined) }));
+vi.mock("@backend/client", () => ({ fetchMutation: vi.fn(async () => undefined) }));
 vi.mock("@/lib/security/anonymous", () => ({
   anonymousSubject: vi.fn(() => ({ id: "test-user" })),
   attachAnonymousCookie: vi.fn(),
@@ -27,14 +27,14 @@ vi.mock("@/lib/security/share-token", () => ({
   })),
 }));
 
-import { fetchMutation } from "convex/nextjs";
+import { fetchMutation } from "@backend/client";
 import { POST } from "@/app/api/share/route";
 import { takeRateLimits } from "@/lib/security/rate-limit";
 import { verifyShareToken } from "@/lib/security/share-token";
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
-const originalServerSecret = process.env.CONVEX_SERVER_SECRET;
+const originalServerSecret = process.env.BACKEND_SECRET;
 
 function shareRequest(body: string, origin = "http://localhost") {
   return new NextRequest(`${origin}/api/share`, {
@@ -49,7 +49,7 @@ describe("POST /api/share", () => {
     vi.clearAllMocks();
     Reflect.set(process.env, "NODE_ENV", "test");
     delete process.env.NEXT_PUBLIC_APP_URL;
-    process.env.CONVEX_SERVER_SECRET = "test-only-convex-secret";
+    process.env.BACKEND_SECRET = "test-only-backend-secret";
     vi.mocked(fetchMutation).mockResolvedValue(undefined as never);
     vi.mocked(takeRateLimits).mockResolvedValue([
       { scope: "anonymous", allowed: true, limit: 20, remaining: 19, resetAt: new Date() },
@@ -73,8 +73,8 @@ describe("POST /api/share", () => {
     else Reflect.set(process.env, "NODE_ENV", originalNodeEnv);
     if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
     else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
-    if (originalServerSecret === undefined) delete process.env.CONVEX_SERVER_SECRET;
-    else process.env.CONVEX_SERVER_SECRET = originalServerSecret;
+    if (originalServerSecret === undefined) delete process.env.BACKEND_SECRET;
+    else process.env.BACKEND_SECRET = originalServerSecret;
   });
 
   it("persists only approved incident details with a 24-hour public lifetime", async () => {
@@ -150,7 +150,7 @@ describe("POST /api/share", () => {
   });
 
   it("returns JSON 503 when public-share persistence fails", async () => {
-    vi.mocked(fetchMutation).mockRejectedValueOnce(new Error("Convex unavailable"));
+    vi.mocked(fetchMutation).mockRejectedValueOnce(new Error("Backend unavailable"));
 
     const response = await POST(shareRequest(JSON.stringify({ token: "a".repeat(60) })));
 

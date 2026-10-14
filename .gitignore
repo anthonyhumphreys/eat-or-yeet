@@ -51,3 +51,9 @@ next-env.d.ts
 
 # Private database exports before retiring test deployments
 .local-backups/
+
+# Cloudflare local state and secrets
+.wrangler/
+.dev.vars*
+
+.local-backups/

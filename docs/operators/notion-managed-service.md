@@ -18,7 +18,7 @@ Use the `www` URLs exactly. The bare domain redirects and is not the configured 
 
 ## Required environment settings
 
-| Setting | Vercel Production | Convex Production |
+| Setting | Vercel Production | Cloudflare Production |
 | --- | --- | --- |
 | `NEXT_PUBLIC_APP_URL` | `https://www.eatoryeet.app` | Same canonical origin |
 | `NOTION_INSTALL_ENABLED` | `true` for the authorized production pilot | Not used |
@@ -30,7 +30,7 @@ Use the `www` URLs exactly. The bare domain redirects and is not the configured 
 | `NOTION_WEBHOOK_VERIFICATION_TOKEN` | Sensitive token verified in Notion | Not used |
 | `NOTION_REVIEW_CONNECTION_KEY` | Not used | Existing private review key |
 
-The normal Convex URL and server secret must also be configured in Vercel. The setup button and hosted routes require the complete Vercel configuration. This checks configuration presence, not Notion availability or completion of live acceptance tests. Changing Vercel settings requires a new deployment before the application uses them.
+The server-only BACKEND_URL and BACKEND_SECRET must also be configured in Vercel. The setup button and hosted routes require the complete Vercel configuration. This checks configuration presence, not Notion availability or completion of live acceptance tests. Changing Vercel settings requires a new deployment before the application uses them.
 
 Never copy values returned by `vercel env pull` for sensitive settings: these can be placeholders. Obtain an actual credential from its issuing service and save it directly in each required environment. Do not commit secrets or put them in browser code, URLs or ordinary logs. Keep preview credentials separate.
 
@@ -60,4 +60,10 @@ Use a fresh copied template with synthetic packet details. Verify:
 
 Local fixture tests verify the implementation, including the pause/resume regression and tenant isolation. They do not prove real OAuth consent or webhook delivery. See the [readiness record](./notion-readiness.md) for the current evidence and outstanding checks. Production flags were enabled at the user's request for testing; do not describe the feature as generally available until live checks pass.
 
-Convex stores encrypted credentials, scoped sessions and bounded event/review queues. Jobs read only configured fields in the bound list and write only result fields. Monitor route failures, backlog, review limits and Notion API errors. No customer API key, polling process or NAS container is needed. The NAS hosts the [USDA importer](../usda-sync.md), not customer Notion credentials.
+D1 stores encrypted credentials, scoped sessions and bounded event/review queues. Jobs read only configured fields in the bound list and write only result fields. Monitor route failures, backlog, review limits and Notion API errors. No customer API key, polling process or NAS container is needed. The NAS hosts the [USDA importer](../usda-sync.md), not customer Notion credentials.
+
+## Cloudflare migration acceptance
+
+Keep hosted consent disabled on ordinary Vercel previews. Provision the existing encryption key and Notion client credentials on the matching Worker before enabling jobs. D1 stores installation state; the transactional outbox and Cloudflare Queue run review jobs. Operator and FSIS credentials must stay out of Vercel.
+
+Previous pilot evidence used Convex. Repeat consent, signed webhook deduplication, purchased-row exclusion, failed-job recovery, pausing and disconnect against the Cloudflare stage before general availability. Preserve IDs and encryption keys during the final export/restore. See [Cloudflare deployment](../cloudflare-deployment.md) for cutover and rollback.

@@ -1,9 +1,9 @@
 import "server-only";
 
-import { fetchMutation, fetchQuery } from "convex/nextjs";
+import { fetchMutation, fetchQuery } from "@backend/client";
 import { cookies } from "next/headers";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import { NotionOAuthApi } from "../../../integrations/notion/managed/notion-api.ts";
 import { getNotionInstallationOrigin, getNotionSetupOrigin } from "./notion-installation";
 import { captureNotionWebhookVerification, handleNotionRequest, notionCookieNames, notionCsrf, notionHash, type NotionHttpDependencies } from "./notion-http";
@@ -16,8 +16,8 @@ function required(name: string): string {
 export function notionHttpDependencies(): NotionHttpDependencies | null {
   const origin = getNotionSetupOrigin();
   if (!origin) return null;
-  const secret = required("CONVEX_SERVER_SECRET");
-  const url = required("NEXT_PUBLIC_CONVEX_URL");
+  const secret = required("BACKEND_SECRET");
+  const url = required("BACKEND_URL");
   return {
     origin,
     encryptionKey: required("NOTION_CREDENTIAL_KEY"),
@@ -53,8 +53,8 @@ export async function getNotionManagement() {
   if (!origin) return null;
   const rawSession = (await cookies()).get(notionCookieNames(origin).session)?.value;
   if (!rawSession) return null;
-  const secret = required("CONVEX_SERVER_SECRET");
-  const state = await fetchQuery(api.notion.management, { secret, sessionHash: notionHash(rawSession), now: Date.now() }, { url: required("NEXT_PUBLIC_CONVEX_URL") });
+  const secret = required("BACKEND_SECRET");
+  const state = await fetchQuery(api.notion.management, { secret, sessionHash: notionHash(rawSession), now: Date.now() }, { url: required("BACKEND_URL") });
   return state ? { ...state, csrfToken: notionCsrf(rawSession, secret) } : null;
 }
 
@@ -64,6 +64,6 @@ export async function getNotionDisconnectReceipt() {
   const rawSession = (await cookies()).get(notionCookieNames(origin).session)?.value;
   if (!rawSession) return null;
   return fetchQuery(api.notion.disconnectReceipt, {
-    secret: required("CONVEX_SERVER_SECRET"), sessionHash: notionHash(rawSession), now: Date.now(),
-  }, { url: required("NEXT_PUBLIC_CONVEX_URL") });
+    secret: required("BACKEND_SECRET"), sessionHash: notionHash(rawSession), now: Date.now(),
+  }, { url: required("BACKEND_URL") });
 }
