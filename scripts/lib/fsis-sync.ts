@@ -1,10 +1,11 @@
+import { setTimeout as pause } from "node:timers/promises";
 import { z } from "zod";
 import { FSIS_API, parseFsisRecords } from "../../src/lib/incidents/fsis";
 import { fetchOfficialJson } from "../../src/lib/incidents/official-source-http";
 import { readResponseJson } from "../../src/lib/http/bounded-response";
 
 const importResultSchema = z.object({
-  status: z.string(), found: z.number(), created: z.number(), updated: z.number(), errors: z.array(z.string()),
+  status: z.string(), runId: z.string().optional(), found: z.number(), created: z.number(), updated: z.number(), errors: z.array(z.string()),
 });
 type SyncOptions = { prod?: boolean; env?: NodeJS.ProcessEnv };
 
@@ -29,7 +30,17 @@ export async function syncFsis(options: SyncOptions = {}) {
     });
   } catch { throw new Error("USDA upload request failed; check backend access and the ingestion ledger"); }
   if (!response.ok) throw new Error(`USDA upload returned HTTP ${response.status}`);
-  const body = z.object({ result: importResultSchema }).parse(await readResponseJson(response, 1024 * 1024));
-  if (body.result.status !== "success") throw new Error("USDA import did not complete successfully; see the ingestion ledger");
-  return body.result;
+  let result = z.object({ result: importResultSchema }).parse(await readResponseJson(response, 1024 * 1024)).result;
+  const deadline = Date.now() + 15 * 60 * 1_000;
+  while (result.status === "queued" || result.status === "running") {
+    if (!result.runId || Date.now() >= deadline) throw new Error("USDA import did not finish within 15 minutes; see the ingestion ledger");
+    await pause(2_000);
+    const statusUrl = new URL(url);
+    statusUrl.searchParams.set("runId", result.runId);
+    const status = await fetch(statusUrl, { headers: { Authorization: `Bearer ${env.FSIS_UPLOAD_TOKEN}` }, redirect: "error", signal: AbortSignal.timeout(30_000) });
+    if (!status.ok) throw new Error(`USDA import status returned HTTP ${status.status}`);
+    result = z.object({ result: importResultSchema }).parse(await readResponseJson(status, 1024 * 1024)).result;
+  }
+  if (result.status !== "success") throw new Error("USDA import did not complete successfully; see the ingestion ledger");
+  return result;
 }

@@ -1,4 +1,5 @@
 import schema from "./schema";
+import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
 
 import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
@@ -25,7 +26,6 @@ const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource,
 // Pack checks only cover food, so only food sources gate a "no match" result.
 const checkSources = sources.filter((source) => source.superCategory === "Food");
 const UPSERT_BATCH_SIZE = 25;
-const DATASET_PAGE_SIZE = 100;
 // Keep each response below the server client's and Next's 2 MiB limits while
 // avoiding one cross-provider HTTP round trip per hundred warning records.
 const READ_PAGE_SIZE = 400;
@@ -67,7 +67,8 @@ function serialiseIncident(item: NormalisedIncident, source: IncidentSource, run
   };
 }
 
-type ImportItem = ReturnType<typeof serialiseIncident> & { productCategoryTags?: Record<string, string[]> };
+type ImportItem = Omit<Doc<"incidents">, "_id" | "_creationTime">;
+type ImportResult = { source: string; runId?: Id<"ingestionRuns">; found: number; created: number; updated: number; status: "queued" | "success" | "partial" | "failed"; errors: string[] };
 const CATEGORY_CACHE_CHUNK = 200;
 
 // Attaches cached Open Food Facts categories and queues unseen barcodes for
@@ -81,7 +82,7 @@ async function attachProductCategoryTags(ctx: ActionCtx, items: ImportItem[]) {
         if (target.type === "gtin" && target.valueNormalized) newest.set(target.valueNormalized, Math.max(newest.get(target.valueNormalized) ?? 0, item.publishedAt));
       }
     }
-    const gtins = [...newest.keys()];
+    const gtins = [...newest.keys()].slice(0, 250);
     const known = new Set<string>();
     const cached = new Map<string, string[]>();
     for (let offset = 0; offset < gtins.length; offset += CATEGORY_CACHE_CHUNK) {
@@ -350,7 +351,7 @@ export const getActiveSourceIdsPage = internalQuery({
     const page = await ctx.db
       .query("incidentMatchData")
       .withIndex("by_sourceKey_status", (q) => q.eq("sourceKey", sourceKey).eq("status", "active"))
-      .paginate({ numItems: DATASET_PAGE_SIZE, cursor });
+      .paginate({ numItems: READ_PAGE_SIZE, maximumBytesRead: READ_PAGE_BYTES, cursor });
     return {
       ids: page.page.map((row) => row.sourceId),
       isDone: page.isDone,
@@ -434,23 +435,42 @@ export const beginRun = internalMutation({
   }),
 });
 
+function verifiedUnchanged(state: Doc<"incidentImportState"> | null, match: Doc<"incidentMatchData"> | null, item: ImportItem, fingerprint: string, now: number): boolean {
+  return !!state && state.fingerprint === fingerprint && now >= state.archiveVerifiedAt
+    && now - state.archiveVerifiedAt < IMPORT_ARCHIVE_AUDIT_MS && match?.incidentId === state.incidentId
+    && sameIncidentContent(match, compactMatchRecord(state.incidentId, item));
+}
+
 export const upsertBatch = internalMutation({
-  args: { items: v.array(schema.incidents.validator) },
+  args: { items: v.array(schema.incidents.validator).max(UPSERT_BATCH_SIZE) },
   handler: async (ctx, { items }) => {
+    // Fetch related records together instead of paying a binding round trip
+    // for every record in the archive. The mutation's revision still fences
+    // the complete read/write operation, and staged changes overlay the cache.
+    await ctx.db.preloadIndex("incidentImportState", "by_authority_sourceId", items.map(({ authority, sourceId }) => ({ authority, sourceId })));
+    const states = await Promise.all(items.map(item => ctx.db.query("incidentImportState").withIndex("by_authority_sourceId", q => q.eq("authority", item.authority).eq("sourceId", item.sourceId)).unique()));
+    await ctx.db.preloadIds(states.flatMap(state => state ? [state.matchDataId] : []));
+    const fingerprints = await Promise.all(items.map(incidentFingerprint));
+    const needsArchive: ImportItem[] = [];
+    for (const [index, item] of items.entries()) {
+      const state = states[index];
+      const match = state ? await ctx.db.get("incidentMatchData", state.matchDataId) : null;
+      if (!verifiedUnchanged(state, match, item, fingerprints[index], Date.now())) needsArchive.push(item);
+    }
+    await ctx.db.preloadIndex("incidents", "by_authority_sourceId", needsArchive.map(({ authority, sourceId }) => ({ authority, sourceId })));
+    const existing = await Promise.all(needsArchive.map(item => ctx.db.query("incidents").withIndex("by_authority_sourceId", q => q.eq("authority", item.authority).eq("sourceId", item.sourceId)).unique()));
+    await ctx.db.preloadIndex("incidentMatchData", "by_incidentId", existing.flatMap(row => row ? [{ incidentId: row._id }] : []));
     let created = 0;
     let updated = 0;
     let unchanged = 0;
     const regions = new Set<"UK" | "US">();
-    for (const item of items) {
-      const fingerprint = await incidentFingerprint(item);
+    for (const [index, item] of items.entries()) {
+      const fingerprint = fingerprints[index];
       const state = await ctx.db.query("incidentImportState")
         .withIndex("by_authority_sourceId", (q) => q.eq("authority", item.authority).eq("sourceId", item.sourceId)).unique();
       const savedMatch = state ? await ctx.db.get("incidentMatchData", state.matchDataId) : null;
       const now = Date.now();
-      if (state && state.fingerprint === fingerprint
-        && now >= state.archiveVerifiedAt && now - state.archiveVerifiedAt < IMPORT_ARCHIVE_AUDIT_MS
-        && savedMatch?.incidentId === state.incidentId
-        && sameIncidentContent(savedMatch, compactMatchRecord(state.incidentId, item))) {
+      if (verifiedUnchanged(state, savedMatch, item, fingerprint, now)) {
         unchanged += 1;
         continue;
       }
@@ -584,15 +604,15 @@ export const backfillMatchDataInternal = internalAction({
   },
 });
 
-async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
+async function ingestSource(ctx: ActionCtx, source: IncidentSource): Promise<ImportResult> {
   const runId = await ctx.runMutation(internal.incidents.beginRun, {
     source: source.id,
     sourceName: source.name,
     region: source.region,
     scope: source.scope,
   });
-  let created = 0;
-  let updated = 0;
+  const created = 0;
+  const updated = 0;
   const errors: string[] = [];
   let found = 0;
   let fetchFailed = false;
@@ -616,17 +636,14 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
     const incoming = await source.fetchIncidents(existingSourceIds);
     found = incoming.length;
     const items: ImportItem[] = incoming.map((item) => serialiseIncident(item, source, runId));
-    if (source.superCategory === "Food") await attachProductCategoryTags(ctx, items);
-    for (let offset = 0; offset < items.length; offset += UPSERT_BATCH_SIZE) {
-      try {
-        const result = await ctx.runMutation(internal.incidents.upsertBatch, {
-          items: items.slice(offset, offset + UPSERT_BATCH_SIZE),
-        });
-        created += result.created;
-        updated += result.updated;
-      } catch (error) {
-        errors.push(`Batch ${Math.floor(offset / UPSERT_BATCH_SIZE) + 1}: ${error instanceof Error ? error.message : "Unknown write failure"}`);
+    if (items.length) {
+      const prefix = `source-imports/${runId}/${crypto.randomUUID()}`;
+      const batches = Math.ceil(items.length / UPSERT_BATCH_SIZE);
+      for (let index = 0; index < batches; index++) {
+        await ctx.storage.put(`${prefix}/${index}.json`, JSON.stringify(items.slice(index * UPSERT_BATCH_SIZE, (index + 1) * UPSERT_BATCH_SIZE)));
       }
+      await ctx.runMutation(internal.incidents.prepareImport, { runId, prefix, batches, found });
+      return { source: source.id, runId, found, created: 0, updated: 0, status: "queued", errors: [] };
     }
   } catch (error) {
     fetchFailed = true;
@@ -645,9 +662,72 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource) {
   return { source: source.id, found, created, updated, status, errors: errors.slice(0, 50) };
 }
 
+export const getImportWork = internalQuery({
+  args: { runId: v.id("ingestionRuns") },
+  handler: (ctx, { runId }) => ctx.db.get("ingestionRuns", runId),
+});
+
+export const getImportResult = internalQuery({
+  args: { runId: v.id("ingestionRuns") },
+  handler: async (ctx, { runId }) => {
+    const run = await ctx.db.get("ingestionRuns", runId);
+    return run ? { source: run.source, runId, status: run.status ?? "running", found: run.incidentsFound,
+      created: run.created, updated: run.updated, errors: run.errors } : null;
+  },
+});
+
+export const prepareImport = internalMutation({
+  args: { runId: v.id("ingestionRuns"), prefix: v.string(), batches: v.number().int().positive(), found: v.number().int().positive() },
+  handler: async (ctx, { runId, prefix, batches, found }) => {
+    const run = await ctx.db.get("ingestionRuns", runId);
+    if (!run || run.status !== "running" || run.pipeline) throw new Error("Import is not awaiting preparation");
+    if (batches !== Math.ceil(found / UPSERT_BATCH_SIZE)) throw new Error("Import batch count does not match the source archive");
+    await ctx.db.patch(runId, { incidentsFound: found, pipeline: { prefix, batches, nextBatch: 0 } });
+    await ctx.scheduler.runAfter(0, internal.incidents.processImportBatch, { runId, index: 0 });
+  },
+});
+
+export const applyImportBatch = internalMutation({
+  args: { runId: v.id("ingestionRuns"), index: v.number().int().nonnegative(), items: v.array(schema.incidents.validator).max(UPSERT_BATCH_SIZE) },
+  handler: async (ctx, { runId, index, items }) => {
+    const run = await ctx.db.get("ingestionRuns", runId);
+    if (!run?.pipeline || run.status !== "running" || run.pipeline.nextBatch !== index) return { applied: false };
+    if (items.length !== Math.min(UPSERT_BATCH_SIZE, run.incidentsFound - index * UPSERT_BATCH_SIZE)) throw new Error("Import batch is incomplete");
+    const latest = await ctx.db.query("ingestionRuns").withIndex("by_source_startedAt", q => q.eq("source", run.source)).order("desc").first();
+    if (latest?._id !== runId) {
+      await ctx.db.patch(runId, { status: "failed", completedAt: Date.now(), errors: ["Superseded by a newer source refresh"] });
+      return { applied: false };
+    }
+    if (items.some(item => item.sourceKey !== run.source || item.sourceRunId !== runId)) throw new Error("Import batch belongs to another refresh");
+    const result = await upsertBatch.handler(ctx, { items });
+    const nextBatch = index + 1;
+    const done = nextBatch === run.pipeline.batches;
+    await ctx.db.patch(runId, { created: run.created + result.created, updated: run.updated + result.updated,
+      pipeline: { ...run.pipeline, nextBatch }, ...(done ? { status: "success" as const, completedAt: Date.now() } : {}) });
+    if (!done) await ctx.scheduler.runAfter(0, internal.incidents.processImportBatch, { runId, index: nextBatch });
+    return { applied: true };
+  },
+});
+
+export const processImportBatch = internalAction({
+  args: { runId: v.id("ingestionRuns"), index: v.number().int().nonnegative() },
+  handler: async (ctx, { runId, index }) => {
+    const run: Doc<"ingestionRuns"> | null = await ctx.runQuery(internal.incidents.getImportWork, { runId });
+    if (!run?.pipeline) return;
+    const key = `${run.pipeline.prefix}/${index}.json`;
+    if (run.status !== "running" || run.pipeline.nextBatch !== index) { await ctx.storage.delete(key); return; }
+    const blob = await ctx.storage.get(key);
+    if (!blob) throw new Error("Prepared import batch is missing");
+    const items = v.array(schema.incidents.validator).max(UPSERT_BATCH_SIZE).parse(await readResponseJson(new Response(blob), 20 * 1024 * 1024));
+    if (sources.find(source => source.id === run.source)?.superCategory === "Food") await attachProductCategoryTags(ctx, items);
+    await ctx.runMutation(internal.incidents.applyImportBatch, { runId, index, items });
+    await ctx.storage.delete(key);
+  },
+});
+
 export const refreshSourceInternal = internalAction({
   args: { sourceId: v.string() },
-  handler: async (ctx, { sourceId }) => {
+  handler: async (ctx, { sourceId }): Promise<ImportResult | { source: string; status: "external" }> => {
     // An external fetch keeps USDA's hosted-IP block out of the daily cron.
     // Missing external updates still expire through the normal health gate.
     if (sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") return { source: sourceId, status: "external" };
@@ -660,7 +740,7 @@ export const refreshSourceInternal = internalAction({
 // Admin-only upload/import functions. No public caller can supply recall data.
 export const importFsisSnapshotInternal = internalAction({
   args: { storageId: v.string(), fetchedAt: v.number() },
-  handler: async (ctx, { storageId, fetchedAt }) => {
+  handler: async (ctx, { storageId, fetchedAt }): Promise<ImportResult> => {
     try {
       return await ingestSource(ctx, {
         ...fsisSource,
@@ -685,6 +765,15 @@ export const refreshAllInternal = internalAction({
       { sourceId: source.id },
     )));
     return { queued: scheduled.map((source) => source.id) };
+  },
+});
+
+export const queueSourceRefresh = internalMutation({
+  args: { sourceId: v.string() },
+  handler: async (ctx, { sourceId }) => {
+    if (!sources.some(source => source.id === sourceId)) throw new Error("Unknown incident source");
+    await ctx.scheduler.runAfter(0, internal.incidents.refreshSourceInternal, { sourceId });
+    return { queued: sourceId };
   },
 });
 

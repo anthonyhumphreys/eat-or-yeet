@@ -20,12 +20,19 @@ const worker = {
       await env.DB.prepare("SELECT revision FROM transaction_state WHERE id=1").first();
       return json({ service: "eat-or-yeet-backend", status: "ok" });
     }
-    const admin = url.pathname.startsWith("/admin/");
+    const nested = url.pathname === "/internal/rpc";
+    const admin = nested || url.pathname.startsWith("/admin/");
     const secret = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
     const credential = url.pathname === "/admin/fsis" ? env.FSIS_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
     if (!equalSecrets(secret, credential)) return json({ error: "Unauthorized" }, 401);
-    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
     try {
+      if (url.pathname === "/admin/fsis" && request.method === "GET") {
+        const runId = z.string().min(1).max(200).safeParse(url.searchParams.get("runId"));
+        if (!runId.success) return json({ error: "Invalid run identifier" }, 400);
+        const result = await workerRuntime(env).invoke(internal.incidents.getImportResult, { runId: runId.data as import("./values").Id<"ingestionRuns"> });
+        return result?.source === "fsis" ? json({ result }) : json({ error: "Not found" }, 404);
+      }
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       const body = await readResponseJson(new Response(request.body, { headers: request.headers }), admin ? 20 * 1024 * 1024 : 1024 * 1024);
       if (url.pathname === "/admin/fsis") {
         const snapshot = z.strictObject({ fetchedAt: z.number().nonnegative(), payload: z.array(z.unknown()).max(20_000) }).parse(body);
@@ -33,16 +40,17 @@ const worker = {
         await env.SNAPSHOTS.put(key, JSON.stringify(snapshot.payload), { httpMetadata: { contentType: "application/json" } });
         try {
           const result = await workerRuntime(env).invoke(internal.incidents.importFsisSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
-          return json({ result });
+          ctx.waitUntil(publishDueJobs(env));
+          return json({ result }, result.status === "queued" ? 202 : 200);
         } finally { await env.SNAPSHOTS.delete(key); }
       }
       const input = requestSchema.parse(body);
       if (!Object.hasOwn(operations, input.operation)) return json({ error: "Unknown operation" }, 404);
       const operation = operations[input.operation as OperationName];
       if (!admin && (operation.internal || input.operation.startsWith("seed."))) return json({ error: "Unauthorized" }, 403);
-      if (url.pathname !== "/rpc" && url.pathname !== "/admin/rpc") return json({ error: "Not found" }, 404);
+      if (url.pathname !== "/rpc" && url.pathname !== "/admin/rpc" && !nested) return json({ error: "Not found" }, 404);
       const result = await workerRuntime(env).invoke({ name: input.operation }, input.args);
-      ctx.waitUntil(publishDueJobs(env));
+      if (!nested) ctx.waitUntil(publishDueJobs(env));
       return json({ result: result ?? null });
     } catch (error) {
       if (error instanceof z.ZodError) return json({ error: "Invalid arguments" }, 400);

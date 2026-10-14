@@ -8,7 +8,7 @@ export function createBackend() {
   const sql = sqliteD1();
   const migrations = readFileSync(new URL("../backend/migrations/0001_backend.sql", import.meta.url), "utf8");
   const ready = sql.batch(migrations.split(";\n").filter((statement) => statement.trim()).map((statement) => sql.prepare(statement)));
-  const runtime = new Runtime(sql, { get: async () => null, delete: async () => undefined });
+  const runtime = new Runtime(sql, { get: async () => null, put: async () => undefined, delete: async () => undefined });
   const invoke: Runtime["invoke"] = async (ref, args) => { await ready; return runtime.invoke(ref, args); };
   return {
     query: invoke, mutation: invoke, action: invoke,

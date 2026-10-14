@@ -14,7 +14,7 @@ pnpm data:sync:fsis
 pnpm data:sync:fsis --prod
 ```
 
-The script validates the complete official archive before sending its English records to `/admin/fsis`. The Worker checks the dedicated token, writes a temporary private R2 object, validates the snapshot again, records the import in D1 and deletes the object on success or failure. The upload token cannot call general backend or operator operations. Credentials and source records stay out of logs.
+The script validates the complete official archive before sending its English records to `/admin/fsis`. The Worker checks the dedicated token, writes a temporary private R2 object, validates the snapshot again and prepares durable import batches. The upload returns a run ID, and the script polls its ingestion ledger through the same restricted endpoint for up to 15 minutes. It reports success only after all batches commit. Temporary upload and committed batch objects are deleted. The upload token cannot call general backend or operator operations. Credentials and source records stay out of logs.
 
 Only active notices and tracked closures create database records. Missing previously active notices fail the refresh. Snapshots must be fetched within 15 minutes and fit the existing size limit. Failed or stale coverage blocks negative results after the same 48-hour freshness gate.
 
@@ -24,7 +24,7 @@ Only active notices and tracked closures create database records. Missing previo
 
 Use a Linux NAS with Docker Compose and an ARM64 or x86-64 CPU. The image contains Node and only the two dependencies needed for fetching and importing; it does not run the website or a second database. No inbound ports are exposed. The home connection must reach both USDA and the Cloudflare Worker.
 
-The worker imports immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to seven minutes for an import already in progress to finish. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
+The worker imports immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to 17 minutes for an import already in progress to finish. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
 
 ### Create a separate key
 

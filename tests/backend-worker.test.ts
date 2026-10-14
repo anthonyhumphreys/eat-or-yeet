@@ -11,7 +11,7 @@ async function rpc(operation: string, args: unknown, token = secret, path = "/rp
 }
 beforeAll(async () => {
   const bundle = await build({ entryPoints: ["backend/worker.ts"], bundle: true, write: false, format: "esm", platform: "neutral", target: "es2022", external: ["node:*"], conditions: ["workerd", "worker", "browser"], tsconfig: "tsconfig.json" });
-  mf = new Miniflare({ modules: true, script: bundle.outputFiles[0].text, compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"],
+  mf = new Miniflare({ name: "backend-test", serviceBindings: { SELF: "backend-test" }, modules: true, script: bundle.outputFiles[0].text, compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"],
     d1Databases: { DB: "worker-test-db" }, r2Buckets: ["SNAPSHOTS"], queueProducers: { JOBS: "worker-test-jobs" }, queueConsumers: { "worker-test-jobs": { maxBatchSize: 1, maxBatchTimeout: 0 } },
     bindings: { BACKEND_SECRET: secret, BACKEND_ADMIN_TOKEN: admin, FSIS_UPLOAD_TOKEN: "uploader-only", ALLOW_DEMO_DATA: "true", BACKEND_RESTORE_ENABLED: "false", SCHEDULED_SOURCE_REFRESH: "false", PRODUCT_CATEGORY_LOOKUPS: "false", FSIS_FETCH_MODE: "snapshot" },
   });
@@ -68,5 +68,35 @@ describe("Cloudflare Worker with native D1 and R2", () => {
     expect((await (await mf.getR2Bucket("SNAPSHOTS")).list()).objects).toEqual([]);
     const status = await rpc("incidents.getDatasetStatus", { region: "US" });
     expect(await status.json()).toMatchObject({ result: { healthy: false } });
+  });
+  it("imports USDA across durable batches and reports completion through the upload credential", async () => {
+    const payload = Array.from({ length: 26 }, (_, index) => ({
+      field_title: `Native USDA test ${index}`, field_recall_number: `test-${index}-2026`, field_recall_number_export: `test-${index}-2026`,
+      field_recall_url: `https://www.fsis.usda.gov/recalls-alerts/native-test-${index}`, field_recall_date: "2026-10-01",
+      field_active_notice: "TRUE", field_summary: "Do not eat this food.", langcode: "English",
+    }));
+    const response = await mf.dispatchFetch("https://backend.test/admin/fsis", {
+      method: "POST", headers: { Authorization: "Bearer uploader-only", "Content-Type": "application/json" },
+      body: JSON.stringify({ fetchedAt: Date.now(), payload }),
+    });
+    expect(response.status).toBe(202);
+    const { result } = await response.json() as { result: { runId: string } };
+    const statusUrl = `https://backend.test/admin/fsis?runId=${encodeURIComponent(result.runId)}`;
+    expect((await mf.dispatchFetch(statusUrl, { headers: { Authorization: `Bearer ${secret}` } })).status).toBe(401);
+    await vi.waitFor(async () => {
+      const status = await mf.dispatchFetch(statusUrl, { headers: { Authorization: "Bearer uploader-only" } });
+      expect(await status.json()).toMatchObject({ result: { status: "success", found: 26, created: 26, updated: 0 } });
+    }, { timeout: 10_000 });
+    const db = await mf.getD1Database("DB");
+    const run = await db.prepare("SELECT payload FROM records WHERE id=?").bind(result.runId).first<{ payload: string }>();
+    const pipeline = JSON.parse(run!.payload).pipeline;
+    expect(pipeline.nextBatch).toBe(2);
+    // A redelivered committed batch must not change counters or versions.
+    const version = await rpc("incidents.getDatasetVersion", { region: "US" });
+    const before = await version.json();
+    expect(await (await rpc("incidents.applyImportBatch", { runId: result.runId, index: 1, items: payload }, admin, "/admin/rpc")).json()).toMatchObject({ error: "Invalid arguments" });
+    expect(await (await rpc("incidents.applyImportBatch", { runId: result.runId, index: 1, items: [] }, admin, "/admin/rpc")).json()).toEqual({ result: { applied: false } });
+    expect(await (await rpc("incidents.getDatasetVersion", { region: "US" })).json()).toEqual(before);
+    await vi.waitFor(async () => expect((await (await mf.getR2Bucket("SNAPSHOTS")).list()).objects).toEqual([]));
   });
 });

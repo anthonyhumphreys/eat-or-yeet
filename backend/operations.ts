@@ -9,7 +9,7 @@ export type ActionCtx = {
   runMutation<A, R>(ref: OperationRef<A, R>, args: A): Promise<R>;
   runAction<A, R>(ref: OperationRef<A, R>, args: A): Promise<R>;
   scheduler: MutationCtx["scheduler"];
-  storage: { get(id: string): Promise<Blob | null>; delete(id: string): Promise<void> };
+  storage: { get(id: string): Promise<Blob | null>; put(id: string, body: string): Promise<void>; delete(id: string): Promise<void> };
 };
 export type Operation<Shape extends z.ZodRawShape, R, Context = MutationCtx & ActionCtx> = {
   kind: "query" | "mutation" | "action";

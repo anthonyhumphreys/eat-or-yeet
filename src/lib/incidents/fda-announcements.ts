@@ -337,13 +337,20 @@ async function fetchListings(): Promise<AnnouncementListing[]> {
 
 async function fetchDetail(listing: AnnouncementListing): Promise<NormalisedIncident> {
   const url = new URL(listing.path, FDA_ORIGIN).toString();
-  const html = await fetchOfficialText(url, {
-    sourceName: "FDA announcement detail",
-    headers: FDA_HEADERS,
-    timeoutMs: 20_000,
-    cache: "no-store",
-  });
-  return parseFdaAnnouncementDetail(listing, html);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const requestUrl = new URL(url);
+    // FDA's CDN occasionally serves a cached error page for a valid listing.
+    // Retry once against a fresh cache key, keeping the canonical source ID.
+    if (attempt) requestUrl.searchParams.set("_source_refresh", new Date().toISOString().slice(0, 10));
+    try {
+      const html = await fetchOfficialText(requestUrl.toString(), {
+        sourceName: "FDA announcement detail", headers: attempt ? { ...FDA_HEADERS, "Cache-Control": "no-cache" } : FDA_HEADERS, timeoutMs: 20_000, cache: "no-store",
+      });
+      return parseFdaAnnouncementDetail(listing, html);
+    } catch (error) { lastError = error; }
+  }
+  throw new Error(`FDA announcement import failed for ${url}: ${lastError instanceof Error ? lastError.message : "Invalid announcement"}`);
 }
 
 export const fdaAnnouncementsSource: IncidentSource = {

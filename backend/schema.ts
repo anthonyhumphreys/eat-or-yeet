@@ -190,6 +190,7 @@ export default defineSchema({
     created: v.number(),
     updated: v.number(),
     errors: v.array(v.string()),
+    pipeline: v.optional(v.object({ prefix: v.string(), batches: v.number(), nextBatch: v.number() })),
   })
     .index("by_startedAt", ["startedAt"])
     .index("by_source_startedAt", ["source", "startedAt"])

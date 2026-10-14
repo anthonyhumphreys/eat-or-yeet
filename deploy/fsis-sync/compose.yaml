@@ -21,7 +21,7 @@ services:
       - no-new-privileges:true
     mem_limit: 256m
     cpus: 0.5
-    stop_grace_period: 7m
+    stop_grace_period: 17m
     healthcheck:
       test: ["CMD", "node", "--import", "tsx", "scripts/fsis-sync-worker.ts", "--healthcheck"]
       interval: 5m

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FSIS_API } from "@/lib/incidents/fsis";
 import { syncFsis } from "../scripts/lib/fsis-sync";
+vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn(async () => undefined) }));
 
 const record = {
   field_title: "Test recall", field_recall_number: "001-2026", field_recall_number_export: "001-2026",
@@ -36,6 +37,14 @@ describe("USDA fetcher transport", () => {
   it("reports a rejected upload", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(Response.json([record])).mockResolvedValueOnce(new Response(null, { status: 500 }));
     await expect(syncFsis({ env })).rejects.toThrow("HTTP 500");
+  });
+  it("polls a queued import until its committed ledger reports success", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json([record]))
+      .mockResolvedValueOnce(Response.json({ result: { ...success, status: "queued", runId: "ingestionRuns:one" } }, { status: 202 }))
+      .mockResolvedValueOnce(Response.json({ result: { ...success, status: "running", runId: "ingestionRuns:one" } }))
+      .mockResolvedValueOnce(Response.json({ result: { ...success, runId: "ingestionRuns:one" } }));
+    await expect(syncFsis({ prod: true, env })).resolves.toMatchObject(success);
+    expect(String(vi.mocked(fetch).mock.calls[2][0])).toBe("https://backend.example.test/admin/fsis?runId=ingestionRuns%3Aone");
   });
 
   it.each(["failed", "partial"])("reports a %s import", async (status) => {

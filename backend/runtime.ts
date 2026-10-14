@@ -3,11 +3,13 @@ import { Database, revision, type SqlDatabase } from "./database";
 import { operations } from "./registry";
 import type { ActionCtx, MutationCtx, OperationRef } from "./operations";
 import { BackendError } from "./values";
+import { readResponseJson } from "../src/lib/http/bounded-response";
 
 export type OperationName = keyof typeof operations;
 export type Storage = ActionCtx["storage"];
+type Invoke = <A, R>(ref: OperationRef<A, R>, args: A) => Promise<R>;
 export class Runtime {
-  constructor(readonly sql: SqlDatabase, readonly storage: Storage) {}
+  constructor(readonly sql: SqlDatabase, readonly storage: Storage, private readonly dispatch?: Invoke) {}
   async invoke<A, R>(ref: OperationRef<A, R>, args: A): Promise<R> {
     if (!Object.hasOwn(operations, ref.name)) throw new BackendError("Unknown operation");
     const operation = operations[ref.name as OperationName];
@@ -16,7 +18,7 @@ export class Runtime {
       if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, Math.min(100, attempt * 2) + Math.floor(Math.random() * 10)));
       const initial = await revision(this.sql);
       const db = new Database(this.sql, operation.kind === "mutation");
-      const invoke = <I, O>(nested: OperationRef<I, O>, input: I) => this.invoke(nested, input);
+      const invoke: Invoke = this.dispatch ?? ((nested, input) => this.invoke(nested, input));
       const ctx: MutationCtx & ActionCtx = {
         db, runQuery: invoke, runMutation: invoke, runAction: invoke, storage: this.storage,
         scheduler: { runAfter: async (delay, nested, input) => {
@@ -67,6 +69,20 @@ export function workerRuntime(env: CloudflareBindings) {
       if (object.size > 20 * 1024 * 1024) throw new Error("Snapshot is too large");
       return new Blob([await object.arrayBuffer()], { type: "application/json" });
     },
+    put: async (id, body) => { await env.SNAPSHOTS.put(id, body, { httpMetadata: { contentType: "application/json" } }); },
     delete: async (id) => { await env.SNAPSHOTS.delete(id); },
+  }, async <A, R>(ref: OperationRef<A, R>, args: A): Promise<R> => {
+    // Each nested operation gets its own bounded D1 invocation. Imports keep
+    // their existing transactional batches instead of exhausting one event's
+    // query budget across an entire source archive.
+    const response = await env.SELF.fetch("https://backend.internal/internal/rpc", {
+      method: "POST", headers: { Authorization: `Bearer ${env.BACKEND_ADMIN_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: ref.name, args }),
+    });
+    const body = await readResponseJson<unknown>(response, 2 * 1024 * 1024);
+    if (!body || typeof body !== "object") throw new Error("Invalid internal backend response");
+    if ("error" in body) throw new BackendError(body.error);
+    if (!response.ok || !("result" in body)) throw new Error("Internal backend operation failed");
+    return body.result as R;
   });
 }

@@ -10,6 +10,10 @@ Read operations bracket their reads with a database revision. Mutations stage th
 
 The transactional job outbox closes the gap between D1 writes and Queue publication. A minute cron republishes pending work and recovers expired leases. Lease tokens reject old queue deliveries and prevent a stale attempt from completing a newer claim. Failures retry with bounded backoff, then remain visible as `failed` records. Operations involving third-party effects still need their existing idempotency keys and domain leases.
 
+Source archives are validated before imports are prepared in private R2. Each Queue delivery applies at most 25 notices and commits its progress, warning projections and next job together. Redelivery cannot double-count a committed batch. A newer source refresh fences older batches. Indexed reads are fetched together, while unchanged notices retain the compact-projection fast path. One consumer avoids contention on the database revision; delivery leases last 20 minutes, longer than Queue's 15-minute invocation limit. Nested operations use the Worker's SELF binding, and durable batches keep request chains below its invocation limit.
+
+Configure R2 lifecycle rules for `source-imports/` at seven days and `fsis/` at one day. Committed batches and upload objects are deleted immediately; these rules remove abandoned objects after a failed preparation or superseded refresh.
+
 ## Provision an isolated stage
 
 ```sh
@@ -47,11 +51,20 @@ Local Wrangler uses `.dev.vars`; hosted stages use `.dev.vars.staging` or `.dev.
 Retain a private export and the original backend before cutover. Export with the old CLI, which is no longer a runtime dependency:
 
 ```sh
-pnpm dlx convex@1.46.0 export --prod --include-file-storage --path .local-backups/convex-production.zip
+# Run the export in the retained legacy checkout, with its Convex dependency
+# and deployment configuration. The migrated project no longer includes it.
+pnpm exec convex export --prod --include-file-storage --path /private/path/convex-production.zip
 pnpm backend:restore .local-backups/convex-production.zip --validate-only
 ```
 
-The restore validates every table before its first write, retains IDs and timestamps, and can resume by replaying the same export. Its preflight rejects records from another dataset, including a demo-seeded destination; restore into an empty database. The CLI currently bounds exports to 100,000 records. It does not import old scheduler entries or create third-party jobs. Resolve any active jobs before taking the final cutover export. Empty tables must be present in the archive. Unexpected tables and non-empty legacy file storage require operator review.
+The HTTP restore validates every table before its first write, retains IDs and timestamps, and can resume by replaying the same export. Its preflight rejects records from another dataset, including a demo-seeded destination; restore into an empty database. The HTTP preflight bounds exports to 100,000 records. It does not import old scheduler entries or create third-party jobs. Resolve any active jobs before taking the final cutover export. Empty tables must be present in the archive. Unexpected tables and non-empty legacy file storage require operator review.
+
+For a short production write freeze, generate a private SQL import instead. It validates the same records, rejects duplicate IDs and refuses an occupied destination. Large source payloads are assembled from ordered chunks to stay below D1's SQL statement limit. Its temporary table is removed after import. This path requires Wrangler account access and does not enable HTTP restore.
+
+```sh
+pnpm backend:restore .local-backups/convex-production.zip --sql-output .local-backups/production-restore.sql
+pnpm exec wrangler d1 execute DB --env production --remote --file .local-backups/production-restore.sql
+```
 
 Temporarily deploy the selected stage with `--var BACKEND_RESTORE_ENABLED:true`. Supply `BACKEND_URL` and `BACKEND_ADMIN_TOKEN` privately to the restore command, then deploy normally again to disable restore:
 
@@ -75,7 +88,7 @@ pnpm backend:deploy:staging
 
 Use the staging URL returned by Wrangler. Set Vercel Preview `BACKEND_URL` and `BACKEND_SECRET` to that stage; keep `ALLOW_DEMO_DATA=false` and `NOTION_INSTALL_ENABLED=false` for ordinary previews. Check warning browsing, details, known matches, unknown products, stale/failed sources, public shares, quotas and job recovery. Hosted Notion needs a separate live consent, signed event, review and disconnect acceptance run.
 
-`pnpm backend:run module.operation` is an operator-only CLI. It loads local environment files and calls `/admin/rpc`. For example, `pnpm backend:run incidents.refreshAllInternal` queues source refreshes. Queued jobs are not proof of successful imports.
+`pnpm backend:run module.operation` is an operator-only CLI. It loads local environment files and calls `/admin/rpc`. For example, `pnpm backend:run incidents.refreshAllInternal` queues source refreshes. Use `incidents.queueSourceRefresh '{"sourceId":"fda-announcements"}'` for a single source; fetching a full archive in an HTTP call can outlast its client timeout. Queued jobs are not proof of successful imports.
 
 ## Production cutover and rollback
 
@@ -83,7 +96,7 @@ Use the staging URL returned by Wrangler. Set Vercel Preview `BACKEND_URL` and `
 2. Pause the old backend's scheduled writers and the old NAS importer. Drain or resolve active Notion jobs. Take a final export while writers are stopped.
 3. Apply production D1 migrations and restore the final export with IDs intact. Disable the restore flag. Preserve the existing Notion encryption key. Keep refresh jobs disabled until verification finishes.
 4. Point the NAS at the production Worker using its separate FSIS token. Verify complete imports and source freshness for both countries, then enable the production schedules in `wrangler.jsonc`.
-5. Set Vercel Production `BACKEND_URL` and `BACKEND_SECRET`, retain its website secrets, and change the Build Command to `pnpm build:vercel`. The command now builds only Next.js. Deploy this branch and verify the production flows.
+5. Set Vercel Production `BACKEND_URL` and `BACKEND_SECRET`, retain its website secrets, and change the Build Command to `pnpm build:vercel`. The command now builds only Next.js. Stage a production deployment with `vercel deploy --prod --skip-domain`, verify that exact deployment, then promote it. Keep production domains on the old deployment until verification passes.
 6. Keep the old Vercel deployment, backend and private export until acceptance finishes. Roll back both Vercel's deployment and its backend URL/credential together. Never run both job schedulers against the same Notion installations.
 
 This branch does not switch production automatically. Staging acceptance cannot verify NAS connectivity, physical camera hardware or live Notion consent. Retire Convex credentials and delete old resources only after the cutover is accepted.

@@ -136,7 +136,8 @@ describe("browse-only medicine recalls", () => {
   it("paginates across active food and multiple pages of historical reports without dropping or repeating records", async () => {
     const t = createBackend();
     const medicines = Array.from({ length: 101 }, (_, index) => ({ ...drug(), sourceId: `D-${index}-2026`, slug: `medicine-${index}` }));
-    await t.mutation(internal.incidents.upsertBatch, { items: [food(), ...medicines] });
+    const items = [food(), ...medicines];
+    for (let offset = 0; offset < items.length; offset += 25) await t.mutation(internal.incidents.upsertBatch, { items: items.slice(offset, offset + 25) });
     const slugs: string[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < 10; page++) {

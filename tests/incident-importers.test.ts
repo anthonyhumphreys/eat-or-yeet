@@ -333,6 +333,25 @@ describe("FDA announcement imports", () => {
     "",
   ];
 
+  it("retries a cached error page once and preserves the canonical announcement URL", async () => {
+    const settings = `<script type="application/json" data-drupal-selector="drupal-settings-json">${JSON.stringify({ datatables: { recalls: { ajax: { data: { view_name: "recall_solr_index" } } } } })}</script>`;
+    const details: URL[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === INDEX_PATH_FOR_TEST) return new Response(settings);
+      if (url.pathname === "/datatables/views/ajax") return jsonResponse({ draw: Number(url.searchParams.get("draw")), recordsTotal: 1, recordsFiltered: 1, data: [listingRow(0)] });
+      details.push(url);
+      return new Response(url.searchParams.has("_source_refresh")
+        ? '<h2 id="recall-announcement">Company Announcement</h2><p>Consumers should stop using this product.</p>'
+        : '<h1>Page not found</h1>');
+    }));
+    const incidents = await fdaAnnouncementsSource.fetchIncidents();
+    expect(details).toHaveLength(2);
+    expect(details[1].searchParams.get("_source_refresh")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(incidents[0].authorityUrl).toBe(details[0].toString());
+    expect(incidents[0].sourceId).toBe(`announcement:${details[0].pathname}`);
+  });
+
   it("imports both FDA listings and fetches cross-listed notices only once", async () => {
     const settings = `<script type="application/json" data-drupal-selector="drupal-settings-json">${JSON.stringify({
       datatables: { recalls: { ajax: { data: { view_name: "recall_solr_index" } } } },

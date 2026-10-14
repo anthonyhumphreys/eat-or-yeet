@@ -37,7 +37,34 @@ class IndexRange<T extends TableNames> {
 export class Database {
   readonly changes = new Map<string, StoredRow | null>();
   readonly jobs: PendingJob[] = [];
+  private readonly prefetchedIds = new Map<string, StoredRow | null>();
+  readonly prefetchedIndexes = new Map<string, StoredRow[]>();
   constructor(readonly sql: SqlDatabase, private readonly writable = false) {}
+  async preloadIds(ids: string[]) {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return;
+    if (unique.length > 100) throw new Error("Too many records to preload");
+    const rows = await this.sql.prepare(`SELECT id, table_name, payload, created_at FROM records WHERE id IN (${unique.map(() => "?").join(",")})`).bind(...unique).all<StoredRow>();
+    unique.forEach(id => this.prefetchedIds.set(id, null));
+    rows.results.forEach(row => this.prefetchedIds.set(row.id, row));
+  }
+  async preloadIndex<T extends TableNames>(table: T, index: string, keys: Partial<RecordValue<T>>[]) {
+    const fields = schema[table].indexes[index];
+    if (!fields || keys.some(key => Object.keys(key).length !== fields.length || fields.some(field => !(field in key)))) throw new Error("Preload requires a complete declared index");
+    if (!keys.length) return;
+    if (keys.length * fields.length > 100) throw new Error("Too many indexed records to preload");
+    const values = keys.map(key => fields.map(field => key[field as keyof RecordValue<T>]));
+    if (values.flat().some(value => !["string", "number", "boolean"].includes(typeof value))) throw new Error("Preloaded index keys must be scalar");
+    const clause = fields.map(field => `${fieldSql(field)} = ?`).join(" AND ");
+    const rows = await this.sql.prepare(`SELECT id, table_name, payload, created_at FROM records WHERE table_name='${table}' AND (${keys.map(() => `(${clause})`).join(" OR ")})`).bind(...values.flat().map(value => scalar(value as string | number | boolean))).all<StoredRow>();
+    for (const key of values) this.prefetchedIndexes.set(JSON.stringify([table, fields, key]), []);
+    for (const row of rows.results) {
+      const doc = decode(row);
+      const key = JSON.stringify([table, fields, fields.map(field => doc[field as keyof typeof doc])]);
+      this.prefetchedIndexes.get(key)?.push(row);
+      this.prefetchedIds.set(row.id, row);
+    }
+  }
   query<T extends TableNames>(table: T) { return new IndexedQuery(this, table); }
   async get<T extends TableNames>(id: Id<T>): Promise<Doc<T> | null>;
   async get<T extends TableNames>(table: T, id: Id<T>): Promise<Doc<T> | null>;
@@ -48,7 +75,7 @@ export class Database {
       const row = this.changes.get(id);
       return row && (!expected || row.table_name === expected) ? decode<T>(row) : null;
     }
-    const row = await this.sql.prepare("SELECT id, table_name, payload, created_at FROM records WHERE id = ?").bind(id).first<StoredRow>();
+    const row = this.prefetchedIds.has(id) ? this.prefetchedIds.get(id) : await this.sql.prepare("SELECT id, table_name, payload, created_at FROM records WHERE id = ?").bind(id).first<StoredRow>();
     return row && (!expected || row.table_name === expected) ? decode<T>(row) : null;
   }
   private writeAllowed() { if (!this.writable) throw new Error("Queries cannot modify backend state"); }
@@ -125,8 +152,10 @@ class IndexedQuery<T extends TableNames> {
     // Table names come from the schema, never from a request, so SQLite can
     // choose the corresponding partial expression index.
     const sql = `SELECT id, table_name, payload, created_at FROM records WHERE table_name = '${this.table}'${where ? ` AND ${where}` : ""} ORDER BY ${order} LIMIT ? OFFSET ?`;
-    const result = await this.database.sql.prepare(sql).bind(...this.predicates.filter((p) => p.value !== undefined).map((p) => scalar(p.value)), limit + this.database.changes.size, offset).all<StoredRow>();
-    const rows = new Map(result.results.map((row) => [row.id, row]));
+    const cached = offset === 0 && this.fields.length > 0 && this.predicates.length === this.fields.length && this.fields.every((field, i) => this.predicates[i].field === field && this.predicates[i].operator === "=")
+      ? this.database.prefetchedIndexes.get(JSON.stringify([this.table, this.fields, this.predicates.map(p => p.value)])) : undefined;
+    const persisted = cached ?? (await this.database.sql.prepare(sql).bind(...this.predicates.filter((p) => p.value !== undefined).map((p) => scalar(p.value)), limit + this.database.changes.size, offset).all<StoredRow>()).results;
+    const rows = new Map(persisted.map((row) => [row.id, row]));
     for (const [id, row] of this.database.changes) {
       rows.delete(id);
       if (row?.table_name === this.table) rows.set(id, row);

@@ -39,7 +39,7 @@
         "queue": "eat-or-yeet-local",
         "max_batch_size": 1,
         "max_retries": 5,
-        "max_concurrency": 2
+        "max_concurrency": 1
       }
     ]
   },
@@ -86,7 +86,7 @@
             "queue": "eat-or-yeet-staging",
             "max_batch_size": 1,
             "max_retries": 5,
-            "max_concurrency": 2
+            "max_concurrency": 1
           }
         ]
       },
@@ -109,7 +109,13 @@
         "ALLOW_DEMO_DATA": "false",
         "BACKEND_RESTORE_ENABLED": "false"
       },
-      "preview_urls": false
+      "preview_urls": false,
+      "services": [
+        {
+          "binding": "SELF",
+          "service": "eat-or-yeet-backend-staging"
+        }
+      ]
     },
     "production": {
       "name": "eat-or-yeet-backend",
@@ -117,7 +123,8 @@
         {
           "binding": "DB",
           "database_name": "eat-or-yeet",
-          "migrations_dir": "backend/migrations"
+          "migrations_dir": "backend/migrations",
+          "database_id": "a27dc9e5-4d3e-44f5-8586-6eab64ea43d1"
         }
       ],
       "r2_buckets": [
@@ -138,7 +145,7 @@
             "queue": "eat-or-yeet",
             "max_batch_size": 1,
             "max_retries": 5,
-            "max_concurrency": 2
+            "max_concurrency": 1
           }
         ]
       },
@@ -165,9 +172,21 @@
         "ALLOW_DEMO_DATA": "false",
         "BACKEND_RESTORE_ENABLED": "false"
       },
-      "preview_urls": false
+      "preview_urls": false,
+      "services": [
+        {
+          "binding": "SELF",
+          "service": "eat-or-yeet-backend"
+        }
+      ]
     }
   },
   "account_id": "715060911f9418f1df0f9de0265d8a64",
-  "preview_urls": false
+  "preview_urls": false,
+  "services": [
+    {
+      "binding": "SELF",
+      "service": "eat-or-yeet-backend-local"
+    }
+  ]
 }
