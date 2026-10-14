@@ -1,8 +1,8 @@
-import { getFunctionName } from "convex/server";
+const getFunctionName = (ref: { name: string }) => ref.name.replace(".", ":");
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { query, entries } = vi.hoisted(() => ({ query: vi.fn(), entries: new Map<string, Promise<unknown>>() }));
-vi.mock("convex/nextjs", () => ({ fetchQuery: query }));
+vi.mock("@backend/client", () => ({ fetchQuery: query }));
 vi.mock("next/cache", () => ({
   unstable_cache: (fn: (...args: unknown[]) => Promise<unknown>, keys: string[]) => (...args: unknown[]) => {
     const key = JSON.stringify([keys, args]);
@@ -47,7 +47,7 @@ beforeEach(() => {
   entries.clear();
   vi.useFakeTimers();
   vi.setSystemTime(now);
-  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
+  vi.stubEnv("BACKEND_URL", "https://test.workers.dev");
   vi.stubEnv("ALLOW_DEMO_DATA", "false");
   vi.stubEnv("RATE_LIMIT_SALT", "test secret for warning cursors");
   revision = "UK:revision-1";
@@ -208,13 +208,13 @@ describe("complete warning search", () => {
     expect((await searchWarnings({ region: "UK" })).status.healthy).toBe(true);
     query.mockImplementation(async (ref) => {
       if (getFunctionName(ref) === "incidents:getDatasetStatus") return { ...status, version: revision, healthy: false, regions: [] };
-      if (getFunctionName(ref) === "incidents:listActivePage") throw new Error("Convex unavailable");
+      if (getFunctionName(ref) === "incidents:listActivePage") throw new Error("Backend unavailable");
       throw new Error("Unexpected query");
     });
     // The persistent cache is warm for page data, but health is read for every search.
     expect((await searchWarnings({ region: "UK" })).status.healthy).toBe(false);
 
     entries.clear();
-    await expect(searchWarnings({ region: "UK" })).rejects.toThrow("Convex unavailable");
+    await expect(searchWarnings({ region: "UK" })).rejects.toThrow("Backend unavailable");
   });
 });

@@ -1,10 +1,10 @@
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionReturnType } from "@backend/operations";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, internal } from "@convex/_generated/api";
+import { api, internal } from "@backend/api";
 import { fdaDrugSource, parseFdaDrugRecord } from "@/lib/incidents/fda";
 import { incidentSuperCategories, medicineBrowseCategories } from "@/lib/incidents/browse";
-import { createBackend } from "./convex-harness";
+import { createBackend } from "./backend-harness";
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });

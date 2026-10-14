@@ -13,7 +13,7 @@
     "build:mcp-app": "tsx scripts/build-mcp-app.ts",
     "package:plugin": "tsx scripts/package-plugin.ts",
     "package:plugin:grok-bot": "tsx scripts/package-grok-bot-plugin.ts",
-    "build:vercel": "convex deploy --cmd 'pnpm build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL",
+    "build:vercel": "pnpm build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -23,10 +23,16 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:mcp": "tsx scripts/mcp-smoke.ts",
-    "convex:dev": "convex dev",
-    "convex:deploy": "convex deploy",
     "data:seed": "tsx --env-file=.env.local --env-file-if-exists=.env.development.local scripts/seed.ts",
-    "data:sync:fsis": "tsx scripts/sync-fsis.ts"
+    "data:sync:fsis": "tsx scripts/sync-fsis.ts",
+    "backend:generate": "tsx scripts/generate-backend.ts",
+    "backend:types": "tsx scripts/backend-types.ts",
+    "backend:dev": "wrangler dev --local",
+    "backend:deploy:staging": "wrangler deploy --env staging",
+    "backend:deploy:production": "wrangler deploy --env production",
+    "backend:migrate:local": "wrangler d1 migrations apply DB --local",
+    "backend:restore": "tsx scripts/restore-backend.ts",
+    "backend:run": "tsx scripts/backend-run.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",
@@ -35,7 +41,6 @@
     "@zxing/browser": "^0.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "convex": "^1.46.0",
     "fast-xml-parser": "^5.11.2",
     "lucide-react": "^1.52.0",
     "next": "16.4.0",
@@ -49,6 +54,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261014.1",
     "@next/env": "16.4.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
@@ -57,16 +63,17 @@
     "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "ajv": "8.20.0",
-    "convex-test": "^0.0.60",
     "esbuild": "0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.0",
     "fflate": "0.8.3",
+    "miniflare": "^4.20260730.0",
     "shadcn": "^4.21.4",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "^4.151.0"
   },
   "packageManager": "pnpm@10.32.1"
 }

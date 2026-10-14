@@ -1,9 +1,9 @@
-import { getFunctionName } from "convex/server";
-import { ConvexError } from "convex/values";
+const getFunctionName = (ref: { name: string }) => ref.name.replace(".", ":");
+import { BackendError } from "@backend/values";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { query, entries } = vi.hoisted(() => ({ query: vi.fn(), entries: new Map<string, Promise<unknown>>() }));
-vi.mock("convex/nextjs", () => ({ fetchQuery: query }));
+vi.mock("@backend/client", () => ({ fetchQuery: query }));
 vi.mock("next/cache", () => ({
   unstable_cache: (fn: (...args: unknown[]) => Promise<unknown>, keys: string[]) => (...args: unknown[]) => {
     const key = JSON.stringify([keys, args]);
@@ -36,7 +36,7 @@ beforeEach(() => {
   entries.clear();
   vi.useFakeTimers();
   vi.setSystemTime(now);
-  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
+  vi.stubEnv("BACKEND_URL", "https://test.workers.dev");
   vi.stubEnv("ALLOW_DEMO_DATA", "false");
   revision = "UK:initial";
   healthy = true;
@@ -62,7 +62,7 @@ describe("warning data caches", () => {
   });
 
   it("does not reuse food-era cached pages or details after the category shape changes", async () => {
-    const url = "https://test.convex.cloud";
+    const url = "https://test.workers.dev";
     entries.set(JSON.stringify([["public-warning-page-v5"], ["UK", null, url, revision]]),
       Promise.resolve({ page: [{ ...row, id: row.incidentId }], isDone: true, continueCursor: "done" }));
     entries.set(JSON.stringify([["warning-details-v1"], ["biscuit-recall", false, url, revision]]),
@@ -122,7 +122,7 @@ describe("warning data caches", () => {
       if (args.expectedVersion === "UK:initial") {
         revision = "UK:changed:1";
         healthy = false;
-        throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
+        throw new BackendError({ code: "DATASET_REVISION_CHANGED" });
       }
       return { page: [{ ...row, id: "new", title: "Updated recall" }], isDone: true, continueCursor: "done" };
     });
@@ -140,7 +140,7 @@ describe("warning data caches", () => {
     query.mockImplementation(async (ref, args) => {
       if (getFunctionName(ref) === "incidents:listActivePage") {
         revision += ":changed";
-        throw new ConvexError({ code: "DATASET_REVISION_CHANGED" });
+        throw new BackendError({ code: "DATASET_REVISION_CHANGED" });
       }
       return implementation(ref, args);
     });
@@ -187,7 +187,7 @@ describe("warning data caches", () => {
     await db.getCheckDataset("UK");
     vi.stubEnv("ALLOW_DEMO_DATA", "true");
     await db.getCheckDataset("UK");
-    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://another.convex.cloud");
+    vi.stubEnv("BACKEND_URL", "https://another.workers.dev");
     await db.getCheckDataset("UK");
     expect(calls("getActivePage")).toHaveLength(3);
     expect(calls("getActivePage").map(([, args]) => args.includeDemo)).toEqual([false, true, true]);

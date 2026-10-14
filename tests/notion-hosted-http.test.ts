@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Id } from "@backend/model";
 import { describe, expect, it } from "vitest";
 import { decryptCredentials } from "../integrations/notion/hosted/crypto.ts";
 import type { Authorization, InstallationStatus, Region } from "../integrations/notion/managed/types.ts";

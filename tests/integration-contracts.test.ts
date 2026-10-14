@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Id } from "@backend/model";
 
 import { emptyObservation } from "@/lib/domain/schemas";
 import type { DatasetStatus, MatchableIncident, MatchableTarget } from "@/lib/domain/types";

@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emptyObservation } from "@/lib/domain/schemas";
 import { enrichObservation } from "@/lib/products/enrich";
-import { lookupByGtin } from "../convex/products";
 import oreoMetadata from "./fixtures/open-food-facts-oreo.json";
 
 const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn() }));
-vi.mock("convex/nextjs", () => ({ fetchQuery: mocks.query, fetchMutation: mocks.mutation }));
+vi.mock("@backend/client", () => ({ fetchQuery: mocks.query, fetchMutation: mocks.mutation }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -111,7 +110,7 @@ describe("product lookup evidence", () => {
     expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
-  it("skips external lookup and cache writes if cancellation arrives during the Convex query", async () => {
+  it("skips external lookup and cache writes if cancellation arrives during the backend query", async () => {
     const controller = new AbortController();
     let finishQuery!: (result: { product: null; metadata: null }) => void;
     mocks.query.mockImplementationOnce(() => new Promise((resolve) => {
@@ -164,20 +163,14 @@ describe("product lookup evidence", () => {
   });
 
   it("treats an expired cache row as a miss", async () => {
-    const queryTables: string[] = [];
-    const ctx = {
-      db: {
-        query: (table: string) => {
-          queryTables.push(table);
-          return {
-            withIndex: () => ({ unique: async () => table === "productMetadataCache" ? { expiresAt: Date.now() - 1, metadata: { product_name: "Old name" } } : null }),
-          };
-        },
-      },
-    };
-    const handler = (lookupByGtin as unknown as { _handler: (context: unknown, args: { gtin: string }) => Promise<unknown> })._handler;
+    const { createBackend } = await import("./backend-harness");
+    const { api } = await import("../backend/api");
+    const t = createBackend();
+    await t.run((ctx) => ctx.db.insert("productMetadataCache", {
+      gtin: "0004006381333931", source: "openfoodfacts", metadata: { product_name: "Old name" },
+      expiresAt: Date.now() - 1, updatedAt: Date.now() - 2,
+    }));
+    await expect(t.query(api.products.lookupByGtin, { gtin: "0004006381333931" })).resolves.toEqual({ product: null, metadata: null });
 
-    await expect(handler(ctx, { gtin: "0004006381333931" })).resolves.toEqual({ product: null, metadata: null });
-    expect(queryTables).toEqual(["products", "productMetadataCache"]);
   });
 });

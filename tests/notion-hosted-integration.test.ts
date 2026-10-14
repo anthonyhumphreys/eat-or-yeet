@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
-import { fetchMutation, fetchQuery } from "convex/nextjs";
+import { fetchMutation, fetchQuery } from "@backend/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, internal } from "@convex/_generated/api";
+import { api, internal } from "@backend/api";
 import { decryptCredentials } from "../integrations/notion/hosted/crypto.ts";
 import { NotionOAuthApi } from "../integrations/notion/managed/notion-api.ts";
 import type { Authorization, Region } from "../integrations/notion/managed/types.ts";
@@ -11,12 +11,12 @@ import { GET as callbackRoute } from "../src/app/api/notion/callback/route.ts";
 import { POST as manageRoute } from "../src/app/api/notion/manage/route.ts";
 import { POST as webhookRoute } from "../src/app/api/notion/webhook/route.ts";
 import { handleNotionRequest, notionCookieNames, notionCsrf, notionHash, type NotionHttpBackend, type NotionHttpDependencies } from "../src/lib/integrations/notion-http.ts";
-import { createBackend } from "./convex-harness.ts";
+import { createBackend } from "./backend-harness.ts";
 
-vi.mock("convex/nextjs", () => ({ fetchMutation: vi.fn(), fetchQuery: vi.fn() }));
+vi.mock("@backend/client", () => ({ fetchMutation: vi.fn(), fetchQuery: vi.fn() }));
 
 const ORIGIN = "https://eat-or-yeet.example.test";
-const SECRET = "hosted-convex-secret";
+const SECRET = "hosted-backend-secret";
 const CREDENTIAL_KEY = Buffer.alloc(32, 34).toString("base64");
 const WEBHOOK_TOKEN = "hosted-webhook-secret";
 const INTEGRATION_ID = "hosted-integration";
@@ -118,7 +118,7 @@ async function activate(t: Backend, connection: Awaited<ReturnType<typeof connec
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
   vi.setSystemTime(new Date("2026-10-10T14:00:00Z"));
-  vi.stubEnv("CONVEX_SERVER_SECRET", SECRET);
+  vi.stubEnv("BACKEND_SECRET", SECRET);
   vi.stubEnv("NEXT_PUBLIC_APP_URL", ORIGIN);
   vi.stubEnv("NOTION_CLIENT_ID", "hosted-client");
   vi.stubEnv("NOTION_CLIENT_SECRET", "hosted-client-secret");
@@ -133,7 +133,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("hosted Notion integration with Convex state", () => {
+describe("hosted Notion integration with D1 state", () => {
   it("connects with encrypted credentials and fences durable work through pause, country change and disconnect", async () => {
     const t = createBackend(), fixture = new NotionFixture("hosted");
     vi.stubGlobal("fetch", fixture.fetch);

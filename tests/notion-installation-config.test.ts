@@ -60,8 +60,8 @@ describe("getNotionSetupOrigin", () => {
     NODE_ENV: "production",
     NOTION_INSTALL_ENABLED: "true",
     NEXT_PUBLIC_APP_URL: "https://www.eatoryeet.app",
-    CONVEX_SERVER_SECRET: "test-server-secret",
-    NEXT_PUBLIC_CONVEX_URL: "https://example.convex.cloud",
+    BACKEND_SECRET: "test-server-secret",
+    BACKEND_URL: "https://example.workers.dev",
     NOTION_CLIENT_ID: "test-client",
     NOTION_CLIENT_SECRET: "test-client-secret",
     NOTION_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
@@ -77,7 +77,7 @@ describe("getNotionSetupOrigin", () => {
   });
 
   it.each([
-    "CONVEX_SERVER_SECRET", "NEXT_PUBLIC_CONVEX_URL", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET",
+    "BACKEND_SECRET", "BACKEND_URL", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET",
     "NOTION_CREDENTIAL_KEY", "NOTION_INTEGRATION_ID", "NOTION_SUBSCRIPTION_ID", "NOTION_WEBHOOK_VERIFICATION_TOKEN",
   ])("withholds setup when %s is missing or blank", (name) => {
     expect(getNotionSetupOrigin({ ...configured, [name]: undefined })).toBeUndefined();

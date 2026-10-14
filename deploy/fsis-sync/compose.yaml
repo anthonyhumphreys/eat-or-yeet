@@ -7,9 +7,9 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      FSIS_DEPLOYMENT: prod:silent-raven-365
+      FSIS_BACKEND_URL: ${FSIS_BACKEND_URL:?Set FSIS_BACKEND_URL to the Cloudflare backend URL}
     secrets:
-      - convex_deploy_key
+      - fsis_upload_token
     volumes:
       - sync-state:/var/lib/fsis-sync
     read_only: true
@@ -35,8 +35,8 @@ services:
         max-file: "2"
 
 secrets:
-  convex_deploy_key:
-    file: ./secrets/convex-deploy.key
+  fsis_upload_token:
+    file: ./secrets/fsis-upload-token
 
 volumes:
   sync-state:

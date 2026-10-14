@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { internal } from "@convex/_generated/api";
-import { createBackend } from "./convex-harness";
+import { internal } from "@backend/api";
+import { createBackend } from "./backend-harness";
 
 const notice = (overrides: Record<string, unknown> = {}) => ({
   title: "Maker recalls Heatwave Mix because of undeclared milk", slug: "heatwave", authority: "Test authority", authorityUrl: "https://example.test/recall",

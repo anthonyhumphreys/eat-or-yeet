@@ -60,7 +60,7 @@ describe("POST /api/check", () => {
   });
 
   it("returns JSON 503 when the rate-limit datastore is unavailable", async () => {
-    vi.mocked(takeRateLimits).mockRejectedValueOnce(new Error("Convex unavailable"));
+    vi.mocked(takeRateLimits).mockRejectedValueOnce(new Error("Backend unavailable"));
     const request = new Request("http://localhost/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

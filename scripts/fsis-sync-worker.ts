@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { syncFsis } from "./lib/fsis-sync";
-import { fsisDeployKeyEnvironment, fsisWorkerHealthy, runFsisWorker } from "./lib/fsis-worker";
+import { fsisUploadEnvironment, fsisWorkerHealthy, runFsisWorker } from "./lib/fsis-worker";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -13,10 +13,10 @@ async function main() {
   }
   if (args.length && (args.length !== 1 || args[0] !== "--once")) throw new Error("Usage: fsis-sync-worker [--once | --healthcheck]");
 
-  const keyFile = process.env.CONVEX_DEPLOY_KEY_FILE ?? "/run/secrets/convex_deploy_key";
-  const deployment = process.env.FSIS_DEPLOYMENT;
-  if (!deployment) throw new Error("Set FSIS_DEPLOYMENT and mount its Convex deployment key before starting the USDA worker");
-  const env = fsisDeployKeyEnvironment(await readFile(keyFile, "utf8"), deployment, process.env);
+  const keyFile = process.env.FSIS_UPLOAD_TOKEN_FILE ?? "/run/secrets/fsis_upload_token";
+  const deployment = process.env.FSIS_BACKEND_URL;
+  if (!deployment) throw new Error("Set FSIS_BACKEND_URL and mount its FSIS upload token before starting the USDA worker");
+  const env = fsisUploadEnvironment(await readFile(keyFile, "utf8"), deployment, process.env);
   const controller = new AbortController();
   const stop = () => controller.abort();
   process.once("SIGTERM", stop);

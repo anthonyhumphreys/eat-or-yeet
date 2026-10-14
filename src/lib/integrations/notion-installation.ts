@@ -37,8 +37,8 @@ export function getNotionInstallationOrigin(environment: NodeJS.ProcessEnv = pro
 /** Offer the hosted connection only when its OAuth, backend and webhook settings exist. */
 export function getNotionSetupOrigin(environment: NodeJS.ProcessEnv = process.env): string | undefined {
   const requiredSettings = [
-    "CONVEX_SERVER_SECRET",
-    "NEXT_PUBLIC_CONVEX_URL",
+    "BACKEND_SECRET",
+    "BACKEND_URL",
     "NOTION_CLIENT_ID",
     "NOTION_CLIENT_SECRET",
     "NOTION_CREDENTIAL_KEY",

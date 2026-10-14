@@ -1,43 +1,48 @@
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import path from "node:path";
 
 export type DevelopmentEnv = Record<string, string | undefined>;
-
-export function developmentTarget(env: DevelopmentEnv): "local" | "cloud" {
-  if (env.CONVEX_DEPLOY_KEY || env.CONVEX_SELF_HOSTED_URL || env.CONVEX_SELF_HOSTED_ADMIN_KEY) {
-    throw new Error("pnpm dev does not use deploy keys or self-hosted credentials. Use pnpm dev:web with your separately managed backend.");
-  }
-  const selector = env.CONVEX_DEPLOYMENT?.trim() ?? "";
-  const local = !selector || selector === "local" || selector.endsWith(":local") || /^(anonymous|local):/.test(selector);
-  if (!local && selector !== "dev" && !/^dev:/.test(selector) && !/(^|:)dev\//.test(selector)) {
-    throw new Error("pnpm dev requires a local or personal dev deployment. Select a development deployment before starting.");
-  }
-  if (local && env.NEXT_PUBLIC_CONVEX_URL && !isLoopbackUrl(env.NEXT_PUBLIC_CONVEX_URL)) {
-    throw new Error("The local deployment has a remote NEXT_PUBLIC_CONVEX_URL. Remove the conflicting override before starting.");
-  }
-  return local ? "local" : "cloud";
-}
-
 export function isLoopbackUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  } catch {
-    return false;
+  } catch { return false; }
+}
+export function developmentTarget(env: DevelopmentEnv): "local" | "cloud" {
+  const stage = env.BACKEND_ENV?.trim() || "local";
+  if (stage === "staging") {
+    if (!env.BACKEND_URL || new URL(env.BACKEND_URL).protocol !== "https:") throw new Error("Staging requires an HTTPS BACKEND_URL");
+    return "cloud";
   }
+  if (stage !== "local") throw new Error("pnpm dev requires a local or staging development deployment");
+  if (env.BACKEND_URL && !isLoopbackUrl(env.BACKEND_URL)) throw new Error("The local backend has a remote or invalid BACKEND_URL conflicting override");
+  return "local";
 }
 
-/** Add only missing local values; existing files and secrets belong to the contributor. */
+/** Add missing values while preserving contributor configuration and credentials. */
 export function ensureLocalEnvironment(directory: string, env: DevelopmentEnv): void {
   const filename = path.join(directory, ".env.local");
-  if (!existsSync(filename)) {
-    writeFileSync(filename, readFileSync(path.join(directory, ".env.example")), { mode: 0o600, flag: "wx" });
-  }
+  if (!existsSync(filename)) writeFileSync(filename, readFileSync(path.join(directory, ".env.example")), { mode: 0o600, flag: "wx" });
+  const resolved = { ...parseEnv(readFileSync(filename, "utf8")), ...env };
   const additions: string[] = [];
-  for (const name of ["CONVEX_SERVER_SECRET", "RATE_LIMIT_SALT", "CRON_SECRET"]) {
-    if (!env[name]) additions.push(`${name}=${randomBytes(32).toString("hex")}`);
+  for (const name of ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "RATE_LIMIT_SALT", "CRON_SECRET"]) {
+    if (!resolved[name]) {
+      resolved[name] = randomBytes(32).toString("hex");
+      additions.push(`${name}=${resolved[name]}`);
+    }
   }
-  if (!env.NEXT_PUBLIC_APP_URL) additions.push("NEXT_PUBLIC_APP_URL=http://localhost:3000");
+  for (const [name, value] of Object.entries({ BACKEND_URL: "http://127.0.0.1:8787", NEXT_PUBLIC_APP_URL: "http://localhost:3000" })) {
+    if (!resolved[name]) { resolved[name] = value; additions.push(`${name}=${value}`); }
+  }
   if (additions.length) appendFileSync(filename, `\n# Generated local development values.\n${additions.join("\n")}\n`);
+  const workerFile = path.join(directory, ".dev.vars");
+  const names = ["BACKEND_SECRET", "BACKEND_ADMIN_TOKEN", "FSIS_UPLOAD_TOKEN", "NOTION_CREDENTIAL_KEY", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET", "NOTION_REVIEW_CONNECTION_KEY", "OPENFDA_API_KEY"];
+  if (!existsSync(workerFile)) {
+    writeFileSync(workerFile, names.filter((name) => resolved[name]).map((name) => `${name}=${JSON.stringify(resolved[name])}`).join("\n") + "\n", { mode: 0o600, flag: "wx" });
+  } else {
+    const workerEnv = parseEnv(readFileSync(workerFile, "utf8"));
+    for (const name of names.slice(0, 3)) if (workerEnv[name] !== resolved[name]) throw new Error(`${name} differs between .dev.vars and the Next.js environment. Align the local credentials before starting.`);
+  }
 }

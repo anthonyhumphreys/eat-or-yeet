@@ -1,9 +1,9 @@
 import "server-only";
 
-import { fetchMutation, fetchQuery } from "convex/nextjs";
+import { fetchMutation, fetchQuery } from "@backend/client";
 import { z } from "zod";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import type { ProductObservation } from "@/lib/domain/schemas";
 import { readResponseJson } from "@/lib/http/bounded-response";
 import { isValidGtin, normaliseGtin } from "@/lib/matching/normalise";
@@ -59,7 +59,7 @@ async function fetchOpenFoodFacts(
     const expiresAt = Date.now() + (metadata ? 7 * 24 : 24) * 60 * 60 * 1000;
     throwIfAborted(signal);
     await fetchMutation(api.products.cacheMetadata, {
-      secret: process.env.CONVEX_SERVER_SECRET ?? "",
+      secret: process.env.BACKEND_SECRET ?? "",
       gtin,
       metadata,
       expiresAt,
@@ -67,7 +67,7 @@ async function fetchOpenFoodFacts(
     throwIfAborted(signal);
     return metadata;
   } catch {
-    // Convex mutations cannot be cancelled once submitted. If cancellation happens
+    // Backend mutations cannot be cancelled once submitted. If cancellation happens
     // during one, this prevents the completed result from flowing into a verdict.
     if (signal?.aborted) throwIfAborted(signal);
     return null;
@@ -83,7 +83,7 @@ export async function enrichObservation(
   if (!observation.barcode || !isValidGtin(observation.barcode)) return observation;
   const gtin = normaliseGtin(observation.barcode);
   throwIfAborted(signal);
-  // Convex queries do not accept an AbortSignal; check after completion and discard
+  // Backend queries do not accept an AbortSignal; check after completion and discard
   // their result if the caller cancelled while the query was in flight.
   const lookup = await fetchQuery(api.products.lookupByGtin, { gtin });
   throwIfAborted(signal);

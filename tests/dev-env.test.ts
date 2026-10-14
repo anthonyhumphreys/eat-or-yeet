@@ -11,7 +11,7 @@ const directories: string[] = [];
 function workspace(): string {
   const directory = mkdtempSync(path.join(tmpdir(), "eat-or-yeet-dev-test-"));
   directories.push(directory);
-  writeFileSync(path.join(directory, ".env.example"), "CONVEX_SERVER_SECRET=\nRATE_LIMIT_SALT=\nCRON_SECRET=\nALLOW_DEMO_DATA=true\n");
+  writeFileSync(path.join(directory, ".env.example"), "BACKEND_SECRET=\nRATE_LIMIT_SALT=\nCRON_SECRET=\nALLOW_DEMO_DATA=true\n");
   return directory;
 }
 
@@ -24,7 +24,7 @@ describe("contributor development setup", () => {
     ensureLocalEnvironment(directory, {});
     const contents = readFileSync(filename, "utf8");
     const env = parseEnv(contents);
-    const secrets = [env.CONVEX_SERVER_SECRET, env.RATE_LIMIT_SALT, env.CRON_SECRET];
+    const secrets = [env.BACKEND_SECRET, env.RATE_LIMIT_SALT, env.CRON_SECRET];
     for (const secret of secrets) expect(secret).toMatch(/^[a-f0-9]{64}$/);
     expect(new Set(secrets).size).toBe(3);
     expect(env.ALLOW_DEMO_DATA).toBe("true");
@@ -39,38 +39,29 @@ describe("contributor development setup", () => {
     const contents = "# Keep my configuration\nALLOW_DEMO_DATA=false\nUNRELATED=value\n";
     writeFileSync(filename, contents);
     ensureLocalEnvironment(directory, {
-      CONVEX_SERVER_SECRET: "existing-server", RATE_LIMIT_SALT: "existing-salt", CRON_SECRET: "existing-cron",
+      BACKEND_SECRET: "existing-server", BACKEND_ADMIN_TOKEN: "existing-admin", FSIS_UPLOAD_TOKEN: "existing-upload", BACKEND_URL: "http://localhost:8787", RATE_LIMIT_SALT: "existing-salt", CRON_SECRET: "existing-cron",
       NEXT_PUBLIC_APP_URL: "http://localhost:4000",
     });
     expect(readFileSync(filename, "utf8")).toBe(contents);
   });
 
-  it("defaults to local and recognises local selectors", () => {
-    for (const selector of [undefined, "", "anonymous:anonymous-agent", "local:sample", "local", "team:project:local"]) {
-      expect(developmentTarget({ CONVEX_DEPLOYMENT: selector })).toBe("local");
-    }
+  it("defaults to local and allows explicit staging", () => {
+    expect(developmentTarget({})).toBe("local");
+    expect(developmentTarget({ BACKEND_ENV: "local" })).toBe("local");
+    expect(developmentTarget({ BACKEND_ENV: "staging", BACKEND_URL: "https://staging.example.test" })).toBe("cloud");
   });
 
-  it("preserves personal cloud development selectors", () => {
-    for (const selector of ["dev", "dev:sample", "team:project:dev/contributor"]) {
-      expect(developmentTarget({ CONVEX_DEPLOYMENT: selector, NEXT_PUBLIC_CONVEX_URL: "https://sample.convex.cloud" })).toBe("cloud");
-    }
-  });
-
-  it("rejects production, preview and deploy-key configurations before setup can mutate them", () => {
-    for (const selector of ["prod", "prod:sample", "team:project:prod", "preview:sample", "staging"]) {
-      expect(() => developmentTarget({ CONVEX_DEPLOYMENT: selector })).toThrow(/development deployment/);
-    }
-    expect(() => developmentTarget({ CONVEX_DEPLOY_KEY: "test-key" })).toThrow(/deploy keys/);
-    expect(() => developmentTarget({ CONVEX_SELF_HOSTED_URL: "http://localhost:3210" })).toThrow(/self-hosted/);
+  it("rejects production or an insecure staging target before setup can mutate it", () => {
+    expect(() => developmentTarget({ BACKEND_ENV: "production" })).toThrow(/development deployment/);
+    expect(() => developmentTarget({ BACKEND_ENV: "staging", BACKEND_URL: "http://example.test" })).toThrow(/HTTPS/);
   });
 
   it("rejects remote or malformed URL overrides for a local backend", () => {
-    for (const url of ["https://production.convex.cloud", "http://localhost.evil.test:3210", "invalid"]) {
-      expect(() => developmentTarget({ NEXT_PUBLIC_CONVEX_URL: url })).toThrow(/conflicting override/);
+    for (const url of ["https://production.example.test", "http://localhost.evil.test:3210", "invalid"]) {
+      expect(() => developmentTarget({ BACKEND_URL: url })).toThrow(/conflicting override/);
     }
     for (const url of ["http://localhost:3210", "http://127.0.0.1:3210", "http://[::1]:3210"]) {
-      expect(developmentTarget({ NEXT_PUBLIC_CONVEX_URL: url })).toBe("local");
+      expect(developmentTarget({ BACKEND_URL: url })).toBe("local");
     }
   });
 });

@@ -7,7 +7,7 @@ import oreoMetadata from "./fixtures/open-food-facts-oreo.json";
 
 const mocks = vi.hoisted(() => ({ dataset: vi.fn(), query: vi.fn(), mutation: vi.fn() }));
 vi.mock("@/db/queries", () => ({ getCheckDataset: mocks.dataset }));
-vi.mock("convex/nextjs", () => ({ fetchQuery: mocks.query, fetchMutation: mocks.mutation }));
+vi.mock("@backend/client", () => ({ fetchQuery: mocks.query, fetchMutation: mocks.mutation }));
 vi.mock("@/lib/security/anonymous", () => ({
   anonymousSubject: () => ({ id: "test-user" }),
   attachAnonymousCookie: vi.fn(),

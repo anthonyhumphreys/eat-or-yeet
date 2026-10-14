@@ -6,51 +6,41 @@ The official CDC combined feed is reachable from hosted runners, but currently i
 
 ## Import from a connection that works
 
-Use Node 24+, install this repository's dependencies, and sign in to Convex with a maintainer account. Run from the repository root:
+Use Node 24+ and this repository's dependencies. Supply the intended `BACKEND_URL` and its dedicated `FSIS_UPLOAD_TOKEN` privately, then run:
 
 ```sh
-pnpm data:sync:fsis          # selected development deployment
-pnpm data:sync:fsis --prod  # explicit production target
+pnpm data:sync:fsis
+# A production invocation also requires BACKEND_ENV=production.
+pnpm data:sync:fsis --prod
 ```
 
-The script fetches the full official API and validates every record before uploading its English records to temporary Convex storage. An admin-only action validates the snapshot again, imports through the existing source ledger and deletes the temporary file. No new public write endpoint or application secret is added. Upload URLs and dataset contents stay out of logs.
+The script validates the complete official archive before sending its English records to `/admin/fsis`. The Worker checks the dedicated token, writes a temporary private R2 object, validates the snapshot again, records the import in D1 and deletes the object on success or failure. The upload token cannot call general backend or operator operations. Credentials and source records stay out of logs.
 
-Only active notices and explicit closures of previously active notices are stored. Unused resolved history is checked but does not create database rows. A snapshot missing a previously active notice fails the refresh. Warnings never resolve merely because they disappear from a response.
+Only active notices and tracked closures create database records. Missing previously active notices fail the refresh. Snapshots must be fetched within 15 minutes and fit the existing size limit. Failed or stale coverage blocks negative results after the same 48-hour freshness gate.
 
-Snapshots must be fetched within 15 minutes of import and remain subject to the existing source size limit. Import failures mark the source unhealthy; a successful import becomes stale after 48 hours. A queued upload is not proof of a successful import.
-
-## Daily external sync
-
-When an external fetcher is responsible for USDA, set this variable on the matching Convex deployment:
-
-```sh
-pnpm exec convex env set FSIS_FETCH_MODE snapshot --prod
-```
-
-This stops the built-in cron from making the known blocked USDA request and overwriting a successful external run with a failure. Other sources continue on the Convex schedule. Without an external update, USDA becomes stale after 48 hours and blocks negative results as before.
-
-The NAS container below runs this daily from a home connection. A home fetch adds no hosting service, but an offline machine cannot update the data. Keep the repository current so the fetcher and deployed importer agree.
+`FSIS_FETCH_MODE=snapshot` is already configured in Wrangler. Other source refreshes run on the Worker schedule. An external importer is still required; the migration does not bypass USDA's hosted-IP block.
 
 ## NAS container
 
-Use a Linux NAS with Docker Compose and an ARM64 or x86-64 CPU. The image contains Node and only the three dependencies needed for fetching and importing; it does not run the website or a second database. No inbound ports are exposed. The home connection must reach both USDA and Convex.
+Use a Linux NAS with Docker Compose and an ARM64 or x86-64 CPU. The image contains Node and only the two dependencies needed for fetching and importing; it does not run the website or a second database. No inbound ports are exposed. The home connection must reach both USDA and the Cloudflare Worker.
 
 The worker imports immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to seven minutes for an import already in progress to finish. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
 
 ### Create a separate key
 
-From an up-to-date checkout on your maintainer machine, create a revocable key for this production deployment:
+Generate a separate 32-byte token and provision the same value as the production Worker's `FSIS_UPLOAD_TOKEN`. On your maintainer machine:
 
 ```sh
 mkdir -p deploy/fsis-sync/secrets
 chmod 700 deploy/fsis-sync/secrets
-pnpm exec convex deployment token create nas-fsis-sync --prod > deploy/fsis-sync/secrets/convex-deploy.key
-chmod 444 deploy/fsis-sync/secrets/convex-deploy.key
+openssl rand -hex 32 > deploy/fsis-sync/secrets/fsis-upload-token
+pnpm exec wrangler secret put FSIS_UPLOAD_TOKEN --env production < deploy/fsis-sync/secrets/fsis-upload-token
+chmod 444 deploy/fsis-sync/secrets/fsis-upload-token
 ```
 
-The private `secrets` directory restricts host access; the readable file lets the container's unprivileged user access the mounted secret. Both Git and the Docker build exclude this directory. Transfer the file privately to the same path in the NAS checkout, retaining those permissions. Do not copy your personal Convex CLI login to the NAS.
+Transfer the file privately to the same path on the NAS. The private directory restricts host access and the readable file lets the unprivileged container user read the mounted secret. Git and the Docker build exclude this directory. Set `FSIS_BACKEND_URL` to the intended production Worker URL in the NAS Compose environment. Compose requires an explicit URL and has no production default.
 
-A [Convex deployment key](https://docs.convex.dev/cli/deploy-key-types) grants administration rights to that deployment, including code deployment and data writes. This key is separate from the website's build key and can be revoked independently. [Compose mounts it as a secret file](https://docs.docker.com/compose/how-tos/use-secrets/); the key is not embedded in the image or Compose environment. The worker checks its deployment prefix against `FSIS_DEPLOYMENT`, currently `prod:silent-raven-365`, before fetching or writing anything.
+The token only authorizes USDA snapshot uploads, and can be rotated independently of the website and operator credentials. The worker rejects insecure target URLs and malformed tokens before fetching.
 
 ### Start and check
 
@@ -88,18 +78,8 @@ For a one-off diagnostic import without starting the daily worker:
 docker compose -f deploy/fsis-sync/compose.yaml run --rm fsis-sync --once
 ```
 
-Stop the service with `docker compose -f deploy/fsis-sync/compose.yaml down`. The status volume is retained. If retiring the fetcher, revoke its separate key from a signed-in maintainer checkout:
+Stop the service with `docker compose -f deploy/fsis-sync/compose.yaml down`. The status volume is retained. Rotate the Worker's `FSIS_UPLOAD_TOKEN` when retiring or replacing the NAS fetcher.
 
-```sh
-pnpm exec convex deployment token delete nas-fsis-sync --prod
-```
-
-Keep the container's pinned dependency versions in `deploy/fsis-sync/package.json` aligned with the root package when upgrading Convex, tsx or Zod, and regenerate its npm lockfile.
-
-To return to direct Convex fetching after upstream access is fixed:
-
-```sh
-pnpm exec convex env remove FSIS_FETCH_MODE --prod
-```
+Keep tsx and Zod versions aligned with the root package and regenerate the NAS npm lockfile when upgrading them. To return to direct fetching after upstream access is fixed, change `FSIS_FETCH_MODE` in the selected Wrangler environment and redeploy.
 
 Official references: [USDA Recall API](https://www.fsis.usda.gov/science-data/developer-resources/recall-api), [CDC combined food safety feed](https://catalog.data.gov/dataset/food-safety-information-rss-feed).

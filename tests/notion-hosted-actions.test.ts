@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCredentialSession } from "../convex/notionActions";
+import { createCredentialSession } from "../backend/notionActions";
 
 describe("hosted Notion credential request wrapper", () => {
   it("pins requests to the Notion API and replaces caller authorization", async () => {

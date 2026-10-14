@@ -1,0 +1,173 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "eat-or-yeet-backend-local",
+  "main": "backend/worker.ts",
+  "compatibility_date": "2026-10-14",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "limits": {
+    "cpu_ms": 30000
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "eat-or-yeet-local",
+      "migrations_dir": "backend/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SNAPSHOTS",
+      "bucket_name": "eat-or-yeet-local"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "eat-or-yeet-local"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "eat-or-yeet-local",
+        "max_batch_size": 1,
+        "max_retries": 5,
+        "max_concurrency": 2
+      }
+    ]
+  },
+  "secrets": {
+    "required": [
+      "BACKEND_SECRET",
+      "BACKEND_ADMIN_TOKEN",
+      "FSIS_UPLOAD_TOKEN"
+    ]
+  },
+  "vars": {
+    "SCHEDULED_SOURCE_REFRESH": "false",
+    "PRODUCT_CATEGORY_LOOKUPS": "false",
+    "FSIS_FETCH_MODE": "snapshot",
+    "ALLOW_DEMO_DATA": "true",
+    "BACKEND_RESTORE_ENABLED": "false"
+  },
+  "env": {
+    "staging": {
+      "name": "eat-or-yeet-backend-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "eat-or-yeet-staging",
+          "migrations_dir": "backend/migrations",
+          "database_id": "f5e60772-3c56-4506-b8bb-7d5dff98a03a"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "SNAPSHOTS",
+          "bucket_name": "eat-or-yeet-staging"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "JOBS",
+            "queue": "eat-or-yeet-staging"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "eat-or-yeet-staging",
+            "max_batch_size": 1,
+            "max_retries": 5,
+            "max_concurrency": 2
+          }
+        ]
+      },
+      "triggers": {
+        "crons": [
+          "* * * * *"
+        ]
+      },
+      "secrets": {
+        "required": [
+          "BACKEND_SECRET",
+          "BACKEND_ADMIN_TOKEN",
+          "FSIS_UPLOAD_TOKEN"
+        ]
+      },
+      "vars": {
+        "SCHEDULED_SOURCE_REFRESH": "false",
+        "PRODUCT_CATEGORY_LOOKUPS": "false",
+        "FSIS_FETCH_MODE": "snapshot",
+        "ALLOW_DEMO_DATA": "false",
+        "BACKEND_RESTORE_ENABLED": "false"
+      },
+      "preview_urls": false
+    },
+    "production": {
+      "name": "eat-or-yeet-backend",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "eat-or-yeet",
+          "migrations_dir": "backend/migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "SNAPSHOTS",
+          "bucket_name": "eat-or-yeet"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "JOBS",
+            "queue": "eat-or-yeet"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "eat-or-yeet",
+            "max_batch_size": 1,
+            "max_retries": 5,
+            "max_concurrency": 2
+          }
+        ]
+      },
+      "triggers": {
+        "crons": [
+          "* * * * *",
+          "17 4 * * *",
+          "17 5 * * *",
+          "23 5 * * *",
+          "41 * * * *"
+        ]
+      },
+      "secrets": {
+        "required": [
+          "BACKEND_SECRET",
+          "BACKEND_ADMIN_TOKEN",
+          "FSIS_UPLOAD_TOKEN"
+        ]
+      },
+      "vars": {
+        "SCHEDULED_SOURCE_REFRESH": "true",
+        "PRODUCT_CATEGORY_LOOKUPS": "true",
+        "FSIS_FETCH_MODE": "snapshot",
+        "ALLOW_DEMO_DATA": "false",
+        "BACKEND_RESTORE_ENABLED": "false"
+      },
+      "preview_urls": false
+    }
+  },
+  "account_id": "715060911f9418f1df0f9de0265d8a64",
+  "preview_urls": false
+}

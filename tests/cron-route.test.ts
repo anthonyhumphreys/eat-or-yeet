@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/cron/incidents/route";
 
 const action = vi.hoisted(() => vi.fn());
-vi.mock("convex/nextjs", () => ({ fetchAction: action }));
+vi.mock("@backend/client", () => ({ fetchAction: action }));
 
 beforeEach(() => {
   vi.clearAllMocks();

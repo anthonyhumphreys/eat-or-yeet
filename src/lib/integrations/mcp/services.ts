@@ -28,7 +28,7 @@ const actions: Record<ToolName, IntegrationRateLimitAction> = {
   review_shopping_items: "mcp_shopping",
 };
 
-/** Stops waiting on cancellation. Convex requests already sent may still finish. */
+/** Stops waiting on cancellation. Backend requests already sent may still finish. */
 export async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) void work.catch(() => undefined);
   signal.throwIfAborted();

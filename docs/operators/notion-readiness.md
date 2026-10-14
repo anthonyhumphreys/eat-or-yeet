@@ -1,3 +1,5 @@
+> This record describes the previous Convex deployment. Cloudflare rollout and its separate acceptance checks are documented in [Cloudflare deployment](../cloudflare-deployment.md).
+
 # Notion readiness — 11 October 2026
 
 The public shopping-list template and customer setup implementation exist. Production testing was authorized with the integration flags enabled. Automatic reviews are not yet generally available.

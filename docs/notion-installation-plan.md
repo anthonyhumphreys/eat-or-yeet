@@ -4,7 +4,7 @@ Updated: 11 October 2026
 
 ## Decision and status
 
-The normal customer setup is **Add to Notion** on Eat or Yeet. Vercel runs the website, OAuth and webhook routes. Convex stores installation state and durable review jobs. Customers do not host a service, create API keys or need Notion AI.
+The normal customer setup is **Add to Notion** on Eat or Yeet. Vercel runs the website, OAuth and webhook routes. Cloudflare stores installation state and durable review jobs. Customers do not host a service, create API keys or need Notion AI.
 
 The managed flow and local tests are implemented. The template is public and the OAuth connection is registered. Production testing is authorized with the flags enabled; the customer entry requires complete OAuth, backend and webhook configuration. Live acceptance remains a release gate. See the [readiness record](operators/notion-readiness.md). The deterministic review engine and optional standalone worker from [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) remain useful for owner-run setups. They are not part of the ordinary customer flow.
 
@@ -30,11 +30,11 @@ Adding or changing an unbought item creates a review job. Bought and blank rows 
 
 The browser starts OAuth at `/api/notion/connect?region=UK|US`. Vercel handles the fixed callback at `https://www.eatoryeet.app/api/notion/callback` and the signed Notion webhook at `https://www.eatoryeet.app/api/notion/webhook`. Management forms post to `/api/notion/manage`; reconnect uses the same connect route and the scoped management cookie to locate the existing installation.
 
-Convex stores the installation owner, workspace, Notion bot and copied-list binding, region, lifecycle state, encrypted credentials, management sessions, event deduplication, review queue and bounded counters. The application encrypts OAuth credentials before storing them. The webhook queues work for changed pages in the registered list. Workers read only configured shopping properties, re-fetch current row data before writing, and update only dedicated review properties. They do not fetch full workspaces or page bodies.
+Cloudflare stores the installation owner, workspace, Notion bot and copied-list binding, region, lifecycle state, encrypted credentials, management sessions, event deduplication, review queue and bounded counters. The application encrypts OAuth credentials before storing them. The webhook queues work for changed pages in the registered list. Workers read only configured shopping properties, re-fetch current row data before writing, and update only dedicated review properties. They do not fetch full workspaces or page bodies.
 
 Management shows setup and review status, warning country, retry timing, pause/resume, retry, reconnect and disconnect controls. Country changes schedule reviews for unbought rows. Pause and disconnect wait for in-flight work to drain. Disconnect then removes the saved connection and queue state, and revokes Notion access where supported. The list remains in the shopper's workspace. Status refresh is explicit; the page does not poll automatically.
 
-The managed connection uses a server-only operator key for the private review tool. It is not exposed in the browser and is not provisioned per shopper. Do not use a Convex administrative credential as that key. Keep the public Notion OAuth client secret, credential-encryption key, webhook verification token and review key in the hosting secret store.
+The managed connection uses a server-only operator key for the private review tool. It is not exposed in the browser and is not provisioned per shopper. Do not use a Cloudflare administrative credential as that key. Keep the public Notion OAuth client secret, credential-encryption key, webhook verification token and review key in the hosting secret store.
 
 ## One-time operator setup
 
@@ -43,10 +43,10 @@ These are release tasks for the service owner. They are not customer setup instr
 - Register one public Notion OAuth connection for the customer flow. Set its redirect URL to `https://www.eatoryeet.app/api/notion/callback` and configure the intended workspace installation scope and content capabilities.
 - Publish and configure a clean shopping-list template. Remove private test rows and identifiers. Verify the copied list has the database and fields the worker expects.
 - Create the Notion webhook subscription at `https://www.eatoryeet.app/api/notion/webhook`, with the supported page-created and page-properties-updated events. Keep the verification token private.
-- Set the OAuth client details, encryption key, webhook verification token, review key and `NEXT_PUBLIC_APP_URL` in the appropriate Vercel and Convex environments. Keep preview and production credentials separate. Configure the public app origin as HTTPS.
-- Deploy Convex schema/functions before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before general availability.
+- Set the OAuth client details, encryption key, webhook verification token, review key and `NEXT_PUBLIC_APP_URL` in the appropriate Vercel and Cloudflare environments. Keep preview and production credentials separate. Configure the public app origin as HTTPS.
+- Apply D1 migrations and deploy the Worker before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before general availability.
 
-The Vercel/Convex deployment owns customer installations and queues. The NAS runs the separate USDA snapshot importer because USDA blocks hosted fetches; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
+The Vercel/Cloudflare deployment owns customer installations and queues. The NAS runs the separate USDA snapshot importer because USDA blocks hosted fetches; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
 
 ## Acceptance and release gate
 

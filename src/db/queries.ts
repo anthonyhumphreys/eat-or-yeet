@@ -1,11 +1,10 @@
 import "server-only";
 
-import { fetchQuery } from "convex/nextjs";
-import { ConvexError } from "convex/values";
+import { fetchQuery } from "@backend/client";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
-import { api } from "@convex/_generated/api";
+import { api } from "@backend/api";
 import type { DatasetStatus, MatchableIncident } from "@/lib/domain/types";
 import { rowSuperCategories } from "@/lib/incidents/super-categories";
 
@@ -19,8 +18,8 @@ const MAX_PUBLIC_SNAPSHOT_PAGES_PER_REQUEST = MAX_PUBLIC_SNAPSHOT_PAGES_PER_REVI
 type Region = "UK" | "US";
 
 function deploymentUrl() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is required to load warnings.");
+  const url = process.env.BACKEND_URL;
+  if (!url) throw new Error("BACKEND_URL is required to load warnings.");
   return url;
 }
 
@@ -39,7 +38,7 @@ type ActivePage = Awaited<ReturnType<typeof activePage>>;
 // persistent data cache's 2 MiB entry limit. Revisions change with every write.
 const cachedActivePage = unstable_cache(
   async (region: Region, cursor: string | null, url: string, includeDemo: boolean, version: string) => {
-    void version; // Part of the cache key, rather than a Convex query argument.
+    void version; // Part of the cache key.
     return activePage(region, cursor, url, includeDemo);
   },
   ["matcher-page-v1"],
@@ -221,7 +220,7 @@ async function listPublicRegion(
 }
 
 function revisionChanged(error: unknown) {
-  return error instanceof ConvexError && typeof error.data === "object" && error.data !== null
+  return error instanceof Error && "data" in error && typeof error.data === "object" && error.data !== null
     && "code" in error.data && error.data.code === "DATASET_REVISION_CHANGED";
 }
 

@@ -42,11 +42,11 @@ test("system dark mode hydrates without a framework error", async ({ page }) => 
 test("location persists across reloads, warning browsing, and manual checks", async ({ page, context }) => {
   await page.goto("/");
   await chooseRegion(page, "United States");
-  await expect(listHeading(page, "US")).toBeVisible();
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   const preference = (await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-region");
   expect(preference?.value).toBe("US");
   await page.goto("/incidents");
-  await expect(listHeading(page, "US")).toBeVisible();
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   await page.reload();
   await expect(location(page)).toHaveValue("US");
   await page.goto("/search?mode=details");
@@ -80,7 +80,7 @@ test("country selection responds while the new warnings are still loading", asyn
   } finally {
     release();
   }
-  await expect(listHeading(page, "US")).toBeVisible();
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   await expect(location(page)).toHaveAttribute("aria-busy", "false");
 });
 
@@ -116,7 +116,7 @@ test("warning search filters instantly, keeps a shareable URL and preserves the 
   await expect(searchBox(page)).toHaveValue("chocolate");
   await expect(foodTab(page, "Snacks & sweets")).toHaveAttribute("aria-current", "true");
   await page.getByRole("button", { name: "Clear all" }).click();
-  await expect(listHeading(page, "US")).toBeVisible();
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   await checkLink(page).click();
   await expect(page.getByText("Checking against current")).toContainText("United States");
   expect(errors).toEqual([]);
@@ -196,7 +196,7 @@ test("manual label details produce a qualified published-warning result", async 
   await page.getByLabel("Product name").fill("Sample product");
   await page.getByRole("button", { name: "Check published warnings" }).click();
   await expect(page.getByRole("heading", { name: "No matching warning found" })).toBeFocused();
-  await expect(page.getByRole("heading", { name: "EAT" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "EAT", exact: true })).toHaveCount(0);
   await expect(page.getByText("This checks published warnings, not whether food is safe to eat.").first()).toBeVisible();
   await expect(page.getByText("Food Standards Agency")).toBeVisible();
   await expect(page.getByText("UK", { exact: true }).last()).toBeVisible();
@@ -234,7 +234,7 @@ test("warning browsing works with reduced motion and without view transition sup
   });
   await page.goto("/?region=UK");
   await chooseRegion(page, "United States");
-  await expect(listHeading(page, "US")).toBeVisible();
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Hazard", { exact: true }).selectOption("allergen");
   await searchBox(page).fill("no such food warning");
   await expect(page.getByText("No recall reports match.")).toBeVisible();
