@@ -39,6 +39,20 @@ test("system dark mode hydrates without a framework error", async ({ page }) => 
   expect(consoleErrors).toEqual([]);
 });
 
+test("news finishes loading and stays visible through filtering and country changes", async ({ page }) => {
+  await page.goto("/?region=UK");
+  const news = page.locator("#news");
+  await expect(news.getByRole("heading", { name: "In the news", exact: true })).toBeVisible();
+  await expect(news.getByRole("status")).toHaveCount(0);
+  await searchBox(page).fill("milk");
+  await expect(page).toHaveURL(/q=milk/);
+  await expect(news.getByRole("heading", { name: "In the news", exact: true })).toBeVisible();
+  await chooseRegion(page, "United States");
+  await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
+  await expect(news.getByRole("heading", { name: "In the news", exact: true })).toBeVisible();
+  await expect(news.getByRole("status")).toHaveCount(0);
+});
+
 test("location persists across reloads, warning browsing, and manual checks", async ({ page, context }) => {
   await page.goto("/");
   await chooseRegion(page, "United States");

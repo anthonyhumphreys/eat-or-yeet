@@ -7,6 +7,8 @@ import type { NewsArticle } from "./types";
 
 export type NewsSource = { publisher: string; url: string; hosts: string[]; regions: WarningRegion[]; foodOnly?: boolean };
 
+export const MAX_NEWS_AGE_MS = 180 * 24 * 60 * 60 * 1_000;
+
 export const newsSources: NewsSource[] = [
   { publisher: "BBC News", url: "https://feeds.bbci.co.uk/news/health/rss.xml", hosts: ["www.bbc.co.uk", "www.bbc.com", "bbc.com"], regions: ["UK"] },
   { publisher: "CBS News", url: "https://www.cbsnews.com/latest/rss/health", hosts: ["www.cbsnews.com"], regions: ["US"] },
@@ -34,7 +36,7 @@ export function parseNewsRss(xml: string, source: NewsSource, now = Date.now()):
     const text = `${title} ${sourceHtmlToText(item.data.description ?? "").slice(0, 2_000)}`;
     if (!title || (!source.foodOnly && !(foodHazard.test(text) || (recall.test(text) && foodProduct.test(text))))) return [];
     const publishedAt = Date.parse(item.data.pubDate);
-    if (!Number.isFinite(publishedAt) || publishedAt > now + 5 * 60 * 1_000 || publishedAt < now - 180 * 24 * 60 * 60 * 1_000) return [];
+    if (!Number.isFinite(publishedAt) || publishedAt > now + 5 * 60 * 1_000 || publishedAt < now - MAX_NEWS_AGE_MS) return [];
     let url: URL;
     try { url = new URL(item.data.link); } catch { return []; }
     if (url.protocol !== "https:" || url.username || url.password || url.port || !source.hosts.includes(url.hostname)) return [];

@@ -125,15 +125,34 @@ describe("warnings landing feed", () => {
     expect(html).toContain("https://alerts.food.gov.uk/");
   });
 
-  it("keeps official warnings visible and hides the news panel when news fails", async () => {
+  it("keeps official warnings visible and explains when news fails", async () => {
     getNews.mockRejectedValue(new Error("Feed unavailable"));
     expect(await render()).toContain("Waitrose recalls milk chocolate");
-    expect(await RegionalNews({ region: "UK" })).toBeNull();
+    const news = renderToStaticMarkup(await RegionalNews({ region: "UK" }));
+    expect(news).toContain("News is temporarily unavailable.");
+    expect(news).not.toContain("No recent reporting found");
+  });
+
+  it("distinguishes an empty regional feed from an unavailable feed", async () => {
+    const news = renderToStaticMarkup(await RegionalNews({ region: "UK" }));
+    expect(news).toContain("No recent reporting found for this selection.");
+    expect(news).not.toContain("temporarily unavailable");
+  });
+
+  it("shows available regional headlines and explains a partial publisher failure", async () => {
+    const article = { title: "UK milk recalled", url: "https://www.bbc.co.uk/news/milk", publisher: "BBC News", publishedAt: "2026-10-07T12:00:00Z", topics: ["milk"] };
+    getNews.mockResolvedValue({ articles: [{ ...article, regions: ["UK"] }, { ...article, title: "US eggs recalled", url: "https://www.cbsnews.com/eggs", regions: ["US"] }], unavailable: true });
+    const news = renderToStaticMarkup(await RegionalNews({ region: "UK" }));
+    expect(news).toContain("UK milk recalled");
+    expect(news).not.toContain("US eggs recalled");
+    expect(news).toContain("Some publisher feeds are temporarily unavailable.");
   });
 
   it("renders warnings without waiting for a stalled publisher", async () => {
     getNews.mockImplementation(() => new Promise(() => {}));
-    expect(await render()).toContain("Waitrose recalls milk chocolate");
+    const html = await render();
+    expect(html).toContain("Waitrose recalls milk chocolate");
+    expect(html).toContain("Loading news…");
     expect(listWarnings).toHaveBeenCalledWith("UK");
   });
 

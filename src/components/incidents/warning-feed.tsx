@@ -68,7 +68,7 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       </div>
       {/* On wide screens the news runs down beside the list, level with the top alert. On phones it follows the list. */}
       <aside id="news" className="min-w-0 scroll-mt-4">
-        <Suspense key={region} fallback={null}>
+        <Suspense key={region} fallback={<p role="status" className="text-sm text-muted-foreground">Loading news…</p>}>
           <RegionalNews region={region} limit={HOME_NEWS_LIMIT} />
         </Suspense>
       </aside>
