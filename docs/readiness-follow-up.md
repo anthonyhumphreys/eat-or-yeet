@@ -1,4 +1,4 @@
-> This record describes the previous Convex deployment. Cloudflare rollout and its separate acceptance checks are documented in [Cloudflare deployment](cloudflare-deployment.md).
+> Historical review from 7 October 2026. Deployment instructions, test counts and cost estimates below are a dated snapshot, not current release guidance. Production moved to Cloudflare on 14 October; use [architecture](architecture.md), [deployment](cloudflare-deployment.md), [the cutover evidence](cloudflare-cutover-2026-10-14.md) and [current costs](cost-estimate.md).
 
 # Readiness review follow-up
 
@@ -43,6 +43,6 @@ Negative checks depend on the covered official sources and supplied label detail
 
 Production environment settings, provider spend controls and load capacity remain unverified. The hourly limiter permits a burst across hour boundaries, and shared network addresses pool users. See the deployment assumptions in [README](../README.md).
 
-## Updated running costs
+## Historical running-cost estimate
 
-See [cost estimate](cost-estimate.md) for assumptions, current vendor prices and sensitivity. AI inference and packaging uploads cost zero. The planning model estimates roughly $40/month for 100,000 checks and $220/month for one million checks with a 90% matching-snapshot cache hit rate. That cache hit rate is an assumption, not a benchmark; the corresponding all-miss scenarios are about $210 and $1,730.
+See the [archived Convex cost estimate](archive/cost-estimate-2026-10-07.md) for the assumptions used at the time. AI inference and packaging uploads cost zero. The planning model estimates roughly $40/month for 100,000 checks and $220/month for one million checks with a 90% matching-snapshot cache hit rate. That cache hit rate is an assumption, not a benchmark; the corresponding all-miss scenarios are about $210 and $1,730.

@@ -1,6 +1,8 @@
 # Cloudflare backend deployment
 
-Next.js stays on Vercel. The backend uses a Worker, D1, a Queue and private R2. Wrangler configuration declares separate local, staging and production resources. Cloudflare account `715060911f9418f1df0f9de0265d8a64` is the user-confirmed Lexio account.
+Production has used Cloudflare Workers, D1, Queues and private R2 since 14 October 2026. Next.js stays on Vercel. Wrangler declares separate local, staging and production resources. Both hosted stages are provisioned in `wrangler.jsonc`; confirm the selected account and environment before changing them.
+
+See [architecture](architecture.md) for component boundaries, [ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) for the migration decision and [the cutover record](cloudflare-cutover-2026-10-14.md) for dated production evidence. The provisioning and export instructions below apply to a new stage or an explicitly planned restore, not routine deployments.
 
 ## Records and transactions
 
@@ -23,7 +25,7 @@ pnpm exec wrangler r2 bucket create eat-or-yeet-staging
 pnpm exec wrangler queues create eat-or-yeet-staging
 ```
 
-Record the returned database UUID in `wrangler.jsonc`. Staging resources are already provisioned in this branch. Provision the separately named production resources before a production deployment and add its D1 UUID. Do not point staging at production resources.
+These creation commands are examples for an unprovisioned environment. Existing staging and production resources are already declared in `wrangler.jsonc`; do not recreate them for a routine release. For a new environment, use unique resource names, record the returned D1 UUID and configure its bindings. Do not point staging at production resources.
 
 ```sh
 pnpm exec wrangler d1 migrations apply DB --env staging --remote
@@ -31,7 +33,7 @@ pnpm backend:types
 pnpm exec wrangler deploy --env staging --dry-run
 ```
 
-New schema changes need a new numbered migration. `backend:generate` creates the initial schema alongside typed operation references; do not rewrite `0001_backend.sql` once deployed.
+New schema changes need a new numbered migration. Run `pnpm backend:generate` for typed operation references and the registry; the generator writes the initial SQL only when it is missing. Do not delete or rewrite `0001_backend.sql` once deployed.
 
 ## Secrets and boundaries
 
@@ -48,6 +50,15 @@ Generate independent random 32-byte values per environment. Store operator files
 Local Wrangler uses `.dev.vars`; hosted stages use `.dev.vars.staging` or `.dev.vars.production` for local emulation only. These files are ignored. Production secrets must be explicitly provisioned remotely. Worker logs record operation identifiers and error classes, not request contents or credential envelopes.
 
 USDA and FDA announcements use `snapshot` fetch modes. The NAS validates the complete official FDA food/supplement listing and every detail page, then uploads normalized records. The Worker validates their age, schema, FDA origin, source IDs and announcement paragraphs before preparing imports. A Worker-side live test received a regional FDA "Page Not Found" response for an announcement reachable from the home connection, so the NAS fetches this source too. FSA and openFDA food/drug enforcement feeds remain on Workers. The NAS health check covers both snapshot imports, and the application's uncached source-health gate still expires missing or failed coverage.
+
+## Routine release order
+
+1. Review the new numbered SQL migration and compatibility with the currently deployed application. Apply it to staging with `pnpm exec wrangler d1 migrations apply DB --env staging --remote`.
+2. Deploy the compatible Worker with `pnpm backend:deploy:staging`, then deploy the Next.js preview using that stage's website credential. Keep preview imports and hosted Notion consent disabled unless explicitly running their acceptance checks.
+3. After staging acceptance, apply production migrations with `pnpm exec wrangler d1 migrations apply DB --env production --remote`, then run `pnpm backend:deploy:production`.
+4. Build and verify the matching Vercel deployment before promotion. `pnpm build:vercel` does not deploy the Worker or apply SQL migrations.
+
+For a frontend rollback, retain a compatible Cloudflare-backed Vercel deployment. Schema and Worker rollback must account for data written since release. See the migration procedure below only when changing backends or restoring an export.
 
 ## Restore a Convex export
 
@@ -93,7 +104,9 @@ Use the staging URL returned by Wrangler. Set Vercel Preview `BACKEND_URL` and `
 
 `pnpm backend:run module.operation` is an operator-only CLI. It loads local environment files and calls `/admin/rpc`. For example, `pnpm backend:run incidents.refreshAllInternal` queues source refreshes. Use `incidents.queueSourceRefresh '{"sourceId":"fda-announcements"}'` for a single source; fetching a full archive in an HTTP call can outlast its client timeout. Queued jobs are not proof of successful imports.
 
-## Production cutover and rollback
+## Migration cutover and rollback
+
+The following sequence documents the completed backend migration and requirements for any coordinated repeat. It is not the routine release checklist.
 
 1. Provision production D1, Queue, R2 and secrets independently. Confirm Cloudflare credits and spending alerts in the account dashboard; code does not set a billing cap.
 2. Pause the old backend's scheduled writers and the old NAS importer. Drain or resolve active Notion jobs. Take a final export while writers are stopped.

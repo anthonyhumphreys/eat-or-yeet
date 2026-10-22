@@ -1,0 +1,37 @@
+{
+  "name": "eat-or-yeet-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio",
+    "capture": "node scripts/capture.mjs",
+    "capture:overview": "node scripts/capture-overview.mjs",
+    "still": "remotion still Sizzle out/poster.png --frame=130",
+    "render:mp4": "remotion render Sizzle out/sizzle.mp4 --codec=h264 --crf=16",
+    "render:gif": "sh scripts/gif.sh out/sizzle.mp4 out/sizzle.gif",
+    "render": "pnpm render:mp4 && pnpm render:gif",
+    "still:overview": "remotion still Overview out/overview-poster.png --frame=230",
+    "render:overview:mp4": "remotion render Overview out/overview.mp4 --codec=h264 --crf=16",
+    "render:overview:gif": "sh scripts/gif.sh out/overview.mp4 out/overview.gif",
+    "render:overview": "pnpm render:overview:mp4 && pnpm render:overview:gif",
+    "still:architecture": "remotion still Architecture out/architecture-poster.png --frame=2400",
+    "render:architecture:mp4": "remotion render Architecture out/architecture.mp4 --codec=h264 --crf=16",
+    "render:architecture:gif": "sh scripts/gif.sh out/architecture.mp4 out/architecture.gif",
+    "render:architecture": "pnpm render:architecture:mp4 && pnpm render:architecture:gif",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.532",
+    "@remotion/google-fonts": "4.0.532",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.532",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/react": "^19.3.0",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.32.1"
+}

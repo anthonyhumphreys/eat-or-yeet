@@ -1,6 +1,6 @@
-> This record describes the previous Convex deployment. Cloudflare rollout and its separate acceptance checks are documented in [Cloudflare deployment](cloudflare-deployment.md).
+> Historical measurements from 9 October 2026, before the 14 October Cloudflare cutover. Commands, provider allowances and capacity figures below describe Convex only. Use [current cost guidance](cost-estimate.md), [architecture](architecture.md) and [ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) for the active system.
 
-# Keeping Convex usage small
+# Historical Convex usage and optimisations
 
 The 9 October 2026 usage report showed about 759 MB of database storage and 2.95 GB of monthly database I/O across Eat or Yeet deployments. Production warning-list queries accounted for about 1.88 GB of that I/O. These are observed totals, not a forecast or a guaranteed saving.
 

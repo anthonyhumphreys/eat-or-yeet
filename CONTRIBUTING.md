@@ -59,6 +59,10 @@ pnpm test:e2e
 
 Playwright uses `pnpm dev:web` to start only Next.js unless an existing server is available. Start `pnpm dev` first for browser checks against your local backend. Some check/share responses are mocked; server-rendered warning pages still use your configured backend, and news can use the network. Keep the full development stack running. Browser tests do not verify live ingestion or physical camera hardware. Run `pnpm audit --prod` when changing dependencies. Documentation-only changes need link and command review.
 
+## Infrastructure documentation
+
+Start with the [architecture guide](docs/architecture.md) and [ADR 0002](docs/adr/0002-migrate-backend-to-cloudflare.md). Update these when changing storage, transaction guarantees, durable jobs or hosting boundaries. Operational commands belong in the [Cloudflare deployment guide](docs/cloudflare-deployment.md); dated cutover evidence and historical Convex measurements do not establish current live acceptance or capacity.
+
 ## Project conventions
 
 - Use simple, explicit, strict TypeScript and follow nearby code. Explain new dependencies and abstractions.

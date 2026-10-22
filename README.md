@@ -11,6 +11,12 @@ A mobile-first packaged-food recall checker. Scan a barcode or enter label detai
 
 The internal `EAT` enum remains for stored-result compatibility. It is not the public label. An unidentified barcode, an empty dataset or an incomplete refresh must not produce a reassuring negative result. Product, lot and date evidence must belong to the same product group.
 
+## Architecture
+
+The production backend moved from Convex to Cloudflare on 14 October 2026. Next.js stays on Vercel; a Worker owns authenticated operations, D1 stores records, a Queue runs durable jobs, and private R2 holds temporary import batches. Cloudflare Cron Triggers publish/recover jobs and schedule maintenance. The external importer supplies both USDA FSIS and FDA announcement snapshots.
+
+See the [architecture guide](docs/architecture.md), [migration decision in ADR 0002](docs/adr/0002-migrate-backend-to-cloudflare.md), [deployment runbook](docs/cloudflare-deployment.md) and [current cost guidance](docs/cost-estimate.md). Earlier Convex usage reports are historical.
+
 ## Stack and setup
 
 Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4, shadcn/ui components, Cloudflare Workers, D1, Queues and R2, native BarcodeDetector with a ZXing fallback, Zod, Vitest and Playwright.
@@ -38,12 +44,14 @@ For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `B
 | `BACKEND_SECRET` | Website credential; must agree in Next.js and the Worker |
 | `BACKEND_ADMIN_TOKEN` | Separate operator credential; keep out of Vercel and browsers |
 | `FSIS_UPLOAD_TOKEN` | Dedicated USDA importer credential; cannot call general backend operations |
+| `FDA_UPLOAD_TOKEN` | Separate FDA announcement importer credential |
 | `BACKEND_ENV` | Local launcher selection: `local` or `staging` |
 | `RATE_LIMIT_SALT` | Website identity, rate-limit and share hashing |
 | `CRON_SECRET` | Website manual refresh route |
 | `NEXT_PUBLIC_APP_URL` | Canonical website origin |
 | `ALLOW_DEMO_DATA` | Fictional development incidents only; false in hosted stages |
 | `FSIS_FETCH_MODE` | Worker setting: `snapshot` uses the external USDA fetcher |
+| `FDA_ANNOUNCEMENTS_FETCH_MODE` | Worker setting: `snapshot` uses the external FDA announcement fetcher |
 
 All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
@@ -55,11 +63,11 @@ FDA drug enforcement records are imported for browsing under Medical (and Baby, 
 
 Importers check pagination and reject incomplete responses. Warnings are not assumed resolved after an arbitrary age. Only explicit source resolution removes a warning from active matching. Original payloads remain for audit; checks read a separate compact matching table.
 
-Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the successful source versions change. The Worker refreshes each source independently every day. Cleanup runs separately in bounded batches.
+Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the dataset revision changes. The Worker schedules its hosted sources independently each day; snapshot sources use the external importer. Cleanup runs separately in bounded batches.
 
-USDA currently blocks requests from our hosted runtimes. `pnpm data:sync:fsis --prod` fetches the complete official archive from a working connection and imports it through an admin-only snapshot action. The [NAS container](docs/usda-sync.md#nas-container) runs this daily from a home connection, retries failures hourly and reports import health. Only active notices and tracked closures create rows. External sync mode keeps the failed direct fetch out of the daily cron; source freshness still expires after 48 hours. See [USDA snapshot sync](docs/usda-sync.md) for setup and limitations.
+USDA blocks requests from hosted runtimes, and a Worker-side FDA announcement fetch returned regional error content. The [NAS container](docs/usda-sync.md#nas-container) fetches and validates both sources, uploads through separate restricted endpoints, runs daily after success and retries failures hourly. Its health covers both imports. `pnpm data:sync:fsis --prod` remains the one-off USDA-only command. Only active notices and tracked closures create rows. Snapshot modes exclude both sources from hosted refreshes; source freshness still expires after 48 hours. See [source snapshot sync](docs/usda-sync.md) for setup and limitations.
 
-Public browsing shows 50 warnings per page and reads only the selected country. Its separate cache revalidates every minute. Publisher news loads independently and caches validated articles per publisher for 30 minutes. Failed refreshes retain that publisher's last successful feed, with stories still subject to the 180-day age limit. These caches do not change the source-health checks used for food-check results.
+Public browsing shows 50 warnings per page and reads only the selected country. Underlying backend pages use revision-keyed persistent caching, and the complete regional list is filtered for the current request. Publisher news loads independently and caches validated articles per publisher for 30 minutes. Failed refreshes retain that publisher's last successful feed, with stories still subject to the 180-day age limit. These caches do not change the source-health checks used for food-check results.
 
 On a first visit, a region prompt suggests UK or US from Vercel's request country hint, or the browser's timezone and regional language setting when that hint is unavailable. The user confirms their warning region, and the existing region cookie remembers that choice. Suggestions do not change coverage automatically. The header selector remains available to change the region; check flows do not repeat the question after a choice.
 
@@ -94,19 +102,21 @@ pnpm audit --prod
 
 Browser tests use deterministic fixtures. Importer tests cover pagination and parsing separately. Passing tests does not verify live production imports, every physical phone or spend controls.
 
-## Rollout
+## Deployment
+
+Production cutover completed on 14 October 2026; see the [cutover record](docs/cloudflare-cutover-2026-10-14.md) for dated verification and remaining acceptance work.
 
 Keep Next.js on Vercel. `pnpm build:vercel` builds only the frontend. Deploy the matching Worker and apply D1 migrations separately before changing Vercel's `BACKEND_URL` and `BACKEND_SECRET`.
 
 The migration restores opaque identifiers and creation timestamps from a private Convex export. Validate all tables before writing, check table counts and foreign keys after restoring, then disable the operator restore flag. A fresh source import is still required whenever the restored source ledger is stale or incomplete.
 
-Verify both regions, a known warning, insufficient evidence, stale and failed source coverage, public sharing, quotas and queued jobs before promotion. Keep the original backend and Vercel deployment for rollback. Preview deployments must use staging credentials and keep hosted Notion consent disabled until a separate live acceptance run succeeds.
+Verify both regions, a known warning, insufficient evidence, stale and failed source coverage, public sharing, quotas and queued jobs before promotion. Prefer a compatible Cloudflare-backed Vercel deployment for frontend rollback. Returning to the frozen Convex backend requires pausing native writers and reconciling post-cutover data first. Preview deployments must use staging credentials and keep hosted Notion consent disabled until a separate live acceptance run succeeds.
 
 Commands and the production cutover sequence are in [Cloudflare deployment](docs/cloudflare-deployment.md).
 
 ## Notion shopping integration
 
-The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Cloudflare installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. Production pilot tests have verified consent, signed events, reviews and disconnect. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
+The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Cloudflare installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. The pre-migration Convex pilot verified consent, signed events, reviews and disconnect; those live checks have not yet been repeated against the Cloudflare backend. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA/FDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
 
 Connected lists require stored Notion identifiers and encrypted credentials. Our backend decrypts credentials to run reviews; pausing retains them and disconnect removes the connection. We do not save profile names, emails or shopping text as a history, but configured item fields can contain personal information supplied by a shopper. The public [privacy notice](https://www.eatoryeet.app/privacy) and [terms](https://www.eatoryeet.app/terms) describe these boundaries. Using the template without connecting gives Eat or Yeet no access to the Notion account or list.
 

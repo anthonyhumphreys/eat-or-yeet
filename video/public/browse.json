@@ -1,0 +1,241 @@
+{
+  "category": "Dairy & eggs",
+  "all": {
+    "heading": "1,363 recalls in the UK",
+    "alert": {
+      "label": "Top alert · Salmonella",
+      "title": "Food Alert For Action: To food businesses and consumers who have purchased shell eggs originating from Yasensvit Ltd, Ukraine, stamped with the code 3UA1012066"
+    },
+    "types": [
+      {
+        "label": "Everything",
+        "count": "1,363"
+      },
+      {
+        "label": "Baby",
+        "count": "25"
+      },
+      {
+        "label": "Food",
+        "count": "1,363"
+      }
+    ],
+    "categories": [
+      {
+        "label": "Produce",
+        "count": "161"
+      },
+      {
+        "label": "Meat & poultry",
+        "count": "224"
+      },
+      {
+        "label": "Fish & seafood",
+        "count": "65"
+      },
+      {
+        "label": "Dairy & eggs",
+        "count": "167"
+      },
+      {
+        "label": "Bakery & grains",
+        "count": "216"
+      },
+      {
+        "label": "Snacks & sweets",
+        "count": "198"
+      },
+      {
+        "label": "Drinks",
+        "count": "73"
+      },
+      {
+        "label": "Prepared foods",
+        "count": "183"
+      },
+      {
+        "label": "Pantry",
+        "count": "189"
+      },
+      {
+        "label": "Baby food",
+        "count": "25"
+      },
+      {
+        "label": "Pharmaceutical",
+        "count": "1"
+      },
+      {
+        "label": "Supplements",
+        "count": "10"
+      },
+      {
+        "label": "Other foods",
+        "count": "405"
+      }
+    ],
+    "rows": [
+      {
+        "title": "Food Alert For Action: To food businesses and consumers who have purchased shell eggs originating from Yasensvit Ltd, Ukraine, stamped with the code 3UA1012066",
+        "hazard": "Salmonella",
+        "kind": "pathogen",
+        "categories": "Other foods, Dairy & eggs",
+        "date": "11 Oct 2026 · Yesterday"
+      },
+      {
+        "title": "Greencore recalls several products due to the presence of Salmonella",
+        "hazard": "Salmonella",
+        "kind": "pathogen",
+        "categories": "Prepared foods, Other foods, Pantry",
+        "date": "8 Oct 2026 · 4 days ago"
+      },
+      {
+        "title": "Lambertz recalls Lambertz Mini Spekulatius and Lambertz Christmas Tree Cookies because allergens are not declared in English on the label",
+        "hazard": "Milk, egg +6",
+        "kind": "allergen",
+        "categories": "Bakery & grains",
+        "date": "3 Oct 2026 · 1 week ago"
+      },
+      {
+        "title": "Unilever recalls Pot Noodle Piri Piri Chicken Flavour because of undeclared milk",
+        "hazard": "Milk",
+        "kind": "allergen",
+        "categories": "Prepared foods",
+        "date": "2 Oct 2026 · 1 week ago"
+      },
+      {
+        "title": "Updated: World of Sweets recalls Alyan Dubai Style Crunchy Knafeh and Pistachio Milk Chocolate and Alyan Dubai Style Chocolate Truffles because of contamination with Salmonella",
+        "hazard": "Salmonella",
+        "kind": "pathogen",
+        "categories": "Snacks & sweets",
+        "date": "25 Sep 2026 · 2 weeks ago"
+      },
+      {
+        "title": "Lucky Saint recalls Hazy IPA products because of risk of cans exploding",
+        "hazard": "Spoilage risk",
+        "kind": "other",
+        "categories": "Drinks",
+        "date": "25 Sep 2026 · 2 weeks ago"
+      }
+    ]
+  },
+  "filtered": {
+    "heading": "167 recalls found",
+    "alert": {
+      "label": "Top alert · Salmonella",
+      "title": "Food Alert For Action: To food businesses and consumers who have purchased shell eggs originating from Yasensvit Ltd, Ukraine, stamped with the code 3UA1012066"
+    },
+    "types": [
+      {
+        "label": "Everything",
+        "count": "1,363"
+      },
+      {
+        "label": "Baby",
+        "count": "25"
+      },
+      {
+        "label": "Food",
+        "count": "1,363"
+      }
+    ],
+    "categories": [
+      {
+        "label": "Produce",
+        "count": "161"
+      },
+      {
+        "label": "Meat & poultry",
+        "count": "224"
+      },
+      {
+        "label": "Fish & seafood",
+        "count": "65"
+      },
+      {
+        "label": "Dairy & eggs",
+        "count": "167"
+      },
+      {
+        "label": "Bakery & grains",
+        "count": "216"
+      },
+      {
+        "label": "Snacks & sweets",
+        "count": "198"
+      },
+      {
+        "label": "Drinks",
+        "count": "73"
+      },
+      {
+        "label": "Prepared foods",
+        "count": "183"
+      },
+      {
+        "label": "Pantry",
+        "count": "189"
+      },
+      {
+        "label": "Baby food",
+        "count": "25"
+      },
+      {
+        "label": "Pharmaceutical",
+        "count": "1"
+      },
+      {
+        "label": "Supplements",
+        "count": "10"
+      },
+      {
+        "label": "Other foods",
+        "count": "405"
+      }
+    ],
+    "rows": [
+      {
+        "title": "Food Alert For Action: To food businesses and consumers who have purchased shell eggs originating from Yasensvit Ltd, Ukraine, stamped with the code 3UA1012066",
+        "hazard": "Salmonella",
+        "kind": "pathogen",
+        "categories": "Other foods, Dairy & eggs",
+        "date": "11 Oct 2026 · Yesterday"
+      },
+      {
+        "title": "Macroom Buffalo Cheese Products recalls Macroom Buffalo Cheese Mozzarella and Macroom Buffalo Cheese Bocconcini because of contamination with Listeria monocytogenes",
+        "hazard": "Listeria",
+        "kind": "pathogen",
+        "categories": "Dairy & eggs",
+        "date": "28 Aug 2026 · 1 month ago"
+      },
+      {
+        "title": "Graham’s Family Dairy recalls Graham’s Family Dairy Semi-Skimmed Milk due to the presence of veterinary medicines including antibiotics (penicillin)",
+        "hazard": "Medicine residue",
+        "kind": "other",
+        "categories": "Dairy & eggs, Pharmaceutical",
+        "date": "23 Jul 2026 · 2 months ago"
+      },
+      {
+        "title": "Lidl Northern Ireland recalls 1001 Delights Dubai Style Pistachio Ice Cream because of undeclared cashew (nuts)",
+        "hazard": "Nuts",
+        "kind": "allergen",
+        "categories": "Dairy & eggs",
+        "date": "14 Jul 2026 · 2 months ago"
+      },
+      {
+        "title": "M&S recalls M&S Food Truffle Gouda due to the presence of Listeria Monocytogenes",
+        "hazard": "Listeria",
+        "kind": "pathogen",
+        "categories": "Dairy & eggs",
+        "date": "8 Jul 2026 · 3 months ago"
+      },
+      {
+        "title": "Update 1: Traditional Cheese Company recalls French Bries because of contamination with Listeria monocytogenes",
+        "hazard": "Listeria",
+        "kind": "pathogen",
+        "categories": "Dairy & eggs",
+        "date": "24 Jun 2026 · 3 months ago"
+      }
+    ]
+  }
+}

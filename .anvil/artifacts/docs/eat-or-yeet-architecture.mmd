@@ -1,102 +1,21 @@
+%% Current architecture; maintained with docs/architecture.md.
 flowchart TB
-    User["User"]
-
-    subgraph Browser["Browser · mobile first"]
-        Scan["Scan barcode"]
-        Photo["Photograph packaging"]
-        Manual["Enter details manually"]
-        Detector["BarcodeDetector API<br/>ZXing fallback"]
-        Observation["Structured product observation"]
-        Result["EAT · MAYBE YEET<br/>YEET · NO CLUE"]
-        Share["Web Share API<br/>Optional public link"]
-
-        Scan --> Detector
-        Detector --> Observation
-        Manual --> Observation
-    end
-
-    subgraph Vercel["Next.js application · Vercel"]
-        Analyse["POST /api/analyse"]
-        Validate["Zod validation"]
-        Check["POST /api/check"]
-        Enrich["Optional product enrichment"]
-        Matcher["Deterministic TypeScript matcher"]
-        Explain["Verdict and match reasons"]
-        ShareRoute["POST /api/share"]
-        Cron["Protected /api/cron/incidents"]
-        Pages["Public incident and share pages"]
-        Limits["Anonymous per-user rate limits"]
-    end
-
-    subgraph AI["Extraction only"]
-        OpenRouter["OpenRouter"]
-        GLM["GLM 5.3 Flash<br/>vision model"]
-    end
-
-    subgraph Convex["Convex"]
-        Incidents[("Incidents and targets")]
-        Products[("Cached product metadata")]
-        RateData[("Rate-limit counters")]
-        Shares[("Expiring public shares")]
-        Runs[("Ingestion history")]
-    end
-
-    subgraph Official["Official warning sources"]
-        FSA["UK Food Standards Agency"]
-        FDAAnnouncements["FDA recall announcements"]
-        FDAEnforcement["FDA enforcement reports"]
-    end
-
-    OFF["Open Food Facts<br/>metadata only"]
-    Scheduler["Vercel Cron"]
-
-    User --> Scan
-    User --> Photo
-    User --> Manual
-
-    Photo -->|"Transient image"| Analyse
-    Analyse --> Limits
-    Limits --> RateData
-    Analyse --> OpenRouter
-    OpenRouter --> GLM
-    GLM --> Validate
-    Validate -->|"Image discarded"| Observation
-
-    Observation --> Check
-    Check --> Limits
-    Check --> Enrich
-    Enrich -.->|"Optional"| OFF
-    Enrich --> Products
-    Check --> Matcher
-    Incidents --> Matcher
-    Matcher --> Explain
-    Explain --> Result
-    Result --> User
-
-    Result --> Share
-    Share -->|"Private device share"| User
-    Share -->|"Explicit public link"| ShareRoute
-    ShareRoute --> Limits
-    ShareRoute --> Shares
-    Shares --> Pages
-
-    Scheduler --> Cron
-    Cron --> FSA
-    Cron --> FDAAnnouncements
-    Cron --> FDAEnforcement
-    FSA -->|"Normalise and upsert"| Incidents
-    FDAAnnouncements -->|"Normalise UPCs, GTINs and lots"| Incidents
-    FDAEnforcement -->|"Normalise and upsert"| Incidents
-    Cron --> Runs
-
-    Matcher -.->|"AI has no access to verdict logic"| GLM
-
-    classDef safety fill:#fff2d6,stroke:#8a6500,color:#211900,stroke-width:2px
-    classDef data fill:#edf5ff,stroke:#315f8c,color:#10243a
-    classDef result fill:#f7e9e7,stroke:#a5362f,color:#38110e,stroke-width:2px
-    classDef external fill:#f3f3f0,stroke:#68685f,color:#20201c
-
-    class Matcher safety
-    class Result result
-    class Incidents,Products,RateData,Shares,Runs data
-    class FSA,FDAAnnouncements,FDAEnforcement,OFF,OpenRouter,GLM external
+    Browser[Website visitor] --> Web[Next.js on Vercel]
+    Agents[Agent hosts and MCP Apps] --> MCP[MCP routes on Vercel]
+    MCP --> Services[Shared check and warning services]
+    Web --> Services
+    Services --> Matcher[Deterministic matcher]
+    Services -->|Authenticated operations| Worker[Cloudflare Worker]
+    Services --> OFF[Open Food Facts metadata]
+    Notion[Notion consent and signed events] --> Routes[Notion routes on Vercel]
+    Routes -->|Authenticated operations| Worker
+    Worker --> D1[(D1 records and job outbox)]
+    Cron[Cloudflare Cron Triggers] --> Worker
+    Worker -->|Publish due jobs| Queue[Cloudflare Queue]
+    Queue -->|Execute leased jobs| Worker
+    Worker --> R2[(Private R2 snapshots and batches)]
+    Worker --> Direct[FSA and openFDA feeds]
+    Worker -->|Managed list reviews| NotionAPI[Notion API]
+    Worker -->|Private review tool| MCP
+    NAS[External NAS importer] --> Sources[USDA FSIS and FDA announcements]
+    NAS -->|Separate source upload tokens| Worker

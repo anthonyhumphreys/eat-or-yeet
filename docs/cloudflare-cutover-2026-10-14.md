@@ -2,6 +2,8 @@
 
 Migration [PR #29](https://github.com/anthonyhumphreys/eat-or-yeet/pull/29) merged as `d418eb590070858f19628b810f4b859f915bebad`. Next.js and public integrations remain on Vercel; Cloudflare owns backend state and scheduled work.
 
+[ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) records the migration decision. The [architecture guide](architecture.md) describes the current system; this record preserves dated cutover observations.
+
 ## Production identities
 
 | Resource | Identity |

@@ -1,3 +1,5 @@
+> Historical review from 9 October 2026. PR/test counts and release status below describe that review. Production moved to Cloudflare on 14 October; use [architecture](architecture.md), [deployment](cloudflare-deployment.md) and [current host evidence](agent-hosts.md) for subsequent work.
+
 # Agent integration spec review
 
 Reviewed: 9 October 2026. Baseline: [integration plan](./plugin-integration-plan.md), including Ben's shopping-agent requirements. The review inspected the implementation branches and current GitHub review results. It did not run an installed agent host or a live Notion pilot.

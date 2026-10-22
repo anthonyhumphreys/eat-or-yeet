@@ -1,12 +1,12 @@
 # Managed Notion installation
 
-Updated: 11 October 2026
+Updated: 15 October 2026
 
 ## Decision and status
 
 The normal customer setup is **Add to Notion** on Eat or Yeet. Vercel runs the website, OAuth and webhook routes. Cloudflare stores installation state and durable review jobs. Customers do not host a service, create API keys or need Notion AI.
 
-The managed flow and local tests are implemented. The template is public and the OAuth connection is registered. Production testing is authorized with the flags enabled; the customer entry requires complete OAuth, backend and webhook configuration. Live acceptance remains a release gate. See the [readiness record](operators/notion-readiness.md). The deterministic review engine and optional standalone worker from [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) remain useful for owner-run setups. They are not part of the ordinary customer flow.
+The managed flow and local tests are implemented. The template is public and the OAuth connection is registered. The earlier Convex production pilot verified the core customer journey; the 14 October migration retained credentials but did not repeat live Notion acceptance. The customer entry requires complete OAuth, backend and webhook configuration. Cloudflare live acceptance remains a release gate. See the [readiness record](operators/notion-readiness.md). The deterministic review engine and optional standalone worker from [PR #7](https://github.com/anthonyhumphreys/eat-or-yeet/pull/7) remain useful for owner-run setups. They are not part of the ordinary customer flow.
 
 ## Customer flow
 
@@ -46,7 +46,7 @@ These are release tasks for the service owner. They are not customer setup instr
 - Set the OAuth client details, encryption key, webhook verification token, review key and `NEXT_PUBLIC_APP_URL` in the appropriate Vercel and Cloudflare environments. Keep preview and production credentials separate. Configure the public app origin as HTTPS.
 - Apply D1 migrations and deploy the Worker before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before general availability.
 
-The Vercel/Cloudflare deployment owns customer installations and queues. The NAS runs the separate USDA snapshot importer because USDA blocks hosted fetches; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
+The Vercel/Cloudflare deployment owns customer installations and queues. The NAS runs the separate USDA/FDA snapshot importer because those hosted fetches were blocked or incomplete; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
 
 ## Acceptance and release gate
 

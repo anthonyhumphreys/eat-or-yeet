@@ -1,4 +1,4 @@
-> This record describes the previous Convex deployment. Cloudflare rollout and its separate acceptance checks are documented in [Cloudflare deployment](../cloudflare-deployment.md).
+> Live pilot evidence below is from the previous Convex backend on 11 October 2026. Production moved to Cloudflare on 14 October. The cutover preserved the credential key and third-party credentials and had no active installations to drain; it did not repeat live Notion OAuth or signed-event acceptance. See [the cutover record](../cloudflare-cutover-2026-10-14.md) and [migration acceptance](notion-managed-service.md#cloudflare-migration-acceptance).
 
 # Notion readiness — 11 October 2026
 
@@ -27,7 +27,9 @@ After an active US input edit, the row received a new fingerprint, review time a
 
 An edit to the bought US item produced an accepted signed event and drained without another review charge or timestamp change. Disconnect completed with **Notion list disconnected** and **Notion access was revoked**; the installation, sessions, fingerprints and event/job/quota records were removed. Reloading the private Notion list confirmed the item and entered packet details remained accessible.
 
-## Remaining live checks
+## Remaining live checks on Cloudflare
+
+Repeat the complete consent → copied-list → signed event → review → disconnect journey against the Cloudflare deployment. Verify queue recovery and tenant isolation on D1/Queues before treating the earlier pilot as release evidence for this backend.
 
 Already-queued work across pause/resume, callback replay and multiple-workspace/user tests remain outstanding as live checks. Those boundaries remain covered by automated fixtures. Update this record only from observed results. Edits first received while paused intentionally do not start new reviews.
 
