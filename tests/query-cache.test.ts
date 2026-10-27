@@ -20,7 +20,7 @@ const now = Date.parse("2026-10-09T12:00:00Z");
 const row = {
   incidentId: "notice", title: "Biscuit recall", slug: "biscuit-recall", region: "UK", startsAt: now - 1000,
   summary: "Check pack", consumerAdvice: "Do not eat", authority: "FSA", authorityUrl: "https://alerts.food.gov.uk/",
-  sourceId: "1", publishedAt: now - 1000, updatedAt: now, severity: "high", confidence: 1, targets: [], categories: [], stores: [],
+  searchText: "biscuit recall", browseHazard: { kind: "other", label: "Recall" }, sourceId: "1", publishedAt: now - 1000, updatedAt: now, severity: "high", confidence: 1, targets: [], categories: [], stores: [],
 };
 let revision: string;
 let healthy: boolean;
@@ -55,6 +55,22 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("warning data caches", () => {
+  it("does not persist legacy Worker responses across a projection upgrade", async () => {
+    const implementation = query.getMockImplementation()!;
+    let upgraded = false;
+    query.mockImplementation(async (...args) => {
+      const result = await implementation(...args);
+      if (getFunctionName(args[0]) !== "incidents:listActivePage" || upgraded) return result;
+      return { ...result, page: result.page.map(({ searchText: _text, browseHazard: _hazard, ...legacy }: Record<string, unknown>) => { void _text; void _hazard; return legacy; }) };
+    });
+    const db = await import("@/db/queries");
+    expect((await db.listActivePublicIncidents("UK"))[0].searchText).toBeUndefined();
+    upgraded = true;
+    expect((await db.listActivePublicIncidents("UK"))[0].searchText).toBe("biscuit recall");
+    await db.listActivePublicIncidents("UK");
+    expect(calls("listActivePage")).toHaveLength(2);
+  });
+
   it("treats legacy food details and browse rows as Food when the category field is absent", async () => {
     const db = await import("@/db/queries");
     expect((await db.getIncidentBySlug("biscuit-recall"))?.superCategories).toEqual(["Food"]);

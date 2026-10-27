@@ -34,6 +34,8 @@ const makeRow = (index: number, overrides: Record<string, unknown> = {}) => ({
   updatedAt: now - index,
   categories: ["Snacks & sweets"],
   stores: index === 0 ? ["Waitrose"] : ["Tesco"],
+  searchText: "",
+  browseHazard: index === 0 ? { kind: "allergen", label: "Milk" } : { kind: "pathogen", label: "Salmonella" },
   ...overrides,
 });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "@backend/values";
-import { api } from "@backend/api";
+import { api, internal } from "@backend/api";
 import { createBackend } from "./backend-harness";
 
 const serverSecret = "test-backend-secret";
@@ -15,6 +15,27 @@ afterEach(() => {
 });
 
 describe("combined backend request queries and mutations", () => {
+  it("recovers all official risk statements from archived FSA and FSIS records", async () => {
+    for (const originalSourceData of [
+      { problem: [{ riskStatement: "Undeclared milk and egg. " + "Source context. ".repeat(50) + "Sesame allergen" }, { riskStatement: "Mustard allergen" }] },
+      { field_recall_reason: ["Undeclared milk and egg", "Source context. ".repeat(50) + "Sesame and mustard allergens"] },
+    ]) {
+      const t = createBackend();
+      await t.run(ctx => ctx.db.insert("incidents", {
+        title: "Various products recalled", slug: "various-products", region: "UK", status: "active", startsAt: 0, isDemo: false,
+        hazard: "Undeclared milk and egg", summary: "Check the pack", consumerAdvice: "Return it", authority: "Food Standards Agency",
+        authorityUrl: "https://alerts.food.gov.uk/", sourceId: "test", publishedAt: 1, updatedAt: 1, retrievedAt: 1,
+        severity: "medium", confidence: 1, targets: [], originalSourceData,
+      }));
+      await t.action(internal.incidents.backfillMatchDataInternal, {});
+      const { page } = await t.query(api.incidents.listActivePage, { region: "UK", cursor: null });
+      expect(page[0].searchText).toContain("sesame");
+      expect(page[0].searchText).toContain("mustard");
+      expect(page[0].browseHazard).toMatchObject({ kind: "allergen", label: "Milk, egg +2" });
+      expect(page[0]).not.toHaveProperty("originalSourceData");
+    }
+  });
+
   it("projects complete hazard and affected product names without exposing raw payloads", async () => {
     const t = createBackend();
     await t.run((ctx) => ctx.db.insert("incidentMatchData", {

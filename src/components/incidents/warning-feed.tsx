@@ -34,8 +34,8 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       categories: row.categories as ProductCategory[],
       superCategories: [...row.superCategories],
       stores: row.stores,
-      hazard: classifyHazard(row),
-      searchText: warningSearchText({ ...row, hazard: classifyHazard(row), hazardText: row.hazard }),
+      hazard: row.browseHazard ?? classifyHazard(row),
+      searchText: warningSearchText({ ...row, hazard: row.browseHazard ?? classifyHazard(row), hazardText: row.hazard }),
     }))
     : null;
   // Drug enforcement reports cannot establish a current alert.

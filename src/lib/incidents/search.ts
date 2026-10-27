@@ -120,7 +120,7 @@ function isActiveAt(row: BrowseRow, asOf: number) {
 }
 
 function matches(row: BrowseRow, filters: Filters): boolean {
-  const hazard = classifyHazard(row);
+  const hazard = row.browseHazard ?? classifyHazard(row);
   if (!warningSearchMatchesText(warningSearchText({ ...row, hazard, hazardText: row.hazard }), warningSearchTerms(filters.query))) return false;
   if (filters.hazard && hazard.kind !== filters.hazard) return false;
   if (filters.category && !row.categories.includes(filters.category)) return false;
