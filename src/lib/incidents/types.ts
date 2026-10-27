@@ -36,6 +36,8 @@ export type NormalisedIncident = {
   targets: NormalisedTarget[];
 };
 
+export type TrackedSourceNotice = Pick<NormalisedIncident, "sourceId" | "slug"> & { originalSourceData: unknown };
+
 export interface IncidentSource {
   id: string;
   name: string;
@@ -44,5 +46,5 @@ export interface IncidentSource {
   /** What the source covers. Only food sources feed pack checks and their health gate. */
   superCategory: SuperCategory;
   scope: string;
-  fetchIncidents(existingSourceIds?: string[]): Promise<NormalisedIncident[]>;
+  fetchIncidents(existingSourceIds?: string[], trackedNotices?: TrackedSourceNotice[]): Promise<NormalisedIncident[]>;
 }

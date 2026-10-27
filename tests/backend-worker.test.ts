@@ -23,6 +23,44 @@ beforeAll(async () => {
 afterAll(async () => { await mf?.dispose(); });
 
 describe("Cloudflare Worker with native D1 and R2", () => {
+  it("reconciles USDA URL changes through snapshot upload, D1 and durable batches", async () => {
+    const record = {
+      field_title: "Example Foods Recalls Beef Stew", field_recall_number: "001-2026", field_recall_number_export: "001-2026",
+      field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/original-url", field_recall_date: "2026-10-01",
+      field_active_notice: "True", field_summary: "<p>Return the product.</p>", langcode: "English",
+    };
+    async function upload(payload: unknown[]) {
+      const response = await mf.dispatchFetch("https://backend.test/admin/fsis", {
+        method: "POST", headers: { Authorization: "Bearer uploader-only", "Content-Type": "application/json" },
+        body: JSON.stringify({ fetchedAt: Date.now(), payload }),
+      });
+      const body = await response.json() as { result: { runId: string; status: string } };
+      if (body.result.status === "failed") return body.result;
+      let completed: unknown;
+      await vi.waitFor(async () => {
+        const status = await mf.dispatchFetch(`https://backend.test/admin/fsis?runId=${encodeURIComponent(body.result.runId)}`, { headers: { Authorization: "Bearer uploader-only" } });
+        const value = await status.json() as { result: { status: string } };
+        expect(value.result.status).toBe("success");
+        completed = value.result;
+      });
+      return completed;
+    }
+    const db = await mf.getD1Database("DB");
+    const rows = () => db.prepare("SELECT id,payload FROM records WHERE table_name='incidents' AND json_extract(payload,'$.sourceKey')='fsis'").all<{ id: string; payload: string }>();
+    expect(await upload([record])).toMatchObject({ created: 1 });
+    const original = (await rows()).results[0];
+    const renamed = { ...record, field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/new-url" };
+    expect(await upload([renamed])).toMatchObject({ created: 0, updated: 1 });
+    expect(await upload([renamed])).toMatchObject({ created: 0, updated: 0 });
+    const after = (await rows()).results;
+    expect(after).toHaveLength(1);
+    expect(after[0].id).toBe(original.id);
+    expect(JSON.parse(after[0].payload)).toMatchObject({ sourceId: "/recalls-alerts/original-url", slug: JSON.parse(original.payload).slug, authorityUrl: renamed.field_recall_url });
+    expect(await upload([{ ...renamed, field_recall_number: "002-2026", field_recall_number_export: "002-2026" }])).toMatchObject({ status: "failed" });
+    expect(await upload([{ ...renamed, field_active_notice: "False" }])).toMatchObject({ created: 0, updated: 1 });
+    expect(JSON.parse((await rows()).results[0].payload).status).toBe("resolved");
+  });
+
   it("maintains and queries the trigram browse index through native D1", async () => {
     await rpc("seed.demo", { secret }, admin, "/admin/rpc");
     const response = await rpc("incidents.getBySlug", { slug: "demo-northstar-peanut-bites", includeDemo: true });

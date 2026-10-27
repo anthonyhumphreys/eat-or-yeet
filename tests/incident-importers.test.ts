@@ -502,6 +502,41 @@ describe("FDA announcement imports", () => {
 });
 
 describe("FSIS Recall API imports", () => {
+  it("preserves identity and warning links when USDA changes a recall URL", () => {
+    const old = parseFsisRecords([fsisRecord()])[0];
+    const incoming = fsisRecord({ field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/renamed-notice" });
+    const [result] = fsisIncidentsForSync([incoming], [old.sourceId], [old]);
+    expect(result.sourceId).toBe(old.sourceId);
+    expect(result.slug).toBe(old.slug);
+    expect(result.authorityUrl).toContain("renamed-notice");
+    // Repeated refreshes still reconcile against the original stored ID.
+    expect(fsisIncidentsForSync([incoming], [old.sourceId], [result])[0].sourceId).toBe(old.sourceId);
+  });
+
+  it("imports explicit closure after a URL change", () => {
+    const old = parseFsisRecords([fsisRecord()])[0];
+    const result = fsisIncidentsForSync([fsisRecord({ field_active_notice: "False", field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/renamed" })], [old.sourceId], [old]);
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("resolved");
+    expect(result[0].sourceId).toBe(old.sourceId);
+  });
+
+  it("rejects ambiguous recall identities and genuinely missing records", () => {
+    const old = parseFsisRecords([fsisRecord()])[0];
+    const renamed = fsisRecord({ field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/renamed" });
+    const duplicate = fsisRecord({ field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/duplicate" });
+    expect(() => fsisIncidentsForSync([renamed, duplicate], [old.sourceId], [old])).toThrow("incomplete refresh");
+    expect(() => fsisIncidentsForSync([fsisRecord({ field_recall_number: "002-2026", field_recall_number_export: "002-2026", field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/unrelated" })], [old.sourceId], [old])).toThrow("incomplete refresh");
+  });
+
+  it("matches unnumbered alerts only by title and date", () => {
+    const record = fsisRecord({ field_recall_number: "", field_recall_number_export: "" });
+    const old = parseFsisRecords([record])[0];
+    const renamed = { ...record, field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/renamed-alert" };
+    expect(fsisIncidentsForSync([renamed], [old.sourceId], [old])[0].sourceId).toBe(old.sourceId);
+    expect(() => fsisIncidentsForSync([{ ...renamed, field_title: "Different alert" }], [old.sourceId], [old])).toThrow("incomplete refresh");
+  });
+
   it("stores active notices and tracked closures without importing unused resolved history", () => {
     const active = fsisRecord();
     const closed = fsisRecord({ field_active_notice: "False", field_recall_url: "https://www.fsis.usda.gov/recalls-alerts/closed-recall" });
