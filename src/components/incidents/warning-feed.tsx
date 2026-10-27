@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowRight, TriangleAlert } from "lucide-react";
-import Link from "next/link";
 import { Suspense } from "react";
 
+import { RecallLink } from "./recall-link";
+import { browseReturnUrl } from "@/lib/incidents/browse-navigation";
 import { WarningExplorer, type ExplorerRow } from "@/components/incidents/warning-explorer";
 import { RegionalNews } from "@/components/news/regional-news";
 import { listActivePublicIncidents } from "@/db/queries";
@@ -44,11 +45,15 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
   const type = param(params, "type");
   const hazard = param(params, "hazard");
   const page = param(params, "page");
+  const browseParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (typeof value === "string") browseParams.set(key, value);
+  browseParams.set("region", region);
+  const returnTo = browseReturnUrl(`${path}?${browseParams}`) ?? `${path}?region=${region}`;
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
       <div className="min-w-0">
-        {top ? <TopAlert row={top} summary={regional?.find((row) => row.id === top.id)?.summary} /> : null}
+        {top ? <TopAlert row={top} returnTo={returnTo} summary={regional?.find((row) => row.id === top.id)?.summary} /> : null}
         <Suspense key={region} fallback={null}>
           <NewsButton region={region} />
         </Suspense>
@@ -79,10 +84,11 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
 }
 
 /** The one recall to see first: the newest food-poisoning recall this month, otherwise the newest recall. */
-function TopAlert({ row, summary }: { row: ExplorerRow; summary?: string }) {
+function TopAlert({ row, summary, returnTo }: { row: ExplorerRow; summary?: string; returnTo: string }) {
   return (
-    <Link
-      href={`/incidents/${row.slug}`}
+    <RecallLink
+      slug={row.slug}
+      returnTo={returnTo}
       className="group block rounded-xl border bg-card p-4 transition-colors hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:p-5"
     >
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -98,7 +104,7 @@ function TopAlert({ row, summary }: { row: ExplorerRow; summary?: string }) {
       <span className="mt-3 hidden items-center gap-1 text-sm font-bold text-link sm:inline-flex">
         See full warning<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
       </span>
-    </Link>
+    </RecallLink>
   );
 }
 

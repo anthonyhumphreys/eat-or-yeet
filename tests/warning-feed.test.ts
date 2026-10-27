@@ -17,7 +17,7 @@ const rows = [
 
 // The recall list itself, after the top alert.
 const list = (html: string) => html.slice(html.indexOf('id="warnings"'));
-const warningLinks = (html: string) => list(html).match(/href="\/incidents\/[^"]+"/g) ?? [];
+const warningLinks = (html: string) => (list(html).match(/href="\/incidents\/[^"]+"/g) ?? []).map((link) => link.replace(/\?[^"]+/, ""));
 
 beforeEach(() => {
   // The top alert and "x ago" depend on today's date.
@@ -101,7 +101,7 @@ describe("warnings landing feed", () => {
     const html = await render();
     const top = html.slice(0, html.indexOf('id="warnings"'));
     expect(top).toContain("Top alert · Listeria");
-    expect(top).toContain('href="/incidents/bread"');
+    expect(top).toContain('href="/incidents/bread?returnTo=');
     expect(top).toContain("2 days ago");
   });
 

@@ -4,6 +4,8 @@ import { ArrowRight, ChevronDown, ChevronRight, Search, SearchX, X } from "lucid
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
 
+import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
+import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
 import { ShareButton } from "@/components/share-button";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
@@ -23,9 +25,9 @@ export type ExplorerRow = {
   searchText?: string;
 };
 
-export type ExplorerFilters = { q: string; hazard?: HazardKind; type?: SuperCategory; category?: ProductCategory; store?: string };
+export type { ExplorerFilters } from "@/lib/incidents/browse-navigation";
 
-const STEP = 40;
+const STEP = BROWSE_PAGE_SIZE;
 const sourceNames: Record<WarningRegion, string> = { UK: "Food Standards Agency", US: "FDA and USDA FSIS" };
 const officialUrls: Record<WarningRegion, string> = {
   UK: "https://alerts.food.gov.uk/",
@@ -39,16 +41,6 @@ const tagTone: Record<HazardKind, string> = {
   other: "bg-muted text-muted-foreground",
 };
 
-export function filterUrl(path: string, region: WarningRegion, { q, hazard, type, category, store }: ExplorerFilters, page?: number) {
-  const params = new URLSearchParams({ region });
-  if (q) params.set("q", q);
-  if (hazard) params.set("hazard", hazard);
-  if (type) params.set("type", type);
-  if (category) params.set("category", category);
-  if (store) params.set("store", store);
-  if (page && page > 1) params.set("page", String(page));
-  return `${path}?${params}`;
-}
 
 function Highlight({ text, query }: { text: string; query: string }) {
   const words = query.trim().split(/\s+/).filter((word) => word.length > 1).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
@@ -58,14 +50,14 @@ function Highlight({ text, query }: { text: string; query: string }) {
     : part);
 }
 
-function WarningRow({ row, query }: { row: ExplorerRow; query: string }) {
+function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string; returnTo: string }) {
   const iso = new Date(row.updatedAt).toISOString();
   const date = formatRecallDate(row.updatedAt);
   // "x ago" depends on the viewer's clock, so a render either side of midnight may differ from the server's.
   const ago = timeAgo(row.updatedAt);
   return (
     <li className="border-b last:border-b-0">
-      <Link href={`/incidents/${row.slug}`} className="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[6.75rem_minmax(0,1fr)_auto] sm:gap-x-4">
+      <RecallLink slug={row.slug} returnTo={returnTo} className="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[6.75rem_minmax(0,1fr)_auto] sm:gap-x-4">
         <span className="hidden pt-0.5 text-[13px] leading-5 sm:block">
           <time dateTime={iso} className="block font-semibold tabular-nums">{date}</time>
           <span suppressHydrationWarning className="block text-muted-foreground">{ago}</span>
@@ -83,7 +75,7 @@ function WarningRow({ row, query }: { row: ExplorerRow; query: string }) {
           </span>
         </span>
         <ChevronRight className="mt-0.5 size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden />
-      </Link>
+      </RecallLink>
     </li>
   );
 }
@@ -113,9 +105,22 @@ function FacetSelect({ id, label, value, onChange, children }: { id: string; lab
   );
 }
 
+function currentBrowseState(initial: ExplorerFilters, initialPage: number) {
+  const url = typeof window === "undefined" ? null : browseReturnUrl(`${window.location.pathname}${window.location.search}`);
+  if (!url) return { filters: initial, page: initialPage };
+  const params = new URL(url, "https://browse.invalid").searchParams;
+  return { filters: {
+    q: params.get("q") ?? "",
+    hazard: (params.get("hazard") || undefined) as HazardKind | undefined,
+    type: (params.get("type") || undefined) as SuperCategory | undefined,
+    category: (params.get("category") || undefined) as ProductCategory | undefined,
+    store: params.get("store") || undefined,
+  }, page: Number(params.get("page") ?? 1) };
+}
+
 export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }: { rows: ExplorerRow[] | null; region: WarningRegion; path: "/" | "/incidents"; initial: ExplorerFilters; initialPage?: number }) {
-  const [filters, setFilters] = useState<ExplorerFilters>(initial);
-  const [limit, setLimit] = useState(STEP * initialPage);
+  const [filters, setFilters] = useState<ExplorerFilters>(() => currentBrowseState(initial, initialPage).filters);
+  const [limit, setLimit] = useState(() => STEP * currentBrowseState(initial, initialPage).page);
   const [announcement, setAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
@@ -166,17 +171,41 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
 
   const { results } = view;
   const visible = results.slice(0, limit);
+  const page = Math.max(1, Math.ceil(Math.min(limit, results.length) / STEP));
+  const returnTo = filterUrl(path, region, filters, page);
   const filtered = Boolean(q || hazard || type || category || store);
   const countLabel = `${results.length.toLocaleString("en-GB")} ${results.length === 1 ? "recall" : "recalls"}`;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const url = filterUrl(path, region, filters);
+      const url = returnTo;
       if (`${location.pathname}${location.search}` !== url) window.history.replaceState(window.history.state, "", url);
       setAnnouncement(rows ? countLabel : "");
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [filters, path, region, rows, countLabel]);
+  }, [returnTo, rows, countLabel]);
+
+  useEffect(() => {
+    if (!rows) return;
+    let frame = 0;
+    try {
+      const raw = sessionStorage.getItem(BROWSE_POSITION_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (saved?.url === returnTo && Number.isFinite(saved.y) && saved.y >= 0) {
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => {
+            const link = typeof saved.slug === "string" ? document.querySelector<HTMLElement>(`[data-recall-slug="${CSS.escape(saved.slug)}"]`) : null;
+            link?.focus({ preventScroll: true });
+            window.scrollTo({ top: saved.y, behavior: "instant" });
+            sessionStorage.removeItem(BROWSE_POSITION_KEY);
+          });
+        });
+      }
+    } catch { /* Ignore unavailable storage or invalid stale state. */ }
+    const save = () => rememberBrowsePosition(returnTo, (document.activeElement as HTMLElement | null)?.dataset.recallSlug);
+    window.addEventListener("pagehide", save);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("pagehide", save); };
+  }, [returnTo, rows]);
 
   useEffect(() => {
     // Keep the selected tabs visible in the horizontally scrolling rows without moving the page.
@@ -316,7 +345,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
         <ul>
           {visible.map((row) => (
             <ViewTransition key={row.id} name={`warning-${row.id}`} default="none" share="warning-row" update="warning-row" enter="warning-enter" exit="warning-exit">
-              <WarningRow row={row} query={q} />
+              <WarningRow row={row} query={q} returnTo={returnTo} />
             </ViewTransition>
           ))}
         </ul>
@@ -344,7 +373,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
           <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {results.length.toLocaleString("en-GB")}</p>
           <a
             href={filterUrl(path, region, filters, Math.floor(limit / STEP) + 1)}
-            onClick={(event) => { event.preventDefault(); startTransition(() => setLimit((current) => current + STEP)); }}
+            onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); startTransition(() => setLimit((current) => current + STEP)); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             Show {Math.min(STEP, results.length - visible.length)} more<ArrowRight className="size-4 rotate-90" aria-hidden />
