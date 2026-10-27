@@ -1,19 +1,18 @@
 import { ArrowRight, ChevronLeft, ExternalLink, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getIncidentBySlug } from "@/db/queries";
 import { IncidentTargets } from "@/components/incidents/incident-targets";
-import { NewsList } from "@/components/news/news-list";
+import { RecallNews } from "@/components/news/recall-news";
 import { ShareButton } from "@/components/share-button";
 import { Button } from "@/components/ui/button";
 import { rowSuperCategories } from "@/lib/incidents/browse";
 import { classifyHazard } from "@/lib/incidents/hazard";
 import { publicOfficialSource } from "@/lib/incidents/public-source";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
-import { getFoodSafetyNews } from "@/lib/news/feed";
-import { relatedNews } from "@/lib/news/related";
 
 export const revalidate = 1800;
 
@@ -34,8 +33,6 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
   const incident = await getIncidentBySlug(slug);
   if (!incident) notFound();
   const source = publicOfficialSource(incident);
-  const news = await getFoodSafetyNews().catch(() => ({ articles: [], unavailable: true }));
-  const related = relatedNews(news.articles, incident);
   const hazard = classifyHazard(incident);
   const hazardText = incident.hazard?.trim() || incident.pathogen;
   // The FDA publishes recalling companies' own announcements as its recall notices.
@@ -90,7 +87,9 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
                 <p className="mt-3 max-w-[65ch] whitespace-pre-line text-sm leading-6 text-muted-foreground">{hazardText}</p>
               </section>
             ) : null}
-            <NewsList heading="In the news" articles={related} unavailable={news.unavailable} empty="No news stories about this recall yet." />
+            <Suspense fallback={<p role="status" className="text-sm leading-6 text-muted-foreground">Loading related news…</p>}>
+              <RecallNews incident={incident} />
+            </Suspense>
             <Link href={`/?region=${incident.region}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all {incident.region} recall reports<ArrowRight className="size-4" aria-hidden /></Link>
           </div>
         </div>
