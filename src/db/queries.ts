@@ -165,7 +165,7 @@ const cachedPublicListPage = unstable_cache(
     void version;
     return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version, foodOnly }, { url });
   },
-  ["public-warning-page-v7"],
+  ["public-warning-page-v8"],
   { revalidate: false },
 );
 

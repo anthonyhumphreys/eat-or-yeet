@@ -6,8 +6,13 @@ export function warningSearchText(row: {
   stores: string[];
   hazard: { label: string };
   categories: string[];
+  /** Complete source-derived text, separate from shortened display labels. */
+  searchText?: string;
+  hazardText?: string | null;
+  targets?: readonly { type: string; value: string }[];
 }): string {
-  return normaliseText(`${row.title} ${row.stores.join(" ")} ${row.hazard.label} ${row.categories.join(" ")}`);
+  const products = row.targets?.filter((target) => target.type === "product" || target.type === "brand").map((target) => target.value) ?? [];
+  return normaliseText([row.title, ...row.stores, row.hazard.label, ...row.categories, row.searchText ?? "", row.hazardText ?? "", ...products].join(" "));
 }
 
 export function warningSearchTerms(query: string): string[] {

@@ -6,6 +6,7 @@ import { WarningExplorer, type ExplorerRow } from "@/components/incidents/warnin
 import { RegionalNews } from "@/components/news/regional-news";
 import { listActivePublicIncidents } from "@/db/queries";
 import { isSuperCategory, productCategories, type ProductCategory } from "@/lib/incidents/browse";
+import { warningSearchText } from "@/lib/incidents/warning-search";
 import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/hazard";
 import { formatRecallDate, pickTopAlert, timeAgo } from "@/lib/incidents/recency";
 import { type WarningRegion } from "@/lib/location";
@@ -34,6 +35,7 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       superCategories: [...row.superCategories],
       stores: row.stores,
       hazard: classifyHazard(row),
+      searchText: warningSearchText({ ...row, hazard: classifyHazard(row), hazardText: row.hazard }),
     }))
     : null;
   // Drug enforcement reports cannot establish a current alert.

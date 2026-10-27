@@ -20,6 +20,7 @@ export type ExplorerRow = {
   superCategories: SuperCategory[];
   stores: string[];
   hazard: HazardSummary;
+  searchText?: string;
 };
 
 export type ExplorerFilters = { q: string; hazard?: HazardKind; type?: SuperCategory; category?: ProductCategory; store?: string };

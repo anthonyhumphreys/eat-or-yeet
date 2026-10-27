@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Id } from "@backend/values";
 import { api } from "@backend/api";
 import { createBackend } from "./backend-harness";
 
@@ -14,6 +15,27 @@ afterEach(() => {
 });
 
 describe("combined backend request queries and mutations", () => {
+  it("projects complete hazard and affected product names without exposing raw payloads", async () => {
+    const t = createBackend();
+    await t.run((ctx) => ctx.db.insert("incidentMatchData", {
+      incidentId: "incidents:test" as Id<"incidents">, title: "Various products recalled", slug: "various-products", region: "UK", status: "active",
+      startsAt: 0, isDemo: false, hazard: "Undeclared milk and egg. " + "Additional source detail. ".repeat(30) + "Sesame allergen",
+      summary: "Check the pack", consumerAdvice: "Return it", authority: "Food Standards Agency", authorityUrl: "https://alerts.food.gov.uk/",
+      sourceId: "test", publishedAt: 1, updatedAt: 1, severity: "medium", confidence: 1,
+      categories: ["Snacks & sweets"], stores: [], targets: [
+        { type: "product", value: "Sesame crunch", valueNormalized: "sesamecrunch", matchType: "exact", weight: 25, confidence: 1 },
+        { type: "brand", value: "Northstar", valueNormalized: "northstar", matchType: "exact", weight: 25, confidence: 1 },
+      ],
+    }));
+    const { page } = await t.query(api.incidents.listActivePage, { region: "UK", cursor: null });
+    expect(page[0].searchText).toContain("sesameallergen");
+    expect(page[0].searchText).toContain("sesamecrunch");
+    expect(page[0].searchText).toContain("northstar");
+    expect(page[0].hazard).toHaveLength(400);
+    expect(page[0]).not.toHaveProperty("targets");
+    expect(page[0]).not.toHaveProperty("originalSourceData");
+  });
+
   it("guards public pages against dataset changes in the same query transaction", async () => {
     const t = createBackend();
     const version = await t.query(api.incidents.getDatasetVersion, { region: "UK" });

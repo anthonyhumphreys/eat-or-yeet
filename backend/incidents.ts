@@ -1,3 +1,5 @@
+import { classifyHazard } from "../src/lib/incidents/hazard";
+import { warningSearchText } from "../src/lib/incidents/warning-search";
 import schema from "./schema";
 import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
@@ -270,6 +272,7 @@ export const listActivePage = query({
         endsAt: row.endsAt,
         summary: row.summary,
         hazard: row.hazard?.slice(0, 400) ?? null,
+        searchText: warningSearchText({ ...row, hazard: classifyHazard(row), hazardText: row.hazard }),
         pathogen: row.pathogen ?? null,
         authority: row.authority,
         authorityUrl: row.authorityUrl,

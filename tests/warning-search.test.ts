@@ -63,6 +63,18 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("complete warning search", () => {
+  it("finds complete allergens and affected product names while retaining filters and all-term matching", async () => {
+    rows = [makeRow(0, {
+      title: "Various products recalled", hazard: "Undeclared milk, egg and sesame allergens",
+      searchText: "northstar sesame crunch", stores: ["Waitrose"],
+    }), makeRow(1, { title: "Other products", hazard: "Undeclared milk" })];
+    const { searchWarnings } = await import("@/lib/incidents/search");
+    expect((await searchWarnings({ region: "UK", query: "sesame northstar", hazard: "allergen", retailer: "Waitrose" })).items.map((item) => item.slug)).toEqual(["chocolate-warning-0"]);
+    expect((await searchWarnings({ region: "UK", query: "sesame missing" })).total).toBe(0);
+    expect((await searchWarnings({ region: "UK", query: "sesame", retailer: "Tesco" })).total).toBe(0);
+    expect((await searchWarnings({ region: "UK", query: "sesame", category: "Produce" })).total).toBe(0);
+  });
+
   it("excludes medicines from food-only integration searches and requests food-only pages", async () => {
     rows = [
       makeRow(0, { superCategories: ["Food"] }),
