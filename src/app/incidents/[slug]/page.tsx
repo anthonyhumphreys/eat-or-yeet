@@ -9,6 +9,7 @@ import { IncidentTargets } from "@/components/incidents/incident-targets";
 import { RecallNews } from "@/components/news/recall-news";
 import { ShareButton } from "@/components/share-button";
 import { Button } from "@/components/ui/button";
+import { browseReturnUrl } from "@/lib/incidents/browse-navigation";
 import { rowSuperCategories } from "@/lib/incidents/browse";
 import { classifyHazard } from "@/lib/incidents/hazard";
 import { publicOfficialSource } from "@/lib/incidents/public-source";
@@ -28,10 +29,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 // One page per recall, however people arrive (the list, a check, or a link from a chat or an AI assistant):
 // what it is, what to do, which products, then the official record, the company's word, and the news.
-export default async function IncidentPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function IncidentPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { slug } = await params;
   const incident = await getIncidentBySlug(slug);
   if (!incident) notFound();
+  const returnTo = browseReturnUrl((await searchParams)?.returnTo);
+  const listUrl = returnTo ?? `/?region=${incident.region}`;
   const source = publicOfficialSource(incident);
   const hazard = classifyHazard(incident);
   const hazardText = incident.hazard?.trim() || incident.pathogen;
@@ -43,7 +46,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
 
   return (
     <article className="page-shell py-6 sm:py-10">
-      <Link href={`/?region=${incident.region}`} className="-ml-2 mb-4 inline-flex min-h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><ChevronLeft className="size-4" aria-hidden />All {incident.region} recalls</Link>
+      <Link href={listUrl} className="-ml-2 mb-4 inline-flex min-h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><ChevronLeft className="size-4" aria-hidden />{returnTo ? "Back to recalls" : `All ${incident.region} recalls`}</Link>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
         <div className="min-w-0">
           <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
@@ -56,7 +59,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
               {incident.summary ? <p className="mt-3 max-w-[65ch] leading-7 text-muted-foreground">{incident.summary}</p> : null}
               {reported ? <p className="mt-3 max-w-[65ch] text-sm leading-6 text-muted-foreground">Current recall status is unverified. FDA does not update drug-enforcement status after publication. Check the latest official information or ask a pharmacist.</p> : null}
             </div>
-            <ShareButton label="Share this recall" title={`Recall: ${incident.title}`} text={`Heads up: ${incident.title} has been recalled (${hazard.label}).`} className="self-start" />
+            <ShareButton url={`/incidents/${incident.slug}`} label="Share this recall" title={`Recall: ${incident.title}`} text={`Heads up: ${incident.title} has been recalled (${hazard.label}).`} className="self-start" />
           </header>
 
           <section aria-labelledby="advice-heading" className="mt-7 rounded-xl bg-yeet-soft p-5 sm:p-6">
@@ -90,7 +93,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ slug:
             <Suspense fallback={<p role="status" className="text-sm leading-6 text-muted-foreground">Loading related news…</p>}>
               <RecallNews incident={incident} />
             </Suspense>
-            <Link href={`/?region=${incident.region}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all {incident.region} recall reports<ArrowRight className="size-4" aria-hidden /></Link>
+            <Link href={listUrl} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">See all {incident.region} recall reports<ArrowRight className="size-4" aria-hidden /></Link>
           </div>
         </div>
 
