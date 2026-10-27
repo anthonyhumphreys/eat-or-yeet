@@ -33,6 +33,26 @@ async function imported(t: ReturnType<typeof createBackend>) {
 }
 
 describe("import read costs and repair", () => {
+  it("bounds FSIS archive identity reads across more than 100 tracked notices", async () => {
+    const t = createBackend();
+    for (let offset = 0; offset < 101; offset += 25) {
+      await t.mutation(internal.incidents.upsertBatch, { items: Array.from({ length: Math.min(25, 101 - offset) }, (_, i) => notice({
+        sourceKey: "fsis", sourceId: `fsis-${offset + i}`, slug: `fsis-${offset + i}`, region: "US",
+      })) });
+    }
+    let cursor: string | null = null;
+    let total = 0;
+    for (;;) {
+      const page: { ids: string[]; trackedNotices: unknown[]; isDone: boolean; continueCursor: string | null } = await t.query(internal.incidents.getActiveSourceIdsPage, { sourceKey: "fsis", cursor });
+      expect(page.trackedNotices.length).toBe(page.ids.length);
+      expect(page.ids.length).toBeLessThanOrEqual(25);
+      total += page.ids.length;
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    expect(total).toBe(101);
+  });
+
   it("seeds state lazily and skips large archive reads and all writes for unchanged notices", async () => {
     const t = createBackend();
     await t.mutation(internal.incidents.upsertBatch, { items: [notice()] });

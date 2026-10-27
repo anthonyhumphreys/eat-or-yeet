@@ -10,7 +10,7 @@ import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/f
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
-import type { IncidentSource, NormalisedIncident } from "../src/lib/incidents/types";
+import type { IncidentSource, NormalisedIncident, TrackedSourceNotice } from "../src/lib/incidents/types";
 import { browseCategories, incidentSuperCategories, medicineBrowseCategories, namedRetailers, rowSuperCategories, type ProductCategory } from "../src/lib/incidents/browse";
 import { buildDatasetStatus, type IngestionRunSummary } from "../src/lib/incidents/dataset-status";
 import { cleanupNeedsContinuation, EPHEMERAL_CLEANUP_BATCH_SIZE } from "../src/lib/incidents/cleanup-batches";
@@ -339,8 +339,20 @@ export const getActiveSourceIdsPage = internalQuery({
     const page = await ctx.db
       .query("incidentMatchData")
       .withIndex("by_sourceKey_status", (q) => q.eq("sourceKey", sourceKey).eq("status", "active"))
-      .paginate({ numItems: READ_PAGE_SIZE, maximumBytesRead: READ_PAGE_BYTES, cursor });
+      .paginate({ numItems: sourceKey === "fsis" ? UPSERT_BATCH_SIZE : READ_PAGE_SIZE, maximumBytesRead: READ_PAGE_BYTES, cursor });
+    const trackedNotices: TrackedSourceNotice[] = [];
+    const needsIdentity = page.page.filter(row => sourceKey === "fsis"
+      || (sourceKey === "fda" && row.sourceId.startsWith("unclassified-")));
+    if (needsIdentity.length) {
+      await ctx.db.preloadIds(needsIdentity.map(row => row.incidentId));
+      for (const row of needsIdentity) {
+        const notice = await ctx.db.get("incidents", row.incidentId);
+        if (!notice) throw new Error(`Tracked ${sourceKey} notice is missing`);
+        trackedNotices.push({ sourceId: notice.sourceId, slug: notice.slug, originalSourceData: notice.originalSourceData });
+      }
+    }
     return {
+      trackedNotices,
       ids: page.page.map((row) => row.sourceId),
       isDone: page.isDone,
       continueCursor: page.continueCursor,
@@ -607,21 +619,23 @@ async function ingestSource(ctx: ActionCtx, source: IncidentSource): Promise<Imp
 
   try {
     const existingSourceIds: string[] = [];
+    const trackedNotices: TrackedSourceNotice[] = [];
     if (source.id === "fda" || source.id === "fda-drugs" || source.id === "fsis") {
       if (source.id === "fda") await ctx.runAction(internal.incidents.repairLegacyFdaSourceIdsInternal, {});
       let cursor: string | null = null;
       let isDone = false;
       while (!isDone) {
-        const page: { ids: string[]; isDone: boolean; continueCursor: string | null } = await ctx.runQuery(
+        const page: { ids: string[]; trackedNotices: TrackedSourceNotice[]; isDone: boolean; continueCursor: string | null } = await ctx.runQuery(
           internal.incidents.getActiveSourceIdsPage,
           { sourceKey: source.id, cursor },
         );
         existingSourceIds.push(...page.ids);
+        trackedNotices.push(...page.trackedNotices);
         cursor = page.continueCursor;
         isDone = page.isDone;
       }
     }
-    const incoming = await source.fetchIncidents(existingSourceIds);
+    const incoming = await source.fetchIncidents(existingSourceIds, trackedNotices);
     found = incoming.length;
     const items: ImportItem[] = incoming.map((item) => serialiseIncident(item, source, runId));
     if (items.length) {
@@ -732,9 +746,10 @@ export const importFsisSnapshotInternal = internalAction({
     try {
       return await ingestSource(ctx, {
         ...fsisSource,
-        fetchIncidents: async (existingSourceIds) => fsisIncidentsForSync(
+        fetchIncidents: async (existingSourceIds, trackedNotices) => fsisIncidentsForSync(
           await readFsisSnapshot(await ctx.storage.get(storageId), fetchedAt),
           existingSourceIds,
+          trackedNotices,
         ),
       });
     } finally {

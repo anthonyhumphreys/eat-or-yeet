@@ -3,7 +3,7 @@ import { z } from "zod";
 import { parseDateBounds } from "@/lib/incidents/date-bounds";
 import { fetchOfficialJson } from "@/lib/incidents/official-source-http";
 import { sourceHtmlParagraphs, sourceHtmlToText } from "@/lib/incidents/source-text";
-import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "@/lib/incidents/types";
+import type { IncidentSource, NormalisedIncident, NormalisedTarget, TrackedSourceNotice } from "@/lib/incidents/types";
 import { isValidGtin, slugify } from "@/lib/matching/normalise";
 
 export const FSIS_API = "https://www.fsis.usda.gov/fsis/api/recall/v/1";
@@ -250,22 +250,50 @@ export const fsisSource: IncidentSource = {
   region: "US",
   superCategory: "Food",
   scope: "English-language records in the full USDA FSIS Recall API archive, covering FSIS-regulated meat, poultry, and egg recalls and public health alerts.",
-  async fetchIncidents(existingSourceIds = []) {
+  async fetchIncidents(existingSourceIds = [], trackedNotices = []) {
     const payload = await fetchOfficialJson(FSIS_API, {
       sourceName: "FSIS Recall API",
       headers: { Accept: "application/json" },
       timeoutMs: 30_000,
       cache: "no-store",
     });
-    return fsisIncidentsForSync(payload, existingSourceIds);
+    return fsisIncidentsForSync(payload, existingSourceIds, trackedNotices);
   },
 };
 
-/** Store current warnings and explicit closures of warnings already tracked. */
-export function fsisIncidentsForSync(payload: unknown, existingSourceIds: string[] = []): NormalisedIncident[] {
+function fsisIdentity(data: unknown): string {
+  const record = recordSchema.parse(data);
+  const number = record.field_recall_number_export.trim() || record.field_recall_number.trim();
+  const date = requiredDate(record.field_recall_date, "recall date").toISOString();
+  // Dates also distinguish reused or placeholder recall numbers. Public health
+  // alerts without a number require an unchanged title as well as the date.
+  return JSON.stringify([number, date, number ? "" : sourceHtmlToText(record.field_title)]);
+}
+
+/** Store current warnings and explicit closures, retaining tracked IDs across URL changes. */
+export function fsisIncidentsForSync(payload: unknown, existingSourceIds: string[] = [], trackedNotices: TrackedSourceNotice[] = []): NormalisedIncident[] {
   const incidents = parseFsisRecords(payload);
-  const incomingIds = new Set(incidents.map((incident) => incident.sourceId));
+  const byIdentity = new Map<string, NormalisedIncident[]>();
+  for (const incident of incidents) {
+    const key = fsisIdentity(incident.originalSourceData);
+    byIdentity.set(key, [...(byIdentity.get(key) ?? []), incident]);
+  }
+  const incomingPaths = new Set(incidents.map(item => item.sourceId));
   const trackedIds = new Set(existingSourceIds);
+  const claimed = new Set<NormalisedIncident>();
+  for (const tracked of trackedNotices) {
+    if (!trackedIds.has(tracked.sourceId) || incomingPaths.has(tracked.sourceId)) continue;
+    const candidates = byIdentity.get(fsisIdentity(tracked.originalSourceData)) ?? [];
+    if (candidates.length !== 1) continue;
+    const match = candidates[0];
+    if (claimed.has(match) || trackedIds.has(match.sourceId)) {
+      throw new Error("FSIS notice identity is ambiguous; refusing an incomplete refresh");
+    }
+    claimed.add(match);
+    match.sourceId = tracked.sourceId;
+    match.slug = tracked.slug;
+  }
+  const incomingIds = new Set(incidents.map((incident) => incident.sourceId));
   if (existingSourceIds.some((id) => !incomingIds.has(id))) {
     throw new Error("FSIS archive is missing a previously active notice; refusing an incomplete refresh");
   }

@@ -10,6 +10,8 @@ type OfficialSourceRequestOptions = {
   headers?: HeadersInit;
   timeoutMs?: number;
   cache?: RequestCache;
+  /** The caller must validate the source's explicit no-results JSON response. */
+  allowNotFound?: boolean;
 };
 
 const MAX_ATTEMPTS = 3;
@@ -42,7 +44,7 @@ export async function fetchOfficialResponse(
       break;
     }
 
-    if (response.ok) return response;
+    if (response.ok || (options.allowNotFound && response.status === 404)) return response;
 
     lastError = new Error(`${options.sourceName} returned HTTP ${response.status} for ${url}`);
     const retryable = response.status === 408 || response.status === 429 || response.status >= 500;

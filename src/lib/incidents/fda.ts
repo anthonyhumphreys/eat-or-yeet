@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { parseDateBounds } from "@/lib/incidents/date-bounds";
 import { fetchOfficialJson } from "@/lib/incidents/official-source-http";
-import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "@/lib/incidents/types";
+import type { IncidentSource, NormalisedIncident, NormalisedTarget, TrackedSourceNotice } from "@/lib/incidents/types";
 import { isValidGtin, slugify } from "@/lib/matching/normalise";
 
 const FDA_API = "https://api.fda.gov/food/enforcement.json";
@@ -261,7 +261,62 @@ async function fetchRecallByNumber(endpoint: EnforcementEndpoint, recallNumber: 
   return incident;
 }
 
-async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSourceIds: string[], current: NormalisedIncident[]): Promise<NormalisedIncident[]> {
+function sameEventProduct(a: z.infer<typeof recordSchema>, b: z.infer<typeof recordSchema>): boolean {
+  const text = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  return !!a.event_id.trim() && a.event_id === b.event_id
+    && a.recall_initiation_date === b.recall_initiation_date
+    && text(a.recalling_firm) === text(b.recalling_firm)
+    && text(a.product_description) === text(b.product_description);
+}
+
+async function fetchRecallEvent(endpoint: EnforcementEndpoint, eventId: string) {
+  if (!/^\d+$/.test(eventId)) throw new Error("FDA unnumbered report has no valid event identifier");
+  const url = new URL(endpoint.api);
+  url.searchParams.set("search", `event_id:\"${eventId}\"`);
+  url.searchParams.set("limit", String(PAGE_SIZE));
+  url.searchParams.set("skip", "0");
+  const payload = await fetchOfficialJson(url.toString(), {
+    sourceName: `${endpoint.label} event lookup`, headers: openFdaHeaders(), timeoutMs: 20_000,
+    cache: "no-store", allowNotFound: true,
+  });
+  if (z.object({ error: z.object({ code: z.literal("NOT_FOUND"), message: z.string() }) }).safeParse(payload).success) return [];
+  const page = pageSchema.parse(payload);
+  if (page.meta.results.skip !== 0 || page.meta.results.limit !== PAGE_SIZE
+    || page.results.length !== page.meta.results.total || page.results.some(record => record.event_id !== eventId)) {
+    throw new Error(`FDA event lookup for ${eventId} was incomplete or returned a different event`);
+  }
+  return page.results.map(record => parseEnforcementRecord(record, endpoint));
+}
+
+async function reconcileUnnumbered(
+  endpoint: EnforcementEndpoint, tracked: TrackedSourceNotice, current: NormalisedIncident[],
+): Promise<NormalisedIncident> {
+  const prior = recordSchema.parse(tracked.originalSourceData);
+  if (incidentStatus(prior.status) !== "active") throw new Error("Tracked FDA report is not active");
+  const matchesPrior = (incident: NormalisedIncident) => {
+    const record = recordSchema.parse(incident.originalSourceData);
+    return prior.recall_number.trim()
+      ? prior.recall_number.trim() === record.recall_number.trim()
+      : sameEventProduct(prior, record);
+  };
+  let candidates = current.filter(matchesPrior);
+  if (!candidates.length) {
+    candidates = prior.recall_number.trim()
+      ? [await fetchRecallByNumber(endpoint, prior.recall_number.trim())]
+      : (await fetchRecallEvent(endpoint, prior.event_id)).filter(matchesPrior);
+  }
+  if (candidates.length > 1) throw new Error(`FDA unnumbered report ${tracked.sourceId} ambiguously matches multiple recalls`);
+  if (candidates.length === 1) return candidates[0];
+
+  // An unclassified report can disappear before FDA assigns a recall number.
+  // Absence is not a closure: retain its evidence and keep matching it, while
+  // continuing to import the complete, validated current feed.
+  const retained = parseEnforcementRecord(prior, endpoint);
+  retained.consumerAdvice += " This earlier report is no longer returned by openFDA. Its current status is unverified; it remains listed until FDA confirms a closure.";
+  return retained;
+}
+
+async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSourceIds: string[], current: NormalisedIncident[], trackedNotices: TrackedSourceNotice[]): Promise<NormalisedIncident[]> {
   const currentIds = new Set(current.map((incident) => incident.sourceId));
   const missingIds = [...new Set(existingSourceIds)].filter((sourceId) => !currentIds.has(sourceId));
   const needsLegacyAliases = missingIds.some((sourceId) => sourceId.startsWith("unclassified-"));
@@ -282,8 +337,25 @@ async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSo
   }
 
   const lookupIds: string[] = [];
+  const lookedUp: NormalisedIncident[] = [];
+  const trackedById = new Map(trackedNotices.map(notice => [notice.sourceId, notice]));
+  const trackedIds = new Set(existingSourceIds);
   for (const sourceId of missingIds) {
     if (sourceId.startsWith("unclassified-")) {
+      const tracked = trackedById.get(sourceId);
+      if (tracked) {
+        const matched = await reconcileUnnumbered(endpoint, tracked, current);
+        // Keep the existing warning URL and database identity even after FDA
+        // changes its report date or assigns an official recall number.
+        const incident = { ...matched, sourceId, slug: tracked.slug };
+        const position = current.indexOf(matched);
+        if (position >= 0 && !trackedIds.has(matched.sourceId)) current[position] = incident;
+        // Older imports can already contain both a numbered report and one
+        // or more synthetic aliases. Refresh each existing link from the same
+        // verified report without creating another numbered copy.
+        else lookedUp.push(incident);
+        continue;
+      }
       const matches = [...(legacyAliases.get(sourceId) ?? [])];
       if (matches.length === 1 && matches[0].status === "active") continue;
       if (matches.length > 1) {
@@ -293,8 +365,6 @@ async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSo
     }
     lookupIds.push(sourceId);
   }
-
-  const lookedUp: NormalisedIncident[] = [];
 
   for (let index = 0; index < lookupIds.length; index += DETAIL_CONCURRENCY) {
     const group = lookupIds.slice(index, index + DETAIL_CONCURRENCY);
@@ -309,9 +379,9 @@ async function resolvePreviouslyActive(endpoint: EnforcementEndpoint, existingSo
   return lookedUp;
 }
 
-async function fetchEnforcementIncidents(endpoint: EnforcementEndpoint, existingSourceIds: string[]): Promise<NormalisedIncident[]> {
+async function fetchEnforcementIncidents(endpoint: EnforcementEndpoint, existingSourceIds: string[], trackedNotices: TrackedSourceNotice[]): Promise<NormalisedIncident[]> {
   const ongoing = await fetchAllWithStatus(endpoint, "Ongoing");
-  const statusChecks = await resolvePreviouslyActive(endpoint, existingSourceIds, ongoing);
+  const statusChecks = await resolvePreviouslyActive(endpoint, existingSourceIds, ongoing, trackedNotices);
   const combined = [...ongoing, ...statusChecks];
   const byId = new Map<string, NormalisedIncident>();
   for (const incident of combined) {
@@ -364,8 +434,8 @@ export const fdaSource: IncidentSource = {
   url: FDA_API,
   region: "US",
   superCategory: "Food",
-  scope: "All openFDA Food Enforcement Reports with status Ongoing, plus explicit status checks for previously active recalls absent from that set.",
-  fetchIncidents: (existingSourceIds = []) => fetchEnforcementIncidents(foodEndpoint, existingSourceIds),
+  scope: "All openFDA Food Enforcement Reports with status Ongoing, plus status checks for previously active recalls. Missing unnumbered reports remain active with an unverified-current-status notice until FDA confirms a closure.",
+  fetchIncidents: (existingSourceIds = [], trackedNotices = []) => fetchEnforcementIncidents(foodEndpoint, existingSourceIds, trackedNotices),
 };
 
 export const fdaDrugSource: IncidentSource = {
