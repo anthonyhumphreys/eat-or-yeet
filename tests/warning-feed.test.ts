@@ -37,6 +37,14 @@ async function render(params = {}, region: "UK" | "US" = "UK") {
 }
 
 describe("warnings landing feed", () => {
+  it("searches complete source hazards and product text without expanding display tags", async () => {
+    listWarnings.mockResolvedValue([{ ...rows[0], title: "Various products recalled", hazard: "Undeclared milk, egg and sesame allergens", searchText: "northstar sesame crunch" }]);
+    const html = await render({ q: "sesame northstar" });
+    expect(warningLinks(html)).toHaveLength(1);
+    expect(html).toContain("Milk, egg +1");
+    expect(warningLinks(await render({ q: "sesame absent" }))).toHaveLength(0);
+  });
+
   it("adds a kind-of-product row once a region has more than food, and filters by it", async () => {
     const medicine = { ...rows[2], id: "4", slug: "infant-drops", title: "Infant drops recalled", hazard: "Subpotent drug", pathogen: null, categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"], updatedAt: new Date("2026-10-04T12:00:00Z") };
     listWarnings.mockResolvedValue([...rows, medicine]);

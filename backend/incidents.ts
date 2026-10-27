@@ -1,3 +1,5 @@
+import { classifyHazard } from "../src/lib/incidents/hazard";
+import { sourceHazardText, warningSearchText } from "../src/lib/incidents/warning-search";
 import schema from "./schema";
 import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
@@ -256,6 +258,16 @@ export const listActivePage = query({
       .query("incidentMatchData")
       .withIndex("by_region_status", (q) => q.eq("region", args.region).eq("status", "reported"))
       .first());
+    // Existing matching rows can contain parser-shortened hazards. Read the
+    // source records in one batch, then return only the compact public projection.
+    for (let offset = 0; offset < page.page.length; offset += 100) {
+      await ctx.db.preloadIds(page.page.slice(offset, offset + 100).map(row => row.incidentId));
+    }
+    const sourceHazards = new Map<string, string>();
+    for (const row of page.page) {
+      const source = await ctx.db.get("incidents", row.incidentId);
+      sourceHazards.set(row.incidentId, sourceHazardText(source?.originalSourceData, row.hazard));
+    }
     return {
       ...page,
       isDone: page.isDone && !nextReports,
@@ -270,6 +282,8 @@ export const listActivePage = query({
         endsAt: row.endsAt,
         summary: row.summary,
         hazard: row.hazard?.slice(0, 400) ?? null,
+        searchText: warningSearchText({ ...row, hazard: classifyHazard({ ...row, hazard: sourceHazards.get(row.incidentId) }), hazardText: sourceHazards.get(row.incidentId) }),
+        browseHazard: classifyHazard({ ...row, hazard: sourceHazards.get(row.incidentId) }),
         pathogen: row.pathogen ?? null,
         authority: row.authority,
         authorityUrl: row.authorityUrl,

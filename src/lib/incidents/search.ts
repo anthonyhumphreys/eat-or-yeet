@@ -120,8 +120,8 @@ function isActiveAt(row: BrowseRow, asOf: number) {
 }
 
 function matches(row: BrowseRow, filters: Filters): boolean {
-  const hazard = classifyHazard(row);
-  if (!warningSearchMatchesText(warningSearchText({ ...row, hazard }), warningSearchTerms(filters.query))) return false;
+  const hazard = row.browseHazard ?? classifyHazard(row);
+  if (!warningSearchMatchesText(warningSearchText({ ...row, hazard, hazardText: row.hazard }), warningSearchTerms(filters.query))) return false;
   if (filters.hazard && hazard.kind !== filters.hazard) return false;
   if (filters.category && !row.categories.includes(filters.category)) return false;
   if (filters.retailer && !row.stores.some((store) => normaliseText(store) === normaliseText(filters.retailer))) return false;

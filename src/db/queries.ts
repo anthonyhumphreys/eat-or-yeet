@@ -160,12 +160,23 @@ export const getIncidentBySlug = cache(async (slug: string, includeDemo = false)
   return row ? { ...mapIncident(row), status: row.status, superCategories: rowSuperCategories(row) } : null;
 });
 
+type PublicPage = Awaited<ReturnType<typeof loadPublicListPage>>;
+class LegacyPublicPage extends Error {
+  constructor(readonly page: PublicPage) { super("Legacy public search projection"); }
+}
+
+async function loadPublicListPage(region: Region, cursor: string | null, url: string, version: string, foodOnly: boolean) {
+  return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version, foodOnly }, { url });
+}
+
 const cachedPublicListPage = unstable_cache(
   async (region: Region, cursor: string | null, url: string, version: string, foodOnly: boolean) => {
     void version;
-    return fetchQuery(api.incidents.listActivePage, { region, cursor, snapshot: true, expectedVersion: version, foodOnly }, { url });
+    const page = await loadPublicListPage(region, cursor, url, version, foodOnly);
+    if (page.page.some(row => typeof row.searchText !== "string" || !row.browseHazard)) throw new LegacyPublicPage(page);
+    return page;
   },
-  ["public-warning-page-v7"],
+  ["public-warning-page-v9"],
   { revalidate: false },
 );
 
@@ -202,7 +213,10 @@ async function listPublicRegion(
     }
     revisionPages += 1;
     if (budget) budget.pages += 1;
-    const page = await cachedPublicListPage(region, cursor, url, version, options.foodOnly ?? false);
+    const page: PublicPage = await cachedPublicListPage(region, cursor, url, version, options.foodOnly ?? false).catch(error => {
+      if (error instanceof LegacyPublicPage) return error.page;
+      throw error;
+    });
     options.signal?.throwIfAborted();
     if (budget && (
       revisionRows + page.page.length > MAX_PUBLIC_SNAPSHOT_ROWS_PER_REVISION ||
