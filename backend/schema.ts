@@ -138,6 +138,8 @@ export default defineSchema({
     // Optional only for rows saved before super-categories; those are food recalls.
     superCategories: v.optional(v.array(superCategory)),
     stores: v.array(v.string()),
+    browseSearchText: v.optional(v.string()),
+    browseHazard: v.optional(v.object({ kind: v.union(v.literal("pathogen"), v.literal("allergen"), v.literal("foreign"), v.literal("spoilage"), v.literal("other")), label: v.string() })),
   })
     .index("by_incidentId", ["incidentId"])
     .index("by_slug", ["slug"])

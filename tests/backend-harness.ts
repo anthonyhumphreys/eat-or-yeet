@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { migrationStatements } from "./migration-statements";
 import { Database, revision } from "../backend/database";
 import { Runtime } from "../backend/runtime";
 import type { MutationCtx } from "../backend/operations";
@@ -6,8 +6,7 @@ import { sqliteD1 } from "./sqlite-d1";
 
 export function createBackend() {
   const sql = sqliteD1();
-  const migrations = readFileSync(new URL("../backend/migrations/0001_backend.sql", import.meta.url), "utf8");
-  const ready = sql.batch(migrations.split(";\n").filter((statement) => statement.trim()).map((statement) => sql.prepare(statement)));
+  const ready = sql.batch(migrationStatements().map(statement => sql.prepare(statement)));
   const runtime = new Runtime(sql, { get: async () => null, put: async () => undefined, delete: async () => undefined });
   const invoke: Runtime["invoke"] = async (ref, args) => { await ready; return runtime.invoke(ref, args); };
   return {

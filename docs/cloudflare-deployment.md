@@ -116,3 +116,27 @@ The following sequence documents the completed backend migration and requirement
 6. Retain a verified Cloudflare-backed Vercel deployment as the first frontend rollback option; promoting it keeps post-cutover D1 writes available. Keep the legacy deployment, backend and private export until acceptance finishes. Returning to Convex requires pausing native writers and reconciling post-cutover records first, then restoring the legacy URL/credential and scheduler settings together. Never run both job schedulers against the same Notion installations.
 
 The production cutover was performed on 14 October 2026. See [the cutover record](cloudflare-cutover-2026-10-14.md) for resources, deployment identities, validation and retained rollback material. Physical camera hardware and live Notion consent still require separate acceptance. Retire Convex credentials and delete old resources only after the cutover is accepted.
+
+
+## Indexed recall browsing (migration 0002)
+
+Apply `0002_warning_browse.sql` before deploying the Worker that maintains the new projection:
+
+```sh
+pnpm exec wrangler d1 migrations apply DB --env staging --remote
+pnpm backend:deploy:staging
+```
+
+Use the corresponding production environment only after staging verification. With that environment's private `BACKEND_URL` and `BACKEND_ADMIN_TOKEN` configured, rebuild existing projections:
+
+```sh
+pnpm backend:run browse.rebuild
+pnpm backend:run browse.list '{"region":"UK","filters":{"q":""}}'
+pnpm backend:run browse.list '{"region":"US","filters":{"q":""}}'
+```
+
+Run this rebuild after restoring a legacy database export as well. The rebuild processes bounded batches, refreshes complete source hazard/product search text and bumps regional revisions. It is restartable. New matching-row writes update the projection, facets and FTS5 index in the same D1 transaction. Trigger dirty markers make a partially rebuilt or older-writer index unavailable rather than returning a partial list. The website retains the complete legacy path until the new operation succeeds; the first-party pagination endpoint returns a controlled unavailable response if an active browse session loses its backend.
+
+Verify counts, filters, multiple pages, a revision change, both regions and reported medical recalls before promotion. The food-only top alert excludes reported records. A rollback to the prior Worker can leave dirty markers; rebuild again before re-enabling indexed browsing. This migration adds derived tables/indexes and optional matching-row fields; it does not rewrite migration 0001 or change source-health gates.
+
+A local SQLite regression with 1,600 representative warnings measured 943,251 bytes for the full legacy list and 11,328 bytes for the first indexed response, including counts/facets (about 98.8% less). It uses one list RPC plus a revision lookup, instead of paging the entire region. Query-plan checks confirm the regional ordering and trigram indexes. These fixture measurements are not a forecast of provider billed reads: facet aggregation, actual notices and cache behavior affect production cost.
