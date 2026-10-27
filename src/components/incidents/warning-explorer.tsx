@@ -4,6 +4,8 @@ import { ArrowRight, ChevronDown, ChevronRight, Search, SearchX, X } from "lucid
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
 
+import { useBrowsePage } from "./use-browse-page";
+import type { BrowsePage } from "@/lib/incidents/browse-view";
 import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
 import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
 import { ShareButton } from "@/components/share-button";
@@ -118,9 +120,13 @@ function currentBrowseState(initial: ExplorerFilters, initialPage: number) {
   }, page: Number(params.get("page") ?? 1) };
 }
 
-export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }: { rows: ExplorerRow[] | null; region: WarningRegion; path: "/" | "/incidents"; initial: ExplorerFilters; initialPage?: number }) {
+export function WarningExplorer({ rows, region, path, initial, initialPage = 1, serverPage }: { rows: ExplorerRow[] | null; region: WarningRegion; path: "/" | "/incidents"; initial: ExplorerFilters; initialPage?: number; serverPage?: BrowsePage }) {
   const [filters, setFilters] = useState<ExplorerFilters>(() => currentBrowseState(initial, initialPage).filters);
-  const [limit, setLimit] = useState(() => STEP * currentBrowseState(initial, initialPage).page);
+  const [limit, setLimit] = useState(() => {
+    const requested = STEP * currentBrowseState(initial, initialPage).page;
+    return serverPage ? Math.min(requested,Math.max(STEP,Math.ceil(serverPage.total/STEP)*STEP)) : requested;
+  });
+  const indexed = useBrowsePage(serverPage,region,filters,limit,setLimit);
   const [announcement, setAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
@@ -131,6 +137,10 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
 
   // Tabs come from the region's recalls, not the search, so they stay put while people type.
   const tabs = useMemo(() => {
+    if (indexed.page) return {
+      types:superCategories.filter(item=>indexed.page!.facets.tabs.includes(item)),
+      categories:productCategories.filter(item=>indexed.page!.facets.categoryTabs.includes(item) || item===category || ((!type || type==="Food") && (foodCategories as readonly string[]).includes(item))),
+    };
     const types = new Set<SuperCategory>();
     const categories = new Set<ProductCategory>();
     for (const row of rows ?? []) {
@@ -143,9 +153,13 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
       categories: productCategories.filter((item) => categories.has(item) || item === category
         || ((!type || type === "Food") && (foodCategories as readonly string[]).includes(item))),
     };
-  }, [rows, type, category]);
+  }, [rows, type, category, indexed.page]);
 
   const view = useMemo(() => {
+    if (indexed.page) {
+      const facets=indexed.page.facets;
+      return {results:indexed.page.rows,hazardCounts:new Map(facets.hazards.map(row=>[row.key as HazardKind,row.count])),hazardTotal:facets.hazards.reduce((sum,row)=>sum+row.count,0),typeCounts:new Map(facets.types.map(row=>[row.key as SuperCategory,row.count])),typeTotal:facets.typeTotal,categoryCounts:new Map(facets.categories.map(row=>[row.key as ProductCategory,row.count])),stores:[...new Set([...(store?[store]:[]),...facets.stores])].sort((a,b)=>a.localeCompare(b))};
+    }
     const terms = warningSearchTerms(q);
     const searched = (rows ?? []).filter((_, i) => warningSearchMatchesText(index[i], terms));
     const hazardCounts = new Map<HazardKind, number>();
@@ -167,14 +181,15 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
       if (inHazard && inType && inCategory && inStore) results.push(row);
     }
     return { results, hazardCounts, hazardTotal, typeCounts, typeTotal, categoryCounts, stores: [...stores].sort((a, b) => a.localeCompare(b)) };
-  }, [rows, index, q, hazard, type, category, store]);
+  }, [rows, index, q, hazard, type, category, store, indexed.page]);
 
   const { results } = view;
+  const total = indexed.page?.total ?? results.length;
   const visible = results.slice(0, limit);
-  const page = Math.max(1, Math.ceil(Math.min(limit, results.length) / STEP));
+  const page = Math.max(1, Math.ceil((indexed.page ? limit : Math.min(limit, results.length)) / STEP));
   const returnTo = filterUrl(path, region, filters, page);
   const filtered = Boolean(q || hazard || type || category || store);
-  const countLabel = `${results.length.toLocaleString("en-GB")} ${results.length === 1 ? "recall" : "recalls"}`;
+  const countLabel = `${total.toLocaleString("en-GB")} ${total === 1 ? "recall" : "recalls"}`;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -195,6 +210,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
         frame = requestAnimationFrame(() => {
           frame = requestAnimationFrame(() => {
             const link = typeof saved.slug === "string" ? document.querySelector<HTMLElement>(`[data-recall-slug="${CSS.escape(saved.slug)}"]`) : null;
+            if (saved.slug && !link && indexed.page?.nextCursor && indexed.page.rows.length < limit) return;
             link?.focus({ preventScroll: true });
             window.scrollTo({ top: saved.y, behavior: "instant" });
             sessionStorage.removeItem(BROWSE_POSITION_KEY);
@@ -205,7 +221,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
     const save = () => rememberBrowsePosition(returnTo, (document.activeElement as HTMLElement | null)?.dataset.recallSlug);
     window.addEventListener("pagehide", save);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("pagehide", save); };
-  }, [returnTo, rows]);
+  }, [returnTo, rows, indexed.page, limit]);
 
   useEffect(() => {
     // Keep the selected tabs visible in the horizontally scrolling rows without moving the page.
@@ -242,7 +258,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
   ];
 
   return (
-    <div id="warnings" className="min-w-0 scroll-mt-4">
+    <div id="warnings" aria-busy={indexed.loading} className="min-w-0 scroll-mt-4">
       {tabs.types.length > 1 ? (
         <div ref={typesRef} className="relative -mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by kind of product">
           <div className="flex gap-2 border-b pb-3 sm:flex-wrap">
@@ -344,7 +360,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
       ) : results.length ? (
         <ul>
           {visible.map((row) => (
-            <ViewTransition key={row.id} name={`warning-${row.id}`} default="none" share="warning-row" update="warning-row" enter="warning-enter" exit="warning-exit">
+            <ViewTransition key={row.id} name={`warning-${Array.from(new TextEncoder().encode(row.id), value => value.toString(16).padStart(2,"0")).join("")}`} default="none" share="warning-row" update="warning-row" enter="warning-enter" exit="warning-exit">
               <WarningRow row={row} query={q} returnTo={returnTo} />
             </ViewTransition>
           ))}
@@ -368,15 +384,18 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1 }
         </div>
       )}
 
-      {results.length > visible.length ? (
+      {indexed.notice ? <p role="status" className="mt-3 text-sm text-muted-foreground">{indexed.notice}</p> : null}
+      {indexed.error ? <p role="alert" className="mt-4 text-sm">{indexed.error} <button type="button" onClick={indexed.retry} className="min-h-10 underline">Retry</button></p> : null}
+      {indexed.loading ? <p role="status" className="mt-3 text-sm text-muted-foreground">Updating recalls…</p> : null}
+      {total > visible.length ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {results.length.toLocaleString("en-GB")}</p>
+          <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
           <a
             href={filterUrl(path, region, filters, Math.floor(limit / STEP) + 1)}
-            onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); startTransition(() => setLimit((current) => current + STEP)); }}
+            onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); if (indexed.loading) return; startTransition(() => setLimit((current) => current + STEP)); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            Show {Math.min(STEP, results.length - visible.length)} more<ArrowRight className="size-4 rotate-90" aria-hidden />
+            Show {Math.min(STEP, total - visible.length)} more<ArrowRight className="size-4 rotate-90" aria-hidden />
           </a>
         </div>
       ) : null}

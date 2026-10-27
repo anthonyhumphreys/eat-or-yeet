@@ -1,5 +1,6 @@
 import type { D1DatabaseSession } from "@cloudflare/workers-types";
 import schema from "./schema";
+import { browseContent, browseStatements } from "./lib/browse_projection";
 import type { Doc, RecordValue, TableNames } from "./model";
 import type { Id } from "./values";
 
@@ -116,6 +117,16 @@ export class Database {
   }
   async commit(expectedRevision: number) {
     if (!this.changes.size && !this.jobs.length) return;
+    const browseWrites = [];
+    for (const row of this.changes.values()) {
+      if (row?.table_name !== "incidentMatchData") continue;
+      const match = decode<"incidentMatchData">(row);
+      const source = await this.get("incidents",match.incidentId);
+      const content = browseContent(match,source?.originalSourceData);
+      // Keep generic matching-row edits and their search projection consistent.
+      row.payload = JSON.stringify({...JSON.parse(row.payload),...content});
+      browseWrites.push(...browseStatements(this.sql,match,content));
+    }
     const token = crypto.randomUUID();
     const statements = [
       this.sql.prepare("UPDATE transaction_state SET revision = revision + 1, token = ? WHERE id = 1 AND revision = ?").bind(token, expectedRevision),
@@ -123,6 +134,7 @@ export class Database {
       ...Array.from(this.changes, ([id, row]) => row
         ? this.sql.prepare("INSERT INTO records(id, table_name, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload").bind(row.id, row.table_name, row.payload, row.created_at)
         : this.sql.prepare("DELETE FROM records WHERE id = ?").bind(id)),
+      ...browseWrites,
       ...this.jobs.map((job) => this.sql.prepare("INSERT INTO job_outbox(id, operation, args, due_at) VALUES (?, ?, ?, ?)").bind(job.id, job.operation, JSON.stringify(job.args), job.due)),
     ];
     // D1 batches roll back every statement on failure. The CHECK assertion

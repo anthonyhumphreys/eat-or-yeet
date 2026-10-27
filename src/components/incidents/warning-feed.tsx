@@ -5,6 +5,7 @@ import { RecallLink } from "./recall-link";
 import { browseReturnUrl } from "@/lib/incidents/browse-navigation";
 import { WarningExplorer, type ExplorerRow } from "@/components/incidents/warning-explorer";
 import { RegionalNews } from "@/components/news/regional-news";
+import { getInitialBrowse } from "@/db/browse";
 import { listActivePublicIncidents } from "@/db/queries";
 import { isSuperCategory, productCategories, type ProductCategory } from "@/lib/incidents/browse";
 import { warningSearchText } from "@/lib/incidents/warning-search";
@@ -24,9 +25,23 @@ function param(params: WarningParams, key: string) {
 }
 
 export async function WarningFeed({ params, region, path }: { params: WarningParams; region: WarningRegion; path: "/" | "/incidents" }) {
-  const [warnings] = await Promise.allSettled([listActivePublicIncidents(region)]);
-  const regional = warnings.status === "fulfilled" ? warnings.value.filter((row) => row.region === region) : null;
-  const rows: ExplorerRow[] | null = regional
+  const category = param(params, "category");
+  const type = param(params, "type");
+  const hazard = param(params, "hazard");
+  const page = param(params, "page");
+  const initialPage = page && /^\d{1,3}$/.test(page) ? Math.max(1,Number(page)) : 1;
+  const initial = {
+    q:(param(params,"q") ?? "").slice(0,120),
+    hazard:hazardKinds.includes(hazard as HazardKind)?hazard as HazardKind:undefined,
+    type:isSuperCategory(type)?type:undefined,
+    category:productCategories.includes(category as ProductCategory)?category as ProductCategory:undefined,
+    store:param(params,"store")?.slice(0,120) || undefined,
+  };
+  // Older Workers and incomplete index rebuilds retain the complete legacy browse path during rollout.
+  const indexed = await getInitialBrowse(region,initial,initialPage).catch(()=>null);
+  const [warnings] = indexed ? [] : await Promise.allSettled([listActivePublicIncidents(region)]);
+  const regional = warnings?.status === "fulfilled" ? warnings.value.filter((row) => row.region === region) : null;
+  const rows: ExplorerRow[] | null = indexed?.rows ?? (regional
     ? regional.map((row) => ({
       id: row.id,
       slug: row.slug,
@@ -38,13 +53,9 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
       hazard: row.browseHazard ?? classifyHazard(row),
       searchText: warningSearchText({ ...row, hazard: row.browseHazard ?? classifyHazard(row), hazardText: row.hazard }),
     }))
-    : null;
+    : null);
   // Drug enforcement reports cannot establish a current alert.
-  const top = rows ? pickTopAlert(rows.filter((row) => row.superCategories.includes("Food"))) : undefined;
-  const category = param(params, "category");
-  const type = param(params, "type");
-  const hazard = param(params, "hazard");
-  const page = param(params, "page");
+  const top = indexed ? indexed.top : (rows ? pickTopAlert(rows.filter((row) => row.superCategories.includes("Food"))) : undefined);
   const browseParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (typeof value === "string") browseParams.set(key, value);
   browseParams.set("region", region);
@@ -53,7 +64,7 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
       <div className="min-w-0">
-        {top ? <TopAlert row={top} returnTo={returnTo} summary={regional?.find((row) => row.id === top.id)?.summary} /> : null}
+        {top ? <TopAlert row={top} returnTo={returnTo} summary={indexed?.top?.summary ?? regional?.find((row) => row.id === top.id)?.summary} /> : null}
         <Suspense key={region} fallback={null}>
           <NewsButton region={region} />
         </Suspense>
@@ -62,14 +73,9 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
             rows={rows}
             region={region}
             path={path}
-            initialPage={page && /^\d{1,3}$/.test(page) ? Math.max(1, Number(page)) : 1}
-            initial={{
-              q: (param(params, "q") ?? "").slice(0, 120),
-              hazard: hazardKinds.includes(hazard as HazardKind) ? hazard as HazardKind : undefined,
-              type: isSuperCategory(type) ? type : undefined,
-              category: productCategories.includes(category as ProductCategory) ? category as ProductCategory : undefined,
-              store: param(params, "store")?.slice(0, 120) || undefined,
-            }}
+            initialPage={initialPage}
+            initial={initial}
+            serverPage={indexed ?? undefined}
           />
         </div>
       </div>

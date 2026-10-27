@@ -57,7 +57,7 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-For deterministic browse-navigation checks without a configured backend or external feeds, run `pnpm test:e2e:fixtures`. This starts isolated local fixture servers on ports 9160 and 9161.
+For deterministic browse-navigation checks without a configured backend or external feeds, run `pnpm test:e2e:fixtures`. This starts isolated local fixture servers on ports 9160 and 9161. After `pnpm build`, use `PLAYWRIGHT_PRODUCTION=1 pnpm test:e2e:fixtures` to run the same checks against the production build.
 
 Playwright uses `pnpm dev:web` to start only Next.js unless an existing server is available. Start `pnpm dev` first for browser checks against your local backend. Some check/share responses are mocked; server-rendered warning pages still use your configured backend, and news can use the network. Keep the full development stack running. Browser tests do not verify live ingestion or physical camera hardware. Run `pnpm audit --prod` when changing dependencies. Documentation-only changes need link and command review.
 

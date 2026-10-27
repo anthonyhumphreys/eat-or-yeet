@@ -41,7 +41,9 @@ Browsing current warnings is the main public flow; checking a pack is optional. 
 
 ## State, transactions and jobs
 
-D1 retains opaque record IDs and creation timestamps from the legacy backend. JSON records are validated through the domain schema, with SQLite expression indexes for declared queries. Public reads use compact warning projections rather than original source payloads.
+D1 retains opaque record IDs and creation timestamps from the legacy backend. JSON records are validated through the domain schema, with SQLite expression indexes for declared queries. Public reads use compact warning projections rather than original source payloads. Public browsing uses a separate D1 projection, a regional ordering index, facet indexes and an FTS5 trigram index for the existing normalized substring search. Matching-row writes and derived index changes commit in the same guarded batch. Unchanged imports still skip writes. Trigger-maintained dirty markers prevent using an index changed by an older writer until it is rebuilt.
+
+The website normally loads 40 browse rows with complete result/facet counts. Further pages use a first-party read endpoint with revision-bound, ten-minute cursors and eligibility-boundary checks. Filter requests are cancelled when superseded; a changed revision restarts the list visibly. Cache keys include backend URL, region, filters, cursor and dataset revision, with a one-minute TTL and explicit time-boundary checks. Food checks and MCP retain their existing source-health and food-only search contracts. During a backend rollout or index rebuild, the website can use the complete legacy regional-list path.
 
 Queries bracket reads with a database revision. Mutations stage record changes and scheduled jobs, then commit one guarded D1 batch. A changed revision causes a retry. The global revision and single Queue consumer trade write throughput for simple consistency at the current workload.
 

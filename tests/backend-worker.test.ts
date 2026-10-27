@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { migrationStatements } from "./migration-statements";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -18,11 +18,23 @@ beforeAll(async () => {
     bindings: { BACKEND_SECRET: secret, BACKEND_ADMIN_TOKEN: admin, FSIS_UPLOAD_TOKEN: "uploader-only", FDA_UPLOAD_TOKEN: "fda-uploader-only", ALLOW_DEMO_DATA: "true", BACKEND_RESTORE_ENABLED: "false", SCHEDULED_SOURCE_REFRESH: "false", PRODUCT_CATEGORY_LOOKUPS: "false", FSIS_FETCH_MODE: "snapshot", FDA_ANNOUNCEMENTS_FETCH_MODE: "snapshot" },
   });
   const db = await mf.getD1Database("DB");
-  for (const statement of readFileSync("backend/migrations/0001_backend.sql", "utf8").split(";")) if (statement.trim()) await db.prepare(statement).run();
+  for (const statement of migrationStatements()) if (statement.trim()) await db.prepare(statement).run();
 }, 30_000);
 afterAll(async () => { await mf?.dispose(); });
 
 describe("Cloudflare Worker with native D1 and R2", () => {
+  it("maintains and queries the trigram browse index through native D1", async () => {
+    await rpc("seed.demo", { secret }, admin, "/admin/rpc");
+    const response = await rpc("incidents.getBySlug", { slug: "demo-northstar-peanut-bites", includeDemo: true });
+    const { result } = await response.json() as {result:Record<string,unknown>};
+    const { _id, _creationTime, superCategories: _categories, ...record } = result; void _id; void _creationTime; void _categories;
+    expect((await rpc("incidents.upsertBatch",{items:[{...record,originalSourceData:{},retrievedAt:Date.now(),isDemo:false,slug:"native-browse-fixture",sourceId:"native-browse-fixture"}]},admin,"/admin/rpc")).status).toBe(200);
+    const page = await rpc("browse.list",{region:"UK",filters:{q:"northstar"}});
+    expect(page.status).toBe(200);
+    expect(await page.json()).toMatchObject({result:{total:1,rows:[{slug:"native-browse-fixture"}]}});
+    await rpc("incidents.upsertBatch",{items:[{...record,originalSourceData:{},retrievedAt:Date.now(),isDemo:false,status:"resolved",slug:"native-browse-fixture",sourceId:"native-browse-fixture"}]},admin,"/admin/rpc");
+  });
+
   it("restricts operator operations and rejects undeclared or prototype operation names", async () => {
     expect((await rpc("incidents.getDatasetVersion", {}, "wrong")).status).toBe(401);
     expect((await rpc("seed.demo", { secret })).status).toBe(403);

@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 const listUrl = "/?region=UK&q=fixture&hazard=allergen&store=Waitrose&page=3";
 const rows = (page: import("@playwright/test").Page) => page.locator("#warnings [data-recall-slug]");
 
-test.beforeEach(async ({ context, baseURL }) => {
+test.beforeEach(async ({ context, baseURL, page }) => {
+  page.on("pageerror", error => { throw error; });
   await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
 });
 
@@ -44,4 +45,12 @@ test("direct recalls reject external return targets and keep canonical sharing",
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/incidents\/fixture-0$/);
   await page.goto(listUrl);
   await expect(rows(page).first()).toHaveAttribute("href", /returnTo=/);
+});
+
+
+test("clamps an expanded list when fewer results remain",async({page})=>{
+  await page.goto("/?region=UK&q=fixture&page=999");
+  await expect(rows(page)).toHaveCount(130);
+  await expect(page).toHaveURL(/page=4/);
+  await expect(page.getByRole("link",{name:/Show .* more/})).toHaveCount(0);
 });

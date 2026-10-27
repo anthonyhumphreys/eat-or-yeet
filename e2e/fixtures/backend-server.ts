@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { BackendError } from "../../backend/values";
 import { createBackend } from "../../tests/backend-harness";
 
 const backend = createBackend();
@@ -26,5 +27,5 @@ createServer(async (request, response) => {
     const result = await backend.query({ name: operation }, args);
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ result }));
-  } catch { response.writeHead(500); response.end(JSON.stringify({ error: "Fixture operation failed" })); }
+  } catch (error) { response.writeHead(error instanceof BackendError ? 409 : 500); response.end(JSON.stringify({ error: error instanceof BackendError ? error.data : "Fixture operation failed" })); }
 }).listen(9161, "127.0.0.1");
