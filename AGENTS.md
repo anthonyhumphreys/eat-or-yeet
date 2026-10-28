@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Marketing video (`video/`)
 
-A standalone Remotion package pinned to 4.0.537. The root tsconfig and ESLint ignore it. Install with `pnpm install --ignore-workspace` inside `video/`.
+A standalone Remotion package pinned to 4.0.539. The root tsconfig and ESLint ignore it. Install with `pnpm install --ignore-workspace` inside `video/`.
 
 - `pnpm capture` saves production screenshots, live food recall counts and real list rows to `video/public/`.
 - `pnpm render` writes `out/sizzle.mp4` and `out/sizzle.gif`.

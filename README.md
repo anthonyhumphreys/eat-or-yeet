@@ -97,10 +97,15 @@ pnpm typecheck
 pnpm test
 pnpm test:e2e
 pnpm build
-pnpm audit --prod
+pnpm audit
+pnpm --dir video --ignore-workspace audit
+npm --prefix integrations/notion audit
+npm --prefix deploy/fsis-sync audit
 ```
 
 Browser tests use deterministic fixtures. Importer tests cover pagination and parsing separately. Passing tests does not verify live production imports, every physical phone or spend controls.
+
+The root workspace contains the web app only; video and the standalone services install independently. Video overrides Remotion's Zod 4 pin to patched 4.6.7; the CLI still warns that it expects 4.5.4, so check types and a sample render after updates. ESLint stays on 9 until Next's React, import and accessibility plugins declare ESLint 10 support.
 
 ## Deployment
 
