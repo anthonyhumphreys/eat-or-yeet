@@ -248,7 +248,10 @@ async function fetchRecallByNumber(endpoint: EnforcementEndpoint, recallNumber: 
     return await fetchRecallByNumberDirect(endpoint, recallNumber);
   } catch (error) {
     if (!endpoint.lookupFallback) throw error;
-    const incident = parseEnforcementRecord(await endpoint.lookupFallback(recallNumber), endpoint);
+    const record = await endpoint.lookupFallback(recallNumber);
+    let incident: NormalisedIncident;
+    try { incident = parseEnforcementRecord(record, endpoint); }
+    catch { throw new Error("FDA fallback lookup returned an invalid recall record"); }
     if (incident.sourceId !== recallNumber) throw new Error("FDA fallback lookup returned a different recall");
     return incident;
   }

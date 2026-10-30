@@ -95,6 +95,7 @@ describe("API-first FDA enforcement imports", () => {
     directFeed(new Response("Blocked", { status: 401 }));
     await expect(createFdaSource(async () => { throw new Error("Budget exhausted"); }).fetchIncidents([number])).rejects.toThrow("Budget exhausted");
     await expect(createFdaSource(async () => ({ ...record, recall_number: "F-OTHER" })).fetchIncidents([number])).rejects.toThrow("different recall");
+    await expect(createFdaSource(async () => ({ ...record, report_date: key })).fetchIncidents([number])).rejects.toThrow("FDA fallback lookup returned an invalid recall record");
   });
 });
 
