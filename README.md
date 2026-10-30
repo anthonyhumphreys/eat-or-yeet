@@ -59,7 +59,7 @@ All backend credentials stay server-side. The frontend build no longer deploys b
 
 ## Coverage and operations
 
-Firecrawl is available as an explicit, default-off pilot for fetching FDA announcement detail pages. Provider APIs and FDA's complete listing retain their current transport. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md) before enabling it; the external importer remains required.
+Firecrawl is available as an explicit, default-off Cloudflare integration for FDA announcement detail pages. Its key lives in the Worker. The external importer can upload only FDA's complete listing, then Cloudflare Queue jobs fetch the pages and prepare the import. Provider APIs retain their current transport. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md).
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 

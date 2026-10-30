@@ -8,11 +8,13 @@ import { serialiseSourceIncident } from "../src/lib/incidents/serialise";
 const secret = "worker-test-server-secret";
 const admin = "worker-test-admin-secret";
 let mf: Miniflare;
+let workerScript: string;
 async function rpc(operation: string, args: unknown, token = secret, path = "/rpc") {
   return mf.dispatchFetch(`https://backend.test${path}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ operation, args }) });
 }
 beforeAll(async () => {
   const bundle = await build({ entryPoints: ["backend/worker.ts"], bundle: true, write: false, format: "esm", platform: "neutral", target: "es2022", external: ["node:*"], conditions: ["workerd", "worker", "browser"], tsconfig: "tsconfig.json" });
+  workerScript = bundle.outputFiles[0].text;
   mf = new Miniflare({ name: "backend-test", serviceBindings: { SELF: "backend-test" }, modules: true, script: bundle.outputFiles[0].text, compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"],
     d1Databases: { DB: "worker-test-db" }, r2Buckets: ["SNAPSHOTS"], queueProducers: { JOBS: "worker-test-jobs" }, queueConsumers: { "worker-test-jobs": { maxBatchSize: 1, maxBatchTimeout: 0 } },
     bindings: { BACKEND_SECRET: secret, BACKEND_ADMIN_TOKEN: admin, FSIS_UPLOAD_TOKEN: "uploader-only", FDA_UPLOAD_TOKEN: "fda-uploader-only", ALLOW_DEMO_DATA: "true", BACKEND_RESTORE_ENABLED: "false", SCHEDULED_SOURCE_REFRESH: "false", PRODUCT_CATEGORY_LOOKUPS: "false", FSIS_FETCH_MODE: "snapshot", FDA_ANNOUNCEMENTS_FETCH_MODE: "snapshot" },
@@ -23,6 +25,17 @@ beforeAll(async () => {
 afterAll(async () => { await mf?.dispose(); });
 
 describe("Cloudflare Worker with native D1 and R2", () => {
+  it("rejects full NAS FDA uploads after cloud cutover and protects the listing endpoint", async () => {
+    expect((await mf.dispatchFetch("https://backend.test/admin/fda-announcement-listings", { method: "POST", headers: { Authorization: `Bearer ${secret}` }, body: "{}" })).status).toBe(401);
+    const cloud = new Miniflare({ modules: true, script: workerScript, compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"],
+      bindings: { FDA_UPLOAD_TOKEN: "fda-uploader-only", FDA_ANNOUNCEMENTS_FETCH_MODE: "firecrawl" } });
+    try {
+      const response = await cloud.dispatchFetch("https://backend.test/admin/fda-announcements", { method: "POST",
+        headers: { Authorization: "Bearer fda-uploader-only", "Content-Type": "application/json" }, body: JSON.stringify({ fetchedAt: Date.now(), payload: [] }) });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "FDA announcement imports are owned by the Cloudflare Worker" });
+    } finally { await cloud.dispose(); }
+  });
   it("reconciles USDA URL changes through snapshot upload, D1 and durable batches", async () => {
     const record = {
       field_title: "Example Foods Recalls Beef Stew", field_recall_number: "001-2026", field_recall_number_export: "001-2026",

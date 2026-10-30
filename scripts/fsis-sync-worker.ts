@@ -22,9 +22,6 @@ async function main() {
     const key = (await readFile(process.env.FDA_UPLOAD_TOKEN_FILE ?? "/run/secrets/fda_upload_token", "utf8")).trim();
     if (!/^[a-f0-9]{64}$/.test(key)) throw new Error("Mount a valid FDA upload token before starting the announcement sync");
     env.FDA_UPLOAD_TOKEN = key;
-    if (env.FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE === "firecrawl" && env.FIRECRAWL_API_KEY_FILE) {
-      env.FIRECRAWL_API_KEY = (await readFile(env.FIRECRAWL_API_KEY_FILE, "utf8")).trim();
-    }
   }
   const controller = new AbortController();
   const stop = () => controller.abort();

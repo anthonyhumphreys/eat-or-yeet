@@ -5,7 +5,8 @@ import { browseContent } from "./lib/browse_projection";
 import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
 
-import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
+import { fdaAnnouncementsSource, fetchFdaAnnouncementDetail } from "../src/lib/incidents/fda-announcements";
+import { fdaListingSnapshotSchema, readFdaListingSnapshot } from "../src/lib/incidents/fda-listing-snapshot";
 import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
@@ -732,10 +733,88 @@ export const refreshSourceInternal = internalAction({
   handler: async (ctx, { sourceId }): Promise<ImportResult | { source: string; status: "external" }> => {
     // An external fetch keeps USDA's hosted-IP block out of the daily cron.
     // Missing external updates still expire through the normal health gate.
-    if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot")) return { source: sourceId, status: "external" };
+    if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && ["snapshot", "firecrawl"].includes(process.env.FDA_ANNOUNCEMENTS_FETCH_MODE ?? ""))) return { source: sourceId, status: "external" };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) throw new Error(`Unknown incident source: ${sourceId}`);
     return await ingestSource(ctx, source);
+  },
+});
+
+function fdaFirecrawlPrefix(runId: Id<"ingestionRuns">) { return `source-imports/${runId}/firecrawl`; }
+
+async function prepareFdaFirecrawlImport(ctx: ActionCtx, loadListings: () => ReturnType<typeof readFdaListingSnapshot>): Promise<ImportResult> {
+  const source = fdaAnnouncementsSource;
+  const runId = await ctx.runMutation(internal.incidents.beginRun, { source: source.id, sourceName: source.name, region: source.region, scope: source.scope });
+  try {
+    if (!process.env.FIRECRAWL_API_KEY?.trim()) throw new Error("Provision FIRECRAWL_API_KEY on the Cloudflare Worker before enabling FDA Firecrawl imports");
+    const listings = await loadListings();
+    await ctx.storage.put(`${fdaFirecrawlPrefix(runId)}/listing.json`, JSON.stringify(listings));
+    await ctx.scheduler.runAfter(0, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+    return { source: source.id, runId, found: listings.length, created: 0, updated: 0, status: "queued", errors: [] };
+  } catch (error) {
+    const errors = [error instanceof Error ? error.message : "FDA listing retrieval failed"];
+    await ctx.runMutation(internal.incidents.finishRun, { runId, status: "failed", incidentsFound: 0, created: 0, updated: 0, errors });
+    return { source: source.id, runId, found: 0, created: 0, updated: 0, status: "failed", errors };
+  }
+}
+
+// Fetch 25 pages per durable job, at most five concurrently. Prepared batches
+// are reusable on delivery retries and are not published until every page passes.
+export const fetchFdaFirecrawlBatch = internalAction({
+  args: { runId: v.id("ingestionRuns"), index: v.number().int().nonnegative() },
+  handler: async (ctx, { runId, index }) => {
+    const run: Doc<"ingestionRuns"> | null = await ctx.runQuery(internal.incidents.getImportWork, { runId });
+    if (!run || run.source !== "fda-announcements" || run.status !== "running" || run.pipeline) return;
+    const prefix = fdaFirecrawlPrefix(runId);
+    let found = 0;
+    try {
+      if (!process.env.FIRECRAWL_API_KEY?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
+      const manifest = await ctx.storage.get(`${prefix}/listing.json`);
+      if (!manifest) throw new Error("FDA Firecrawl listing snapshot is missing");
+      const listings = fdaListingSnapshotSchema.parse(await readResponseJson(new Response(manifest), 20 * 1024 * 1024));
+      found = listings.length;
+      const batches = Math.ceil(found / UPSERT_BATCH_SIZE);
+      if (index >= batches) throw new Error("FDA Firecrawl batch index exceeds the listing");
+      const key = `${prefix}/${index}.json`;
+      const prepared = await ctx.storage.get(key);
+      const expectedCount = Math.min(UPSERT_BATCH_SIZE, found - index * UPSERT_BATCH_SIZE);
+      if (prepared) {
+        const saved = v.array(schema.incidents.validator).length(expectedCount).parse(await readResponseJson(new Response(prepared), 20 * 1024 * 1024));
+        if (saved.some(item => item.sourceKey !== run.source || item.sourceRunId !== runId)) throw new Error("FDA Firecrawl batch belongs to another import");
+      } else {
+        const selected = listings.slice(index * UPSERT_BATCH_SIZE, (index + 1) * UPSERT_BATCH_SIZE);
+        const items: ImportItem[] = [];
+        for (let offset = 0; offset < selected.length; offset += 5) {
+          const details = await Promise.allSettled(selected.slice(offset, offset + 5).map(item => fetchFdaAnnouncementDetail(
+            { ...item, publishedAt: new Date(item.publishedAt) }, { mode: "firecrawl", apiKey: process.env.FIRECRAWL_API_KEY },
+          )));
+          for (const detail of details) {
+            if (detail.status === "rejected") throw new Error("FDA Firecrawl detail batch failed; no partial snapshot will be published");
+            items.push(serialiseIncident(detail.value, fdaAnnouncementsSource, runId));
+          }
+        }
+        await ctx.storage.put(key, JSON.stringify(items));
+      }
+      if (index + 1 < batches) {
+        await ctx.scheduler.runAfter(0, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: index + 1 });
+      } else {
+        await ctx.runMutation(internal.incidents.prepareImport, { runId, prefix, batches, found });
+        await ctx.storage.delete(`${prefix}/listing.json`);
+      }
+    } catch (error) {
+      await ctx.runMutation(internal.incidents.finishRun, { runId, status: "failed", incidentsFound: found, created: 0, updated: 0,
+        errors: [error instanceof Error ? error.message : "FDA Firecrawl retrieval failed"] });
+    }
+  },
+});
+
+export const importFdaListingSnapshotInternal = internalAction({
+  args: { storageId: v.string(), fetchedAt: v.number() },
+  handler: async (ctx, { storageId, fetchedAt }): Promise<ImportResult> => {
+    try {
+      if (process.env.FDA_ANNOUNCEMENTS_FETCH_MODE !== "firecrawl") throw new Error("Cloudflare FDA Firecrawl mode is not enabled");
+      return await prepareFdaFirecrawlImport(ctx, async () => readFdaListingSnapshot(await ctx.storage.get(storageId), fetchedAt));
+    } finally { await ctx.storage.delete(storageId); }
   },
 });
 
@@ -790,7 +869,7 @@ export const queueSourceRefresh = internalMutation({
 });
 
 function scheduledSources() {
-  return sources.filter(source => !(source.id === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") && !(source.id === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot"));
+  return sources.filter(source => !(source.id === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") && !(source.id === "fda-announcements" && ["snapshot", "firecrawl"].includes(process.env.FDA_ANNOUNCEMENTS_FETCH_MODE ?? "")));
 }
 
 export const refreshScheduledInternal = internalAction({

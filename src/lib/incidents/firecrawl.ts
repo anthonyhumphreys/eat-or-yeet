@@ -11,7 +11,7 @@ const scrapeSchema = z.object({
     rawHtml: z.string().trim().min(1).max(MAX_SOURCE_TEXT_BYTES),
     warning: z.string().optional(),
     metadata: z.object({
-      statusCode: z.number().int().min(200).max(299),
+      statusCode: z.literal(200),
       sourceURL: z.string().url(),
       url: z.string().url().optional(),
       error: z.string().optional(),
@@ -27,6 +27,13 @@ function announcementUrl(value: string): URL {
     throw new Error("Firecrawl retrieval requires a canonical FDA announcement URL");
   }
   return url;
+}
+
+function canonicalUrl(html: string): string | undefined {
+  for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
+    const attributes = Object.fromEntries([...tag[0].matchAll(/\b(rel|href)\s*=\s*(["'])(.*?)\2/gi)].map(match => [match[1].toLowerCase(), match[3]]));
+    if (attributes.rel?.toLowerCase().split(/\s+/).includes("canonical")) return attributes.href;
+  }
 }
 
 /** Retrieve source HTML only. The existing FDA parser remains responsible for recall data. */
@@ -50,13 +57,13 @@ export async function fetchFirecrawlFdaHtml(value: string, apiKey: string | unde
       }),
       signal: AbortSignal.timeout(35_000),
       cache: "no-store",
-      redirect: "error",
+      redirect: "manual",
     });
   } catch {
     // Transport errors and vendor response bodies can contain credentials.
     throw new Error("Firecrawl FDA detail request failed; check connectivity and credentials");
   }
-  if (!response.ok) {
+  if (response.status !== 200) {
     await response.body?.cancel();
     throw new Error(`Firecrawl FDA detail request returned HTTP ${response.status}`);
   }
@@ -65,9 +72,12 @@ export async function fetchFirecrawlFdaHtml(value: string, apiKey: string | unde
   try {
     payload = scrapeSchema.parse(await readResponseJson(response, 4 * MAX_SOURCE_TEXT_BYTES));
     const metadata = payload.data.metadata;
+    const canonical = canonicalUrl(payload.data.rawHtml);
     if (payload.warning || payload.data.warning || metadata.error
       || announcementUrl(metadata.sourceURL).href !== url.href
       || (metadata.url && announcementUrl(metadata.url).href !== url.href)
+      || (!metadata.url && !canonical)
+      || (canonical && announcementUrl(canonical).href !== url.href)
       || new TextEncoder().encode(payload.data.rawHtml).byteLength > MAX_SOURCE_TEXT_BYTES) {
       throw new Error("Unverified scrape");
     }

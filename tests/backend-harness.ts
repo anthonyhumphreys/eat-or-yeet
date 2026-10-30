@@ -1,13 +1,13 @@
 import { migrationStatements } from "./migration-statements";
 import { Database, revision } from "../backend/database";
-import { Runtime } from "../backend/runtime";
+import { Runtime, type Storage } from "../backend/runtime";
 import type { MutationCtx } from "../backend/operations";
 import { sqliteD1 } from "./sqlite-d1";
 
-export function createBackend() {
+export function createBackend(storage: Storage = { get: async () => null, put: async () => undefined, delete: async () => undefined }) {
   const sql = sqliteD1();
   const ready = sql.batch(migrationStatements().map(statement => sql.prepare(statement)));
-  const runtime = new Runtime(sql, { get: async () => null, put: async () => undefined, delete: async () => undefined });
+  const runtime = new Runtime(sql, storage);
   const invoke: Runtime["invoke"] = async (ref, args) => { await ready; return runtime.invoke(ref, args); };
   return {
     query: invoke, mutation: invoke, action: invoke,

@@ -7,7 +7,7 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY tsconfig.json ./
 COPY scripts/sync-fsis.ts scripts/fsis-sync-worker.ts ./scripts/
 COPY scripts/lib/fsis-sync.ts scripts/lib/fsis-worker.ts scripts/lib/fda-sync.ts scripts/lib/snapshot-upload.ts scripts/lib/food-source-sync.ts ./scripts/lib/
-COPY src/lib/incidents/fsis.ts src/lib/incidents/fda-announcements.ts src/lib/incidents/firecrawl.ts src/lib/incidents/serialise.ts src/lib/incidents/date-bounds.ts src/lib/incidents/source-text.ts src/lib/incidents/official-source-http.ts ./src/lib/incidents/
+COPY src/lib/incidents/fsis.ts src/lib/incidents/fda-announcements.ts src/lib/incidents/fda-listing-snapshot.ts src/lib/incidents/fsis-snapshot.ts src/lib/incidents/firecrawl.ts src/lib/incidents/serialise.ts src/lib/incidents/date-bounds.ts src/lib/incidents/source-text.ts src/lib/incidents/official-source-http.ts ./src/lib/incidents/
 COPY src/lib/matching/normalise.ts ./src/lib/matching/
 COPY src/lib/domain/gtin.ts ./src/lib/domain/
 COPY src/lib/http/bounded-response.ts ./src/lib/http/

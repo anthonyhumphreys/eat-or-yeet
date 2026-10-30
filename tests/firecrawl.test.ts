@@ -9,7 +9,7 @@ const url = `https://www.fda.gov${path}`;
 const key = "fc-private-test-key";
 const html = '<h2 id="recall-announcement">Company Announcement</h2><p>Fixture recall, lot 123. Consumers should return this product.</p><h2>Contact</h2>';
 const row = ['<time datetime="2026-10-01">October 1</time>', `<a href="${path}">Fixture brand</a>`, "Fixture product", "Food &amp; Beverages", "Undeclared milk", "Fixture company", "", ""];
-const validPayload = () => ({ success: true, data: { rawHtml: html, metadata: { statusCode: 200, sourceURL: url } } });
+const validPayload = () => ({ success: true, data: { rawHtml: html, metadata: { statusCode: 200, sourceURL: url, url } } });
 
 beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -20,7 +20,7 @@ describe("Firecrawl FDA page retrieval", () => {
     await expect(fetchFirecrawlFdaHtml(url, key)).resolves.toBe(html);
     const [endpoint, init] = vi.mocked(fetch).mock.calls[0];
     expect(endpoint).toBe("https://api.firecrawl.dev/v2/scrape");
-    expect(init).toMatchObject({ method: "POST", headers: { Authorization: `Bearer ${key}` }, redirect: "error", cache: "no-store" });
+    expect(init).toMatchObject({ method: "POST", headers: { Authorization: `Bearer ${key}` }, redirect: "manual", cache: "no-store" });
     expect(JSON.parse(init!.body as string)).toEqual({ url, formats: ["rawHtml"], onlyMainContent: false, maxAge: 0, timeout: 30_000, location: { country: "US", languages: ["en-US"] } });
   });
 
@@ -38,7 +38,7 @@ describe("Firecrawl FDA page retrieval", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each([401, 402, 429, 503])("rejects HTTP %s without retrying paid requests or exposing the response", async status => {
+  it.each([206, 302, 401, 402, 429, 503])("rejects HTTP %s without following redirects, retrying paid requests or exposing the response", async status => {
     vi.mocked(fetch).mockResolvedValue(new Response(key, { status }));
     await expect(fetchFirecrawlFdaHtml(url, key)).rejects.toThrow(`HTTP ${status}`);
     expect(fetch).toHaveBeenCalledOnce();
@@ -56,12 +56,22 @@ describe("Firecrawl FDA page retrieval", () => {
     { success: true, data: { ...validPayload().data, rawHtml: "" } },
     { success: true, data: { ...validPayload().data, warning: "Partial response" } },
     { success: true, data: { ...validPayload().data, metadata: { statusCode: 403, sourceURL: url } } },
+    { success: true, data: { ...validPayload().data, metadata: { statusCode: 206, sourceURL: url, url } } },
+    { success: true, data: { ...validPayload().data, metadata: { statusCode: 200, sourceURL: url } } },
     { success: true, data: { ...validPayload().data, metadata: { statusCode: 200, sourceURL: url + "-other" } } },
     { success: true, data: { ...validPayload().data, metadata: { statusCode: 200, sourceURL: url, url: "https://example.com/recall" } } },
     { success: true, data: { ...validPayload().data, metadata: { statusCode: 200, sourceURL: url, error: key } } },
   ])("rejects incomplete, blocked or mismatched scrape responses", async payload => {
     vi.mocked(fetch).mockResolvedValue(Response.json(payload));
     await expect(fetchFirecrawlFdaHtml(url, key)).rejects.toThrow(/^Firecrawl returned an invalid, incomplete or oversized FDA detail response$/);
+  });
+
+  it("requires a matching page canonical URL when the vendor omits its final URL", async () => {
+    const payload = { success: true, data: { rawHtml: `<link href='${url}' rel='canonical'>${html}`, metadata: { statusCode: 200, sourceURL: url } } };
+    vi.mocked(fetch).mockResolvedValue(Response.json(payload));
+    await expect(fetchFirecrawlFdaHtml(url, key)).resolves.toBe(payload.data.rawHtml);
+    vi.mocked(fetch).mockResolvedValue(Response.json({ ...payload, data: { ...payload.data, rawHtml: `<link rel="canonical" href="${url}-wrong">${html}` } }));
+    await expect(fetchFirecrawlFdaHtml(url, key)).rejects.toThrow("invalid");
   });
 
   it("rejects oversized response bodies before parsing", async () => {
@@ -91,7 +101,7 @@ describe("FDA import with optional Firecrawl detail retrieval", () => {
 
   it("uses the complete FDA listings and the existing parser, keeping Firecrawl credentials off FDA requests", async () => {
     mockSource();
-    const source = createFdaAnnouncementsSource({ NODE_ENV: "test", FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE: "firecrawl", FIRECRAWL_API_KEY: key });
+    const source = createFdaAnnouncementsSource({ mode: "firecrawl", apiKey: key });
     const incidents = await source.fetchIncidents();
     expect(incidents).toEqual([parseFdaAnnouncementDetail(parseFdaAnnouncementRows({ data: [row] })[0], html)]);
     const calls = vi.mocked(fetch).mock.calls;
@@ -102,19 +112,21 @@ describe("FDA import with optional Firecrawl detail retrieval", () => {
 
   it("keeps direct retrieval as the default even when a Firecrawl key is configured", async () => {
     mockSource();
-    await createFdaAnnouncementsSource({ NODE_ENV: "test", FIRECRAWL_API_KEY: key }).fetchIncidents();
+    vi.stubEnv("FIRECRAWL_API_KEY", key);
+    vi.stubEnv("FDA_ANNOUNCEMENTS_FETCH_MODE", "firecrawl");
+    await createFdaAnnouncementsSource().fetchIncidents();
     expect(vi.mocked(fetch).mock.calls.some(([address]) => address === url)).toBe(true);
     expect(vi.mocked(fetch).mock.calls.some(([address]) => String(address).includes("firecrawl"))).toBe(false);
   });
 
-  it.each(["firecrawl", "unknown"])("fails invalid %s configuration before reading the source", async mode => {
-    await expect(createFdaAnnouncementsSource({ NODE_ENV: "test", FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE: mode }).fetchIncidents()).rejects.toThrow();
+  it("fails missing Firecrawl credentials before reading the source", async () => {
+    await expect(createFdaAnnouncementsSource({ mode: "firecrawl" }).fetchIncidents()).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it("fails the complete refresh when Firecrawl returns an error page as HTTP 200", async () => {
     mockSource({ ...validPayload(), data: { ...validPayload().data, rawHtml: "<h1>Access denied</h1>" } });
-    await expect(createFdaAnnouncementsSource({ NODE_ENV: "test", FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE: "firecrawl", FIRECRAWL_API_KEY: key }).fetchIncidents()).rejects.toThrow("detail import failed");
+    await expect(createFdaAnnouncementsSource({ mode: "firecrawl", apiKey: key }).fetchIncidents()).rejects.toThrow("detail import failed");
     expect(vi.mocked(fetch).mock.calls.some(([address]) => address === url)).toBe(false);
   });
 
@@ -124,7 +136,7 @@ describe("FDA import with optional Firecrawl detail retrieval", () => {
     vi.mocked(fetch).mockImplementation(async (address, init) => String(address).includes("/datatables/views/ajax")
       ? Response.json({ draw: Number(new URL(String(address)).searchParams.get("draw")), recordsFiltered: 2, recordsTotal: 2, data: [row] })
       : original(address, init));
-    await expect(createFdaAnnouncementsSource({ NODE_ENV: "test", FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE: "firecrawl", FIRECRAWL_API_KEY: key }).fetchIncidents()).rejects.toThrow("incomplete");
+    await expect(createFdaAnnouncementsSource({ mode: "firecrawl", apiKey: key }).fetchIncidents()).rejects.toThrow("incomplete");
     expect(vi.mocked(fetch).mock.calls.some(([address]) => String(address).includes("firecrawl"))).toBe(false);
   });
 });

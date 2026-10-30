@@ -1,6 +1,6 @@
 # NAS USDA and FDA announcement sync
 
-An optional [Firecrawl detail-page pilot](firecrawl.md) can retrieve FDA announcement HTML. It does not replace the FDA listing or USDA API, and the base importer configuration remains unchanged.
+An optional [Cloudflare Firecrawl integration](firecrawl.md) moves FDA detail-page retrieval into the Worker. With `FDA_ANNOUNCEMENTS_UPLOAD_MODE=listings`, this importer uploads only the validated FDA listing; all Firecrawl requests and its key stay in Cloudflare. The default remains the existing full-snapshot mode. USDA API transport is unchanged.
 
 USDA's public FSIS Recall API returns an Akamai 403 from our Convex backend, a Vercel function in `iad1`, standard GitHub Linux/ARM/macOS runners, and a Cloudflare Worker in Amsterdam. Curl and Chrome on GitHub also fail. A fetch from the maintainer's home network succeeds. The exact upstream blocking rule is unknown.
 

@@ -338,13 +338,6 @@ export async function fetchFdaAnnouncementListings(): Promise<AnnouncementListin
 
 type DetailRetrieval = { mode: "direct" | "firecrawl"; apiKey?: string };
 
-function detailRetrieval(env: NodeJS.ProcessEnv): DetailRetrieval {
-  const mode = env.FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE ?? "direct";
-  if (mode !== "direct" && mode !== "firecrawl") throw new Error("FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE must be direct or firecrawl");
-  if (mode === "firecrawl" && !env.FIRECRAWL_API_KEY?.trim()) throw new Error("FIRECRAWL_API_KEY is required for Firecrawl FDA detail retrieval");
-  return { mode, apiKey: env.FIRECRAWL_API_KEY };
-}
-
 export async function fetchFdaAnnouncementDetail(listing: AnnouncementListing, retrieval: DetailRetrieval): Promise<NormalisedIncident> {
   const url = new URL(listing.path, FDA_ORIGIN).toString();
   if (retrieval.mode === "firecrawl") {
@@ -366,7 +359,7 @@ export async function fetchFdaAnnouncementDetail(listing: AnnouncementListing, r
   throw new Error(`FDA announcement import failed for ${url}: ${lastError instanceof Error ? lastError.message : "Invalid announcement"}`);
 }
 
-export function createFdaAnnouncementsSource(env: NodeJS.ProcessEnv = process.env): IncidentSource {
+export function createFdaAnnouncementsSource(retrieval: DetailRetrieval = { mode: "direct" }): IncidentSource {
   return {
     id: "fda-announcements",
     name: "FDA recall announcements",
@@ -375,7 +368,7 @@ export function createFdaAnnouncementsSource(env: NodeJS.ProcessEnv = process.en
     superCategory: "Food",
     scope: "Food, beverage and dietary-supplement notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
     async fetchIncidents() {
-      const retrieval = detailRetrieval(env);
+      if (retrieval.mode === "firecrawl" && !retrieval.apiKey?.trim()) throw new Error("FIRECRAWL_API_KEY is required for Firecrawl FDA detail retrieval");
       const listings = await fetchFdaAnnouncementListings();
       const results: NormalisedIncident[] = [];
       for (let index = 0; index < listings.length; index += DETAIL_CONCURRENCY) {

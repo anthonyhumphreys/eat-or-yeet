@@ -1,5 +1,7 @@
 # Cloudflare backend deployment
 
+For the optional FDA Firecrawl integration, provision `FIRECRAWL_API_KEY` as a Worker secret in the intended environment. Its cloud job and listing-uploader cutover are documented in the [Firecrawl rollout guide](firecrawl.md). The NAS and Vercel do not need this key.
+
 Production has used Cloudflare Workers, D1, Queues and private R2 since 14 October 2026. Next.js stays on Vercel. Wrangler declares separate local, staging and production resources. Both hosted stages are provisioned in `wrangler.jsonc`; confirm the selected account and environment before changing them.
 
 See [architecture](architecture.md) for component boundaries, [ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) for the migration decision and [the cutover record](cloudflare-cutover-2026-10-14.md) for dated production evidence. The provisioning and export instructions below apply to a new stage or an explicitly planned restore, not routine deployments.

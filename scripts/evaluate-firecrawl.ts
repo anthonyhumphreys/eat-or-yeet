@@ -1,7 +1,6 @@
-import { isDeepStrictEqual } from "node:util";
 import nextEnv from "@next/env";
 
-import { fetchFdaAnnouncementDetail, fetchFdaAnnouncementListings } from "../src/lib/incidents/fda-announcements";
+import { evaluateFdaFirecrawl } from "../src/lib/incidents/firecrawl-evaluation";
 
 async function main() {
   nextEnv.loadEnvConfig(process.cwd(), true);
@@ -15,30 +14,9 @@ async function main() {
   if (!apiKey?.trim()) throw new Error("Set FIRECRAWL_API_KEY in the environment or .env.local before evaluating");
 
   // Read only: no backend calls, uploads, source-health updates or production writes.
-  const listings = await fetchFdaAnnouncementListings();
-  if (!listings.length) throw new Error("FDA returned no announcement listings to evaluate");
-  const results = [];
-  for (const listing of listings.slice(0, limit)) {
-    const startedAt = Date.now();
-    const [direct, firecrawl] = await Promise.allSettled([
-      fetchFdaAnnouncementDetail(listing, { mode: "direct" }),
-      fetchFdaAnnouncementDetail(listing, { mode: "firecrawl", apiKey }),
-    ]);
-    const changedFields = direct.status === "fulfilled" && firecrawl.status === "fulfilled"
-      ? Object.keys(direct.value).filter(key => !isDeepStrictEqual(
-        direct.value[key as keyof typeof direct.value], firecrawl.value[key as keyof typeof firecrawl.value],
-      )) : [];
-    results.push({
-      url: `https://www.fda.gov${listing.path}`,
-      direct: direct.status,
-      firecrawl: firecrawl.status,
-      matches: direct.status === "fulfilled" && firecrawl.status === "fulfilled" && !changedFields.length,
-      changedFields,
-      elapsedMs: Date.now() - startedAt,
-    });
-  }
-  console.log(JSON.stringify({ listingCount: listings.length, evaluated: results.length, results }, null, 2));
-  if (results.some(result => !result.matches)) process.exitCode = 1;
+  const report = await evaluateFdaFirecrawl(apiKey, limit);
+  console.log(JSON.stringify(report, null, 2));
+  if (report.results.some(result => !result.matches)) process.exitCode = 1;
 }
 
 main().catch((error: unknown) => {
