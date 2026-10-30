@@ -55,6 +55,8 @@ Source imports use private R2 batches of at most 25 notices. Each committed batc
 
 An optional, default-off Firecrawl path runs entirely in Cloudflare: the external importer uploads FDA's validated listing, then bounded Queue jobs fetch detail pages through Firecrawl and prepare R2 batches before the D1 import. The Firecrawl key is a Worker secret. See the [rollout guide](firecrawl.md); provider API transports are unchanged.
 
+A separate default-off Alexandria fallback can recover a failed numbered FDA food-enforcement lookup after the direct API fails. It preserves the original record and existing parser, reserves five credits atomically in D1, and stops at 100 credits per UTC day. It never replaces bulk enforcement retrieval or turns a budget failure into a successful import.
+
 Workers fetch FSA warnings and openFDA food/drug enforcement records. The NAS fetches USDA FSIS and FDA food/supplement announcements because those sources were unavailable or incomplete from hosted fetches. Both external imports run at startup, daily after success and hourly after failure; combined importer health requires both to succeed. See [source sync](usda-sync.md).
 
 The production Worker schedules source refreshes at 04:17 UTC, temporary-data cleanup at 05:17 UTC, Notion cleanup at 05:23 UTC and product-category lookup hourly at minute 41. Snapshot-mode sources are excluded from hosted refreshes. Staging declares only the minute outbox/recovery cron and disables scheduled source refreshes and category lookups. These schedules come from `wrangler.jsonc` and `backend/jobs.ts`.

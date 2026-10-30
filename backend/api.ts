@@ -80,6 +80,7 @@ export const internal = {
     applyImportBatch: ref<typeof incidents.applyImportBatch>("incidents.applyImportBatch"),
     processImportBatch: ref<typeof incidents.processImportBatch>("incidents.processImportBatch"),
     refreshSourceInternal: ref<typeof incidents.refreshSourceInternal>("incidents.refreshSourceInternal"),
+    reserveFdaAlexandriaLookup: ref<typeof incidents.reserveFdaAlexandriaLookup>("incidents.reserveFdaAlexandriaLookup"),
     fetchFdaFirecrawlBatch: ref<typeof incidents.fetchFdaFirecrawlBatch>("incidents.fetchFdaFirecrawlBatch"),
     importFdaListingSnapshotInternal: ref<typeof incidents.importFdaListingSnapshotInternal>("incidents.importFdaListingSnapshotInternal"),
     importFsisSnapshotInternal: ref<typeof incidents.importFsisSnapshotInternal>("incidents.importFsisSnapshotInternal"),

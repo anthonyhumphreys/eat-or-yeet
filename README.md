@@ -54,12 +54,13 @@ For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `B
 | `ALLOW_DEMO_DATA` | Fictional development incidents only; false in hosted stages |
 | `FSIS_FETCH_MODE` | Worker setting: `snapshot` uses the external USDA fetcher |
 | `FDA_ANNOUNCEMENTS_FETCH_MODE` | Worker setting: `snapshot` uses the external FDA announcement fetcher |
+| `FDA_ALEXANDRIA_FALLBACK` | Worker setting: optional recovery of failed individual FDA food-recall lookups; capped at 100 credits per UTC day |
 
 All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
 ## Coverage and operations
 
-Firecrawl is available as an explicit, default-off Cloudflare integration for FDA announcement detail pages. Its key lives in the Worker. The external importer can upload only FDA's complete listing, then Cloudflare Queue jobs fetch the pages and prepare the import. Provider APIs retain their current transport. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md).
+Firecrawl is available as an explicit, default-off Cloudflare integration for FDA announcement detail pages. Its key lives in the Worker. The external importer can upload only FDA's listing, then Cloudflare Queue jobs fetch the pages and prepare the import. Provider APIs retain their bulk transport; a separate opt-in Alexandria fallback can recover failed individual FDA food-recall lookups within a shared 100-credit daily budget. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md).
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 

@@ -7,7 +7,8 @@ import { BackendError, v } from "./values";
 
 import { fdaAnnouncementsSource, fetchFdaAnnouncementDetail } from "../src/lib/incidents/fda-announcements";
 import { fdaListingSnapshotSchema, readFdaListingSnapshot } from "../src/lib/incidents/fda-listing-snapshot";
-import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
+import { createFdaSource, fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
+import { FDA_ALEXANDRIA_DAILY_CREDITS, FDA_ALEXANDRIA_LOOKUP_CREDITS, fetchAlexandriaFdaRecall } from "../src/lib/incidents/fda-alexandria";
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
@@ -736,7 +737,36 @@ export const refreshSourceInternal = internalAction({
     if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && ["snapshot", "firecrawl"].includes(process.env.FDA_ANNOUNCEMENTS_FETCH_MODE ?? ""))) return { source: sourceId, status: "external" };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) throw new Error(`Unknown incident source: ${sourceId}`);
+    if (source.id === "fda" && process.env.FDA_ALEXANDRIA_FALLBACK === "true") {
+      return await ingestSource(ctx, createFdaSource(async recallNumber => {
+        const key = process.env.FIRECRAWL_API_KEY;
+        if (!key?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
+        const budget = await ctx.runMutation(internal.incidents.reserveFdaAlexandriaLookup, {});
+        if (!budget.allowed) throw new Error("FDA Alexandria daily fallback budget exhausted; recall status could not be verified");
+        return fetchAlexandriaFdaRecall(recallNumber, key);
+      }));
+    }
     return await ingestSource(ctx, source);
+  },
+});
+
+// Reserve before making a paid call. D1 mutations serialize concurrent workers;
+// uncertain/failed calls retain their reservation so retries cannot exceed the cap.
+export const reserveFdaAlexandriaLookup = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const day = Math.floor(Date.now() / 86_400_000) * 86_400_000;
+    const key = `firecrawl:alexandria:fda:${day}`;
+    const existing = await ctx.db.query("rateLimits").withIndex("by_key", q => q.eq("key", key)).unique();
+    const used = existing?.count ?? 0;
+    if (!Number.isSafeInteger(used) || used < 0) throw new Error("FDA Alexandria budget has an invalid count");
+    const allowed = used + FDA_ALEXANDRIA_LOOKUP_CREDITS <= FDA_ALEXANDRIA_DAILY_CREDITS;
+    if (allowed) {
+      if (existing) await ctx.db.patch(existing._id, { count: used + FDA_ALEXANDRIA_LOOKUP_CREDITS });
+      else await ctx.db.insert("rateLimits", { key, subjectHash: "fda-enforcement", action: "firecrawl_alexandria",
+        count: FDA_ALEXANDRIA_LOOKUP_CREDITS, windowStartedAt: day, expiresAt: day + 2 * 86_400_000 });
+    }
+    return { allowed, used: used + (allowed ? FDA_ALEXANDRIA_LOOKUP_CREDITS : 0), limit: FDA_ALEXANDRIA_DAILY_CREDITS, retryAt: day + 86_400_000 };
   },
 });
 

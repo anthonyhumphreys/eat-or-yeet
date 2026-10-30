@@ -32,6 +32,7 @@ export const operations = {
   "incidents.applyImportBatch": incidents.applyImportBatch,
   "incidents.processImportBatch": incidents.processImportBatch,
   "incidents.refreshSourceInternal": incidents.refreshSourceInternal,
+  "incidents.reserveFdaAlexandriaLookup": incidents.reserveFdaAlexandriaLookup,
   "incidents.fetchFdaFirecrawlBatch": incidents.fetchFdaFirecrawlBatch,
   "incidents.importFdaListingSnapshotInternal": incidents.importFdaListingSnapshotInternal,
   "incidents.importFsisSnapshotInternal": incidents.importFsisSnapshotInternal,

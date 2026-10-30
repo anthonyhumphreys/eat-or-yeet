@@ -10,6 +10,7 @@ export interface CloudflareBindings {
 	ALLOW_DEMO_DATA: "false" | "true";
 	BACKEND_RESTORE_ENABLED: "false";
 	FDA_ANNOUNCEMENTS_FETCH_MODE: "snapshot";
+	FDA_ALEXANDRIA_FALLBACK: "false";
 	BACKEND_SECRET: string;
 	BACKEND_ADMIN_TOKEN: string;
 	FSIS_UPLOAD_TOKEN: string;

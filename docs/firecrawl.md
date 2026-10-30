@@ -6,16 +6,16 @@ Firecrawl sponsors Eat or Yeet. The website acknowledges the sponsorship below t
 
 **All hosted Firecrawl requests run in the Cloudflare Worker. Its API key belongs in that Worker's secrets.** The NAS never needs a Firecrawl key and never calls Firecrawl.
 
-Provider APIs remain the primary feeds. FSA, openFDA food/drug enforcement and USDA FSIS retain their existing transport and reconciliation. A live Cloudflare network probe on 30 October 2026 received HTTP 401 from FDA's announcement listing page. The existing working connection therefore still fetches FDA's complete food/supplement listing, checking its reported totals, but can upload the listing alone.
+Provider APIs remain the primary feeds. FSA, openFDA food/drug enforcement and USDA FSIS retain their existing bulk transport and reconciliation. An optional Alexandria fallback can recover individual failed FDA food-enforcement lookups, with a shared daily credit cap. A live Cloudflare network probe on 30 October 2026 received HTTP 401 from FDA's announcement listing page. The existing working connection therefore still fetches FDA's food/supplement listing, checking its reported totals, but can upload the listing alone.
 
 ### API-first source audit
 
-Firecrawl is justified only for useful content unavailable through the source's structured feed. Sponsorship does not change that rule.
+Use public APIs for structured bulk records and Firecrawl for announcement text. Alexandria is a bounded recovery route for a failed individual API lookup, not a second bulk feed. Sponsorship does not require duplicating successful retrievals.
 
 | Source/content | Retrieval | Why |
 | --- | --- | --- |
 | FSA warning records | Existing public API | Structured warning and product data already exists. |
-| FDA food/drug enforcement | Existing openFDA APIs | Product descriptions, code information, classifications and report/status fields are already available. |
+| FDA food/drug enforcement | Existing openFDA APIs | Product descriptions, code information, classifications and report/status fields are already available. Optional Alexandria recovery applies only to failed numbered food-recall lookups. |
 | USDA FSIS archive | Existing official API and working external transport | An IP-access problem does not justify recreating an API with scraping. |
 | FDA announcement listing | Existing structured listing endpoint | Already supplies date, brand, company, product, reason, notice URL and termination label. Do not scrape those fields again. |
 | FDA announcement body | Firecrawl in Cloudflare, existing deterministic parser | Complete announcement text and consumer instructions are outside the listing's fields. This replaces an existing HTML transport, not the provider API or a dataset. |
@@ -25,6 +25,8 @@ Firecrawl is justified only for useful content unavailable through the source's 
 Checked the [openFDA food API](https://open.fda.gov/apis/food/enforcement/), [FDA's announcement XML downloads](https://www.fda.gov/about-fda/open-government-fda-data-sets/recalls-data-sets) and [official RSS feeds](https://www.fda.gov/about-fda/contact-fda/subscribe-podcasts-and-news-feeds) on 30 October 2026. The downloaded 2026 XML contained listing metadata, not full announcement bodies. The two recall RSS feeds each returned 20 items with truncated descriptions. These are useful structured sources, but neither replaces a complete detail-page retrieval. openFDA is updated weekly and is a distinct enforcement dataset; do not infer identical coverage from similar product names.
 
 The HTML parser continues taking the listing's identity/status fields as supplied. It uses page text for announcement paragraphs, consumer instructions and source-confirmed code/date evidence. It does not ask Firecrawl to reconstruct API records. Full daily detail refreshes remain the existing conservative behaviour; skipping unchanged pages would need reliable upstream change signals before it could preserve the same coverage guarantees.
+
+An experiment on 30 October retrieved the original FDA datatable JSON through Firecrawl at one credit per request. However, independent full comparisons returned differing historical notice sets: direct/Firecrawl counts included 827/818, 818/816 and 816/826. Some identical-URL cache-busted comparisons matched, but cache-busting did not establish repeatable full-list parity. The cause is not established; do not remove the listing handoff on the strength of successful HTTP responses or internally consistent totals alone. No experimental cloud-listing transport is enabled or shipped.
 
 The cloud flow is:
 
@@ -47,6 +49,18 @@ pnpm exec wrangler secret put FIRECRAWL_API_KEY --env production
 ```
 
 Each command prompts for the value. The dashboard equivalent is Workers & Pages → the Worker → Settings → Variables and Secrets → Add → Secret. Production's Worker is `eat-or-yeet-backend`; staging is `eat-or-yeet-backend-staging`. Vercel and the NAS do not need this key. For local Worker testing, use the ignored `.dev.vars` file; the local comparison script reads `.env.local`.
+
+## Alexandria fallback
+
+Set `FDA_ALEXANDRIA_FALLBACK=true` in the intended Worker's `wrangler.jsonc` environment after provisioning its Firecrawl secret. The committed default is `false`, independently of announcement retrieval mode.
+
+Bulk food/drug queries and unnumbered event reconciliation always call openFDA directly. Only a numbered food-recall lookup that fails direct retrieval or validation can call `fda-gov/records/food_recalls`, with `record_id` and a limit of two to detect ambiguity. The response must contain exactly one matching original FDA record, matching official source URLs, HTTP 200 upstream status, no truncation or provider error, and the expected five-credit price. The existing FDA parser then validates and normalises the record. Successful direct requests never invoke Alexandria, and browsing or pack checks never invoke it.
+
+The shared D1 budget permits at most 20 fallback attempts (100 reserved credits) per UTC day per environment. Reservations happen atomically before paid calls; failed or uncertain requests retain their reservation. There are no automatic paid-request retries. When the cap is exhausted or recovery cannot verify the record, the import fails and the normal ingestion ledger and source-health gate report incomplete coverage. An exhausted budget never means that a warning is resolved. Set the flag back to `false` and redeploy to disable fallback; no schema migration is needed.
+
+Live discovery and execution on 30 October confirmed a ten-record page maximum and five credits per request for both FDA recall capabilities. With 1,104 food and 2,802 drug records marked Ongoing, a full Alexandria replacement would need 111 + 281 requests, or 1,960 credits per refresh before reconciliation. This bulk replacement is deliberately absent.
+
+An authenticated temporary Worker in Cloudflare's LHR region exercised the actual Alexandria helper and FDA parser against recall `F-1170-2024`, returning the expected source identity and code information. The saved key was transferred into the temporary runtime without displaying it. Native D1 integration tests also cover Worker flag wiring, concurrent reservations, UTC reset, budget exhaustion and retention of existing warnings after failure. No production data or configuration changed.
 
 ## Evaluate and cut over explicitly
 
@@ -77,9 +91,17 @@ For production cutover, let an in-progress legacy FDA import finish, pause its F
 
 To roll back, pause FDA listing uploads, let existing cloud jobs finish or fail, restore the Worker's mode to `snapshot`, redeploy, then recreate the importer with `FDA_ANNOUNCEMENTS_UPLOAD_MODE=full` (the default). The existing uploader credentials remain usable. No database schema migration is required.
 
-## Expected credit use
+## Expected credit use and sponsorship expiry
 
-At the measured 816 detail pages, a complete daily refresh would use about 816 credits per day at Firecrawl's current [1-credit HTML scrape rate](https://docs.firecrawl.dev/billing). A one-off balance of 1,001,250 credits would cover about 1,227 days (3.36 years), or about 2.8 years with 20% overhead for growth, repeat runs and tests. This assumes no expiry, no other Firecrawl usage and unchanged pricing. Sponsorship-specific expiry or replenishment has not been verified. The default-off configuration consumes no scheduled Firecrawl credits.
+The account's [Usage → View all balances](https://www.firecrawl.dev/app/t/TjAzYP5DmjY/usage) showed on 30 October 2026:
+
+- 1,000,000 one-time sponsored credits, expiring **30 October 2027**, with no refresh.
+- A separate 1,000-credit free allowance, refreshing on 28 November 2026.
+- A further 250 one-time credits with no displayed expiry.
+
+The practical sponsored runway is therefore **12 months**, regardless of the balance's theoretical multi-year usage runway. The sidebar reset date applies to the free allowance, not a monthly replenishment of the million credits.
+
+At the observed 816–827 detail pages, a complete daily refresh would use about 24,480–24,810 credits per 30 days at the current [1-credit HTML scrape rate](https://docs.firecrawl.dev/billing). Even using the full 100-credit Alexandria cap every day adds only 3,000 credits per 30 days. That is roughly 335,000–340,000 credits over a year, or about 400,000 with 20% headroom. Actual spend depends on listing size, repeat runs and how often direct lookups fail. The committed default-off configuration consumes no scheduled Firecrawl credits.
 
 ## Government Index
 

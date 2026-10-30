@@ -17,6 +17,7 @@ type EnforcementEndpoint = {
   consumerAdvice: string;
   historicalReports?: boolean;
   extraTargets?: (record: z.infer<typeof recordSchema>) => NormalisedTarget[];
+  lookupFallback?: (recallNumber: string) => Promise<unknown>;
 };
 
 const recordSchema = z.object({
@@ -243,6 +244,17 @@ async function fetchAllWithStatus(endpoint: EnforcementEndpoint, status: string)
 }
 
 async function fetchRecallByNumber(endpoint: EnforcementEndpoint, recallNumber: string): Promise<NormalisedIncident> {
+  try {
+    return await fetchRecallByNumberDirect(endpoint, recallNumber);
+  } catch (error) {
+    if (!endpoint.lookupFallback) throw error;
+    const incident = parseEnforcementRecord(await endpoint.lookupFallback(recallNumber), endpoint);
+    if (incident.sourceId !== recallNumber) throw new Error("FDA fallback lookup returned a different recall");
+    return incident;
+  }
+}
+
+async function fetchRecallByNumberDirect(endpoint: EnforcementEndpoint, recallNumber: string): Promise<NormalisedIncident> {
   const url = new URL(endpoint.api);
   url.searchParams.set("search", `recall_number:\"${recallNumber}\"`);
   url.searchParams.set("limit", "2");
@@ -428,15 +440,21 @@ const drugEndpoint: EnforcementEndpoint = {
   extraTargets: drugTargets,
 };
 
-export const fdaSource: IncidentSource = {
-  id: "fda",
-  name: "U.S. Food and Drug Administration",
-  url: FDA_API,
-  region: "US",
-  superCategory: "Food",
-  scope: "All openFDA Food Enforcement Reports with status Ongoing, plus status checks for previously active recalls. Missing unnumbered reports remain active with an unverified-current-status notice until FDA confirms a closure.",
-  fetchIncidents: (existingSourceIds = [], trackedNotices = []) => fetchEnforcementIncidents(foodEndpoint, existingSourceIds, trackedNotices),
-};
+/** Bulk queries and event reconciliation always use the official API. */
+export function createFdaSource(lookupFallback?: (recallNumber: string) => Promise<unknown>): IncidentSource {
+  const endpoint = { ...foodEndpoint, lookupFallback };
+  return {
+    id: "fda",
+    name: "U.S. Food and Drug Administration",
+    url: FDA_API,
+    region: "US",
+    superCategory: "Food",
+    scope: "All openFDA Food Enforcement Reports with status Ongoing, plus status checks for previously active recalls. Missing unnumbered reports remain active with an unverified-current-status notice until FDA confirms a closure.",
+    fetchIncidents: (existingSourceIds = [], trackedNotices = []) => fetchEnforcementIncidents(endpoint, existingSourceIds, trackedNotices),
+  };
+}
+
+export const fdaSource = createFdaSource();
 
 export const fdaDrugSource: IncidentSource = {
   id: "fda-drugs",
