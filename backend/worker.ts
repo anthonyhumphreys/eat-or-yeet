@@ -22,7 +22,8 @@ const worker = {
     }
     const nested = url.pathname === "/internal/rpc";
     const admin = nested || url.pathname.startsWith("/admin/");
-    const snapshotSource = url.pathname === "/admin/fsis" ? "fsis" : url.pathname === "/admin/fda-announcements" ? "fda-announcements" : null;
+    const fdaListingUpload = url.pathname === "/admin/fda-announcement-listings";
+    const snapshotSource = url.pathname === "/admin/fsis" ? "fsis" : url.pathname === "/admin/fda-announcements" || fdaListingUpload ? "fda-announcements" : null;
     const secret = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
     const credential = snapshotSource === "fsis" ? env.FSIS_UPLOAD_TOKEN : snapshotSource === "fda-announcements" ? env.FDA_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
     if (!equalSecrets(secret, credential)) return json({ error: "Unauthorized" }, 401);
@@ -36,11 +37,16 @@ const worker = {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       const body = await readResponseJson(new Response(request.body, { headers: request.headers }), admin ? 20 * 1024 * 1024 : 1024 * 1024);
       if (snapshotSource) {
+        const cloudFda = process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "firecrawl";
+        if (fdaListingUpload && !cloudFda) return json({ error: "Cloudflare FDA Firecrawl mode is not enabled" }, 409);
+        if (snapshotSource === "fda-announcements" && !fdaListingUpload && cloudFda) {
+          return json({ error: "FDA announcement imports are owned by the Cloudflare Worker" }, 409);
+        }
         const snapshot = z.strictObject({ fetchedAt: z.number().nonnegative(), payload: z.array(z.unknown()).max(20_000) }).parse(body);
         const key = `${snapshotSource}/${crypto.randomUUID()}.json`;
         await env.SNAPSHOTS.put(key, JSON.stringify(snapshot.payload), { httpMetadata: { contentType: "application/json" } });
         try {
-          const result = await workerRuntime(env).invoke(snapshotSource === "fsis" ? internal.incidents.importFsisSnapshotInternal : internal.incidents.importFdaSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
+          const result = await workerRuntime(env).invoke(snapshotSource === "fsis" ? internal.incidents.importFsisSnapshotInternal : fdaListingUpload ? internal.incidents.importFdaListingSnapshotInternal : internal.incidents.importFdaSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
           ctx.waitUntil(publishDueJobs(env));
           return json({ result }, result.status === "queued" ? 202 : 200);
         } finally { await env.SNAPSHOTS.delete(key); }

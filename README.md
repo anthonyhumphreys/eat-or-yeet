@@ -1,5 +1,7 @@
 # Eat or Yeet
 
+Sponsored by [Firecrawl](https://www.firecrawl.dev/). Thank you for supporting Eat or Yeet.
+
 A mobile-first packaged-food recall checker. Scan a barcode or enter label details, then compare them with official UK and US warnings. The app uses deterministic matching, with no AI or photo uploads. See [ADR 0001](docs/adr/0001-remove-ai.md).
 
 ## Result language
@@ -52,10 +54,13 @@ For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `B
 | `ALLOW_DEMO_DATA` | Fictional development incidents only; false in hosted stages |
 | `FSIS_FETCH_MODE` | Worker setting: `snapshot` uses the external USDA fetcher |
 | `FDA_ANNOUNCEMENTS_FETCH_MODE` | Worker setting: `snapshot` uses the external FDA announcement fetcher |
+| `FDA_ALEXANDRIA_FALLBACK` | Worker setting: optional recovery of failed individual FDA food-recall lookups; capped at 100 credits per UTC day |
 
 All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
 ## Coverage and operations
+
+Firecrawl is available as an explicit, default-off Cloudflare integration for FDA announcement detail pages. Its key lives in the Worker. The external importer can upload only FDA's listing, then Cloudflare Queue jobs fetch the pages and prepare the import. Provider APIs retain their bulk transport; a separate opt-in Alexandria fallback can recover failed individual FDA food-recall lookups within a shared 100-credit daily budget. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md).
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
