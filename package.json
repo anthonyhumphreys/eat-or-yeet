@@ -26,6 +26,7 @@
     "test:mcp": "tsx scripts/mcp-smoke.ts",
     "data:seed": "tsx --env-file=.env.local --env-file-if-exists=.env.development.local scripts/seed.ts",
     "data:sync:fsis": "tsx scripts/sync-fsis.ts",
+    "data:evaluate:firecrawl": "tsx scripts/evaluate-firecrawl.ts",
     "backend:generate": "tsx scripts/generate-backend.ts",
     "backend:types": "tsx scripts/backend-types.ts",
     "backend:dev": "wrangler dev --local",

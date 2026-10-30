@@ -1,5 +1,7 @@
 # NAS USDA and FDA announcement sync
 
+An optional [Firecrawl detail-page pilot](firecrawl.md) can retrieve FDA announcement HTML. It does not replace the FDA listing or USDA API, and the base importer configuration remains unchanged.
+
 USDA's public FSIS Recall API returns an Akamai 403 from our Convex backend, a Vercel function in `iad1`, standard GitHub Linux/ARM/macOS runners, and a Cloudflare Worker in Amsterdam. Curl and Chrome on GitHub also fail. A fetch from the maintainer's home network succeeds. The exact upstream blocking rule is unknown.
 
 The official CDC combined feed is reachable from hosted runners, but currently includes only 22 recent notices. It cannot replace a full check of active USDA recalls and public health alerts. The full API currently contains 1,241 English notices, including 101 active notices.

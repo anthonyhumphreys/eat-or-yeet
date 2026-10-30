@@ -1,5 +1,7 @@
 # Eat or Yeet
 
+Sponsored by [Firecrawl](https://www.firecrawl.dev/). Thank you for supporting Eat or Yeet.
+
 A mobile-first packaged-food recall checker. Scan a barcode or enter label details, then compare them with official UK and US warnings. The app uses deterministic matching, with no AI or photo uploads. See [ADR 0001](docs/adr/0001-remove-ai.md).
 
 ## Result language
@@ -56,6 +58,8 @@ For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `B
 All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
 ## Coverage and operations
+
+Firecrawl is available as an explicit, default-off pilot for fetching FDA announcement detail pages. Provider APIs and FDA's complete listing retain their current transport. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md) before enabling it; the external importer remains required.
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 

@@ -8,6 +8,11 @@ export function SiteFooter() {
         <div>
           <p className="mb-1">Provided by <Link className="underline underline-offset-4" href="/terms">Lexio Apps Ltd</Link>.</p>
           <p>Published warning checks with the source, date, and region shown.</p>
+          <p className="mt-2">
+            Thank you to our sponsor,{" "}
+            <a href="https://www.firecrawl.dev/" target="_blank" rel="sponsored noopener noreferrer" aria-label="Firecrawl, opens in a new tab" className="inline-block rounded-sm py-1 font-semibold underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Firecrawl</a>,
+            {" "}for supporting Eat or Yeet.
+          </p>
           <p className="mt-1">
             Created by{" "}
             <a href="https://twitter.com/Alykkat" target="_blank" rel="noopener noreferrer" aria-label="@Alykkat on Twitter, opens in a new tab" className="inline-block rounded-sm py-1 underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">@Alykkat</a>

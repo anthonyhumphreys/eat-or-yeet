@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { parseDateBounds } from "@/lib/incidents/date-bounds";
 import { fetchOfficialJson, fetchOfficialText } from "@/lib/incidents/official-source-http";
+import { fetchFirecrawlFdaHtml } from "@/lib/incidents/firecrawl";
 import type { IncidentSource, NormalisedIncident, NormalisedTarget } from "@/lib/incidents/types";
 import { isValidGtin, slugify } from "@/lib/matching/normalise";
 import { sourceHtmlParagraphs, sourceHtmlToText } from "@/lib/incidents/source-text";
@@ -31,7 +32,7 @@ const tablePageSchema = z.object({
   data: z.array(z.array(z.string()).min(8)),
 });
 
-type AnnouncementListing = {
+export type AnnouncementListing = {
   path: string;
   publishedAt: Date;
   brand: string;
@@ -323,7 +324,7 @@ async function fetchProductTypeListings(indexHtml: string, productType: string):
   throw new Error(`FDA announcements full listing remained incomplete after ${LISTING_ATTEMPTS} attempts: ${lastError}`);
 }
 
-async function fetchListings(): Promise<AnnouncementListing[]> {
+export async function fetchFdaAnnouncementListings(): Promise<AnnouncementListing[]> {
   const indexHtml = await fetchOfficialText(new URL(INDEX_PATH, FDA_ORIGIN).toString(), {
     sourceName: "FDA announcements",
     headers: FDA_HEADERS,
@@ -335,8 +336,20 @@ async function fetchListings(): Promise<AnnouncementListing[]> {
   return [...new Map(listings.flat().map((listing) => [listing.path, listing])).values()];
 }
 
-async function fetchDetail(listing: AnnouncementListing): Promise<NormalisedIncident> {
+type DetailRetrieval = { mode: "direct" | "firecrawl"; apiKey?: string };
+
+function detailRetrieval(env: NodeJS.ProcessEnv): DetailRetrieval {
+  const mode = env.FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE ?? "direct";
+  if (mode !== "direct" && mode !== "firecrawl") throw new Error("FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE must be direct or firecrawl");
+  if (mode === "firecrawl" && !env.FIRECRAWL_API_KEY?.trim()) throw new Error("FIRECRAWL_API_KEY is required for Firecrawl FDA detail retrieval");
+  return { mode, apiKey: env.FIRECRAWL_API_KEY };
+}
+
+export async function fetchFdaAnnouncementDetail(listing: AnnouncementListing, retrieval: DetailRetrieval): Promise<NormalisedIncident> {
   const url = new URL(listing.path, FDA_ORIGIN).toString();
+  if (retrieval.mode === "firecrawl") {
+    return parseFdaAnnouncementDetail(listing, await fetchFirecrawlFdaHtml(url, retrieval.apiKey));
+  }
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     const requestUrl = new URL(url);
@@ -353,30 +366,35 @@ async function fetchDetail(listing: AnnouncementListing): Promise<NormalisedInci
   throw new Error(`FDA announcement import failed for ${url}: ${lastError instanceof Error ? lastError.message : "Invalid announcement"}`);
 }
 
-export const fdaAnnouncementsSource: IncidentSource = {
-  id: "fda-announcements",
-  name: "FDA recall announcements",
-  url: new URL(INDEX_PATH, FDA_ORIGIN).toString(),
-  region: "US",
-  superCategory: "Food",
-  scope: "Food, beverage and dietary-supplement notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
-  async fetchIncidents() {
-    const listings = await fetchListings();
-    const results: NormalisedIncident[] = [];
-    for (let index = 0; index < listings.length; index += DETAIL_CONCURRENCY) {
-      const group = listings.slice(index, index + DETAIL_CONCURRENCY);
-      const details = await Promise.allSettled(group.map(fetchDetail));
-      const failures = details.filter((detail): detail is PromiseRejectedResult => detail.status === "rejected");
-      if (failures.length) {
-        const reason = failures[0].reason;
-        throw new Error(`FDA announcement detail import failed for ${failures.length} of ${group.length} pages: ${reason instanceof Error ? reason.message : String(reason)}`);
+export function createFdaAnnouncementsSource(env: NodeJS.ProcessEnv = process.env): IncidentSource {
+  return {
+    id: "fda-announcements",
+    name: "FDA recall announcements",
+    url: new URL(INDEX_PATH, FDA_ORIGIN).toString(),
+    region: "US",
+    superCategory: "Food",
+    scope: "Food, beverage and dietary-supplement notices on FDA Recalls, Market Withdrawals & Safety Alerts current listing (three-year page window; announcement subset, not all FDA recalls).",
+    async fetchIncidents() {
+      const retrieval = detailRetrieval(env);
+      const listings = await fetchFdaAnnouncementListings();
+      const results: NormalisedIncident[] = [];
+      for (let index = 0; index < listings.length; index += DETAIL_CONCURRENCY) {
+        const group = listings.slice(index, index + DETAIL_CONCURRENCY);
+        const details = await Promise.allSettled(group.map(listing => fetchFdaAnnouncementDetail(listing, retrieval)));
+        const failures = details.filter((detail): detail is PromiseRejectedResult => detail.status === "rejected");
+        if (failures.length) {
+          const reason = failures[0].reason;
+          throw new Error(`FDA announcement detail import failed for ${failures.length} of ${group.length} pages: ${reason instanceof Error ? reason.message : String(reason)}`);
+        }
+        results.push(...details.map((detail) => (detail as PromiseFulfilledResult<NormalisedIncident>).value));
       }
-      results.push(...details.map((detail) => (detail as PromiseFulfilledResult<NormalisedIncident>).value));
-    }
 
-    if (results.length !== listings.length) {
-      throw new Error(`FDA announcement import returned ${results.length} of ${listings.length} detail pages`);
-    }
-    return results;
-  },
-};
+      if (results.length !== listings.length) {
+        throw new Error(`FDA announcement import returned ${results.length} of ${listings.length} detail pages`);
+      }
+      return results;
+    },
+  };
+}
+
+export const fdaAnnouncementsSource = createFdaAnnouncementsSource();
