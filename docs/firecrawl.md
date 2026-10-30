@@ -22,6 +22,12 @@ Run this from a connection that can retrieve the FDA listing. The script reads t
 
 One matching page is a smoke test, not a complete coverage evaluation. Before enabling a full import, compare recent and older notices, multi-product tables, exact lot/GTIN/date associations, explicit terminations and previously blocked pages. Measure the complete run's duration and credits: a full import retrieves every detail page, including unchanged notices, and can be substantially more expensive than the sample.
 
+### Live smoke test: 30 October 2026
+
+`pnpm data:evaluate:firecrawl --limit 1` passed from the feature checkout using its ignored `.env.local`. The existing listing validator returned 816 unique food/supplement announcements. Direct retrieval and Firecrawl produced identical normalised incident fields for [the Vitality Works / 365 Whole Foods Market ashwagandha announcement](https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/vitality-works-inc-recalls-365-whole-foods-market-ashwagandha-capsules-sold-nationwide-due-potential). The detail comparison took 2,686 ms, excluding listing retrieval.
+
+This verifies one real request through the integration and parser. Full-run duration, credit use, archive-wide parity and the seven-cycle rollout comparison are still unverified. No production data or settings were changed by the evaluation.
+
 ## Enable explicitly
 
 The default is `FDA_ANNOUNCEMENTS_DETAIL_FETCH_MODE=direct`, even when a Firecrawl key is present. To use Firecrawl, set the mode to `firecrawl` and provision `FIRECRAWL_API_KEY` in the runtime that performs the import. An unknown mode or missing required key fails before source retrieval. Keep credentials out of Vercel's public environment and committed files.
