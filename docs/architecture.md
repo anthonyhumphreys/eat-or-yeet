@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 15 October 2026. Cloudflare became the production backend on 14 October. [ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) records the decision and trade-offs.
+Updated: 31 October 2026. Cloudflare became the production backend on 14 October. [ADR 0002](adr/0002-migrate-backend-to-cloudflare.md) records the decision and trade-offs.
 
 ## Components and data flow
 
@@ -11,7 +11,7 @@ Updated: 15 October 2026. Cloudflare became the production backend on 14 October
 | D1 | Warnings, matching projections, ingestion state, metadata, quotas, shares, encrypted Notion connections and transactional job outbox | `backend/schema.ts`, `database.ts`, `migrations/` |
 | Cloudflare Queues and Cron Triggers | Durable delivery, retries, expired-lease recovery and recurring maintenance | `backend/jobs.ts`, `wrangler.jsonc` |
 | Private R2 | Temporary uploaded source snapshots and prepared import batches | `backend/incidents.ts`, `runtime.ts` |
-| External NAS importer | Fetch and validate complete USDA FSIS and FDA announcement snapshots, then upload with source-specific credentials | `scripts/fsis-sync-worker.ts`, `deploy/fsis-sync/` |
+| External NAS importer | Fetch and validate complete USDA FSIS snapshots and FDA announcement listings, then upload with source-specific credentials | `scripts/fsis-sync-worker.ts`, `deploy/fsis-sync/` |
 | External APIs | Official warning sources, Open Food Facts metadata, Notion list access and opt-in PostHog capture | Source and integration modules under `src/lib/` and `integrations/notion/` |
 
 ```mermaid
@@ -33,8 +33,11 @@ flowchart TB
     Worker --> Direct[FSA and openFDA feeds]
     Worker -->|Managed list reviews| NotionAPI[Notion API]
     Worker -->|Private review tool| MCP
-    NAS[External NAS importer] --> Sources[USDA FSIS and FDA announcements]
-    NAS -->|Separate source upload tokens| Worker
+    NAS[External NAS importer] --> USDA[USDA FSIS API]
+    NAS --> Listing[FDA structured announcement listing]
+    NAS -->|USDA snapshot and FDA listing uploads| Worker
+    Worker -->|Known FDA detail URLs, two browsers| Firecrawl[Firecrawl original HTTP responses]
+    Worker -->|Failed numbered food lookup only, capped| Alexandria[Firecrawl Alexandria]
 ```
 
 Browsing current warnings is the main public flow; checking a pack is optional. The application uses no AI inference or photo uploads. Barcode detection runs in the browser, with manual entry as a fallback. Agent hosts use the same services and matcher as the website.
@@ -53,9 +56,13 @@ Source imports use private R2 batches of at most 25 notices. Each committed batc
 
 ## Sources and freshness
 
-Workers fetch FSA warnings and openFDA food/drug enforcement records. The NAS fetches USDA FSIS and FDA food/supplement announcements because those sources were unavailable or incomplete from hosted fetches. Both external imports run at startup, daily after success and hourly after failure; combined importer health requires both to succeed. See [source sync](usda-sync.md).
+The hosted Firecrawl path runs entirely in Cloudflare: the external importer uploads FDA's validated listing, then Queue jobs submit the known detail URLs as one two-browser batch and persist its job ID. Bounded result pages provide original HTTP bytes for the existing deterministic parser; rendered DOM output is rejected. All expected notices must validate before preparing R2 batches for the D1 import. The Firecrawl key is a Worker secret. See the [operations guide](firecrawl.md); provider API transports are unchanged.
 
-The production Worker schedules source refreshes at 04:17 UTC, temporary-data cleanup at 05:17 UTC, Notion cleanup at 05:23 UTC and product-category lookup hourly at minute 41. Snapshot-mode sources are excluded from hosted refreshes. Staging declares only the minute outbox/recovery cron and disables scheduled source refreshes and category lookups. These schedules come from `wrangler.jsonc` and `backend/jobs.ts`.
+A separate enabled Alexandria fallback can recover a failed numbered FDA food-enforcement lookup after the direct API fails. It preserves the original record and existing parser, reserves five credits atomically in D1, and stops at 100 credits per UTC day. It never replaces bulk enforcement retrieval or turns a budget failure into a successful import.
+
+Workers fetch FSA warnings and openFDA food/drug enforcement records. The NAS fetches USDA FSIS and FDA's food/supplement announcement listing because those endpoints were unavailable or incomplete from hosted fetches. FDA detail retrieval runs through Firecrawl in Cloudflare. Both external imports run at startup, daily after success and hourly after failure; combined importer health requires both to succeed. See [source sync](usda-sync.md).
+
+The production Worker schedules source refreshes at 04:17 UTC, temporary-data cleanup at 05:17 UTC, Notion cleanup at 05:23 UTC and product-category lookup hourly at minute 41. USDA snapshot mode and FDA Firecrawl mode exclude those sources from independent hosted refreshes. Staging declares only the minute outbox/recovery cron and disables scheduled source refreshes and category lookups. These schedules come from `wrangler.jsonc` and `backend/jobs.ts`.
 
 Food checks read source health on every request. A missing, failed, incomplete or older-than-48-hour source blocks a negative result. Revision-keyed persistent pages and the five-minute prepared matcher cache reduce repeated reads without extending source freshness. Medical browsing uses separately qualified FDA drug reports and does not contribute to food-check eligibility.
 

@@ -1,6 +1,6 @@
 # Running costs on Vercel and Cloudflare
 
-Updated: 15 October 2026. Production moved from Convex to Cloudflare on 14 October. This guide identifies cost drivers and required measurements; it does not claim a measured monthly bill, a saving or a free-tier capacity.
+Updated: 31 October 2026. Production moved from Convex to Cloudflare on 14 October. This guide identifies cost drivers and required measurements; it does not claim a measured monthly bill, a saving or a free-tier capacity.
 
 ## Current cost drivers
 
@@ -11,7 +11,8 @@ Updated: 15 October 2026. Production moved from Convex to Cloudflare on 14 Octob
 | D1 | Rows read and written, index maintenance, stored records, transaction retries and job-outbox updates |
 | Cloudflare Queues | Publication, delivery and retry operations, including recovery after expired leases |
 | Private R2 | Snapshot/batch writes, reads, deletions, abandoned objects and storage duration |
-| Existing NAS | Importer hosting, electricity and connection costs for USDA FSIS and FDA announcements |
+| Existing NAS | Importer hosting, electricity and connection costs for USDA FSIS snapshots and FDA listings |
+| Firecrawl | FDA announcement detail pages, completed batch credits, failed submissions and capped individual Alexandria recovery |
 | Optional PostHog | Consented event ingestion under the selected account plan |
 
 There are no application model-inference or photo-upload costs. Hosting, source imports, retries and background jobs still consume resources. Account plans, credits, rates and spend controls must be checked in the relevant provider account before producing a price forecast.
@@ -22,7 +23,9 @@ Convex function calls and database I/O are no longer the active backend billing 
 
 The backend preserves compact warning projections, revision-keyed persistent pages, a bounded prepared matcher cache and fingerprinted unchanged-import checks. These reduce repeated work, but one application operation can still perform several D1 statements, nested Worker calls and outbox updates. Do not price traffic by substituting a Worker request rate for a Convex call rate.
 
-Imports prepare private R2 batches and commit at most 25 notices per batch through the Queue. The minute recovery cron runs even when staging source refreshes are disabled. Delivery retries, superseded imports, weekly archive checks and changed notices all add work. The external importer covers both USDA and FDA announcements; FSA and openFDA fetching run on Workers.
+Imports prepare private R2 batches and commit at most 25 notices per batch through the Queue. The minute recovery cron runs even when staging source refreshes are disabled. Delivery retries, superseded imports, weekly archive checks and changed notices all add work. The external importer supplies USDA snapshots and FDA listings; Cloudflare retrieves FDA detail pages through Firecrawl. FSA and openFDA bulk fetching run on Workers.
+
+The accepted full staging FDA import used 818 credits for 818 pages. At roughly 816–827 pages daily, budget about 24,480–24,810 detail credits per 30 days, plus any Alexandria recovery (at most 100 reserved credits per UTC day per environment). The one-time million-credit sponsorship expires on 30 October 2027; it does not change Free-plan concurrency or request limits. See the [Firecrawl operations guide](firecrawl.md) for verified balance details and assumptions.
 
 ## Measurement plan
 

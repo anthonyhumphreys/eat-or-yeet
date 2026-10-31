@@ -46,7 +46,7 @@ These are release tasks for the service owner. They are not customer setup instr
 - Set the OAuth client details, encryption key, webhook verification token, review key and `NEXT_PUBLIC_APP_URL` in the appropriate Vercel and Cloudflare environments. Keep preview and production credentials separate. Configure the public app origin as HTTPS.
 - Apply D1 migrations and deploy the Worker before the matching Next.js version. Exercise consent, copied-template binding, signed webhook delivery and the first review on a controlled preview before general availability.
 
-The Vercel/Cloudflare deployment owns customer installations and queues. The NAS runs the separate USDA/FDA snapshot importer because those hosted fetches were blocked or incomplete; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
+The Vercel/Cloudflare deployment owns customer installations and queues. The NAS runs the separate USDA snapshot/FDA listing importer because those hosted endpoints were blocked or incomplete; it does not host the managed Notion service. The [standalone Notion worker runbook](./operators/notion-shopping-worker.md) remains an optional owner-operated route.
 
 ## Acceptance and release gate
 

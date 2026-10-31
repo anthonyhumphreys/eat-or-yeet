@@ -1,5 +1,7 @@
 # NAS USDA and FDA announcement sync
 
+The production [Cloudflare Firecrawl integration](firecrawl.md) runs FDA detail-page retrieval in the Worker. The NAS uses `FDA_ANNOUNCEMENTS_UPLOAD_MODE=listings` and uploads only the validated FDA listing; all Firecrawl requests and its key stay in Cloudflare. The generic container default remains `full` for legacy snapshot deployments, so production must keep its explicit listing-mode override. USDA API transport is unchanged.
+
 USDA's public FSIS Recall API returns an Akamai 403 from our Convex backend, a Vercel function in `iad1`, standard GitHub Linux/ARM/macOS runners, and a Cloudflare Worker in Amsterdam. Curl and Chrome on GitHub also fail. A fetch from the maintainer's home network succeeds. The exact upstream blocking rule is unknown.
 
 The official CDC combined feed is reachable from hosted runners, but currently includes only 22 recent notices. It cannot replace a full check of active USDA recalls and public health alerts. The full API currently contains 1,241 English notices, including 101 active notices.
@@ -18,13 +20,13 @@ The script validates the complete official archive before sending its English re
 
 Only active notices and tracked closures create database records. Missing previously active notices fail the refresh. Snapshots must be fetched within 15 minutes and fit the existing size limit. Failed or stale coverage blocks negative results after the same 48-hour freshness gate.
 
-`FSIS_FETCH_MODE=snapshot` and `FDA_ANNOUNCEMENTS_FETCH_MODE=snapshot` are configured in Wrangler. The NAS also fetches the full FDA food and supplement announcement listing and validates every detail page. Cloudflare received a regional error page for a current FDA announcement that was readable from the home connection. The separate FDA snapshot endpoint accepts only fresh, validated records with canonical FDA URLs and source IDs. FSA and openFDA enforcement refreshes run on the Worker schedule.
+Hosted Wrangler environments use `FSIS_FETCH_MODE=snapshot` and `FDA_ANNOUNCEMENTS_FETCH_MODE=firecrawl`. The NAS also fetches the full FDA food and supplement announcement listing. It uploads this to `/admin/fda-announcement-listings`; Cloudflare retrieves and validates every original detail-page response through Firecrawl. Full FDA record uploads are rejected in this mode. FSA and openFDA enforcement refreshes run on the Worker schedule.
 
 ## NAS container
 
 Use a Linux NAS with Docker Compose and an ARM64 or x86-64 CPU. The image contains Node and only the two dependencies needed for fetching and importing; it does not run the website or a second database. No inbound ports are exposed. The home connection must reach both USDA and the Cloudflare Worker.
 
-The worker imports USDA and FDA announcements immediately on startup, waits 24 hours after each successful import, and retries failures hourly. On shutdown, the container allows up to 35 minutes for an import already in progress to finish. Its health status covers both imports. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
+The worker imports USDA and FDA announcements immediately on startup, waits 24 hours after each successful import, and retries failures hourly. Listing-only FDA imports wait up to 60 minutes for Cloudflare's full import; full snapshot uploads retain their 15-minute wait. On shutdown, the container allows up to 65 minutes for an import already in progress to finish. Its health status covers both imports. A small named volume stores the last attempt and success timestamps; source records are not persisted on the NAS. Logs are capped at two 5 MB files. The container runs as an unprivileged user with a read-only filesystem.
 
 ### Create a separate key
 
@@ -50,10 +52,12 @@ Each token authorizes only its own source upload and status endpoint. They can b
 Place the current repository checkout on the NAS, then run these commands from its root:
 
 ```sh
-docker compose -f deploy/fsis-sync/compose.yaml up -d --build
+FDA_ANNOUNCEMENTS_UPLOAD_MODE=listings docker compose -f deploy/fsis-sync/compose.yaml up -d --build
 docker compose -f deploy/fsis-sync/compose.yaml logs --tail 100 fsis-sync
 docker compose -f deploy/fsis-sync/compose.yaml ps
 ```
+
+Set `FDA_ANNOUNCEMENTS_UPLOAD_MODE=listings` in the Compose project environment when targeting the hosted hybrid Worker. The active production NAS uses an explicit override; preserve it during upgrades (see the [cutover record](firecrawl-cutover-2026-10-31.md)).
 
 On NAS interfaces that support Compose projects, select `deploy/fsis-sync/compose.yaml` in the repository checkout as the project file and build/start it. The build context needs the repository root, so retain the directory structure.
 
@@ -63,13 +67,13 @@ Look for `"status":"success"` with the imported record count in the logs. A runn
 docker compose -f deploy/fsis-sync/compose.yaml exec fsis-sync node --import tsx scripts/fsis-sync-worker.ts --healthcheck
 ```
 
-Exit code 0 means the most recent combined attempt succeeded and its success is less than 36 hours old. Missing status, an import failure or stale success returns 1. Docker checks this every five minutes, with 35 minutes allowed for initial startup. Configure your NAS's container monitoring to alert on unhealthy status if it supports this; Docker health status itself does not send a notification. The app independently stops treating USDA coverage as complete after 48 hours without a successful import.
+Exit code 0 means the most recent combined attempt succeeded and its success is less than 36 hours old. Missing status, an import failure or stale success returns 1. Docker checks this every five minutes, with 65 minutes allowed for initial startup. Configure your NAS's container monitoring to alert on unhealthy status if it supports this; Docker health status itself does not send a notification. The app independently stops treating USDA coverage as complete after 48 hours without a successful import.
 
 The restart policy brings the worker back after a crash or NAS restart. Normal request failures stay in the worker's hourly retry loop. If the first fetch is blocked on the NAS too, the logs will report HTTP 403 and the worker will be unhealthy; the original home-machine test does not guarantee every home network works.
 
 ### Update or stop
 
-After pulling the latest repository changes, rebuild the image with `up -d --build`. To trigger a fresh import, restart the service:
+After pulling the latest repository changes, rebuild the image with `up -d --build`, retaining the explicit listing mode and any production Compose override. To trigger a fresh import, restart the service:
 
 ```sh
 docker compose -f deploy/fsis-sync/compose.yaml restart fsis-sync

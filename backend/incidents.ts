@@ -5,8 +5,11 @@ import { browseContent } from "./lib/browse_projection";
 import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
 
-import { fdaAnnouncementsSource } from "../src/lib/incidents/fda-announcements";
-import { fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
+import { fdaAnnouncementsSource, parseFdaAnnouncementDetail } from "../src/lib/incidents/fda-announcements";
+import { FirecrawlBatchRetry, readFirecrawlFdaBatch, startFirecrawlFdaBatch } from "../src/lib/incidents/firecrawl-batch";
+import { fdaListingSnapshotSchema, readFdaListingSnapshot } from "../src/lib/incidents/fda-listing-snapshot";
+import { createFdaSource, fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
+import { FDA_ALEXANDRIA_DAILY_CREDITS, FDA_ALEXANDRIA_LOOKUP_CREDITS, fetchAlexandriaFdaRecall } from "../src/lib/incidents/fda-alexandria";
 import { fsisIncidentsForSync, fsisSource } from "../src/lib/incidents/fsis";
 import { readFsisSnapshot } from "../src/lib/incidents/fsis-snapshot";
 import { fsaSource } from "../src/lib/incidents/fsa";
@@ -732,10 +735,121 @@ export const refreshSourceInternal = internalAction({
   handler: async (ctx, { sourceId }): Promise<ImportResult | { source: string; status: "external" }> => {
     // An external fetch keeps USDA's hosted-IP block out of the daily cron.
     // Missing external updates still expire through the normal health gate.
-    if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot")) return { source: sourceId, status: "external" };
+    if ((sourceId === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") || (sourceId === "fda-announcements" && ["snapshot", "firecrawl"].includes(process.env.FDA_ANNOUNCEMENTS_FETCH_MODE ?? ""))) return { source: sourceId, status: "external" };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) throw new Error(`Unknown incident source: ${sourceId}`);
+    if (source.id === "fda" && process.env.FDA_ALEXANDRIA_FALLBACK === "true") {
+      return await ingestSource(ctx, createFdaSource(async recallNumber => {
+        const key = process.env.FIRECRAWL_API_KEY;
+        if (!key?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
+        const budget = await ctx.runMutation(internal.incidents.reserveFdaAlexandriaLookup, {});
+        if (!budget.allowed) throw new Error("FDA Alexandria daily fallback budget exhausted; recall status could not be verified");
+        return fetchAlexandriaFdaRecall(recallNumber, key);
+      }));
+    }
     return await ingestSource(ctx, source);
+  },
+});
+
+// Reserve before making a paid call. D1 mutations serialize concurrent workers;
+// uncertain/failed calls retain their reservation so retries cannot exceed the cap.
+export const reserveFdaAlexandriaLookup = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const day = Math.floor(Date.now() / 86_400_000) * 86_400_000;
+    const key = `firecrawl:alexandria:fda:${day}`;
+    const existing = await ctx.db.query("rateLimits").withIndex("by_key", q => q.eq("key", key)).unique();
+    const used = existing?.count ?? 0;
+    if (!Number.isSafeInteger(used) || used < 0) throw new Error("FDA Alexandria budget has an invalid count");
+    const allowed = used + FDA_ALEXANDRIA_LOOKUP_CREDITS <= FDA_ALEXANDRIA_DAILY_CREDITS;
+    if (allowed) {
+      if (existing) await ctx.db.patch(existing._id, { count: used + FDA_ALEXANDRIA_LOOKUP_CREDITS });
+      else await ctx.db.insert("rateLimits", { key, subjectHash: "fda-enforcement", action: "firecrawl_alexandria",
+        count: FDA_ALEXANDRIA_LOOKUP_CREDITS, windowStartedAt: day, expiresAt: day + 2 * 86_400_000 });
+    }
+    return { allowed, used: used + (allowed ? FDA_ALEXANDRIA_LOOKUP_CREDITS : 0), limit: FDA_ALEXANDRIA_DAILY_CREDITS, retryAt: day + 86_400_000 };
+  },
+});
+
+function fdaFirecrawlPrefix(runId: Id<"ingestionRuns">) { return `source-imports/${runId}/firecrawl`; }
+
+async function prepareFdaFirecrawlImport(ctx: ActionCtx, loadListings: () => ReturnType<typeof readFdaListingSnapshot>): Promise<ImportResult> {
+  const source = fdaAnnouncementsSource;
+  const runId = await ctx.runMutation(internal.incidents.beginRun, { source: source.id, sourceName: source.name, region: source.region, scope: source.scope });
+  try {
+    if (!process.env.FIRECRAWL_API_KEY?.trim()) throw new Error("Provision FIRECRAWL_API_KEY on the Cloudflare Worker before enabling FDA Firecrawl imports");
+    const listings = await loadListings();
+    await ctx.storage.put(`${fdaFirecrawlPrefix(runId)}/listing.json`, JSON.stringify(listings));
+    await ctx.scheduler.runAfter(0, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+    return { source: source.id, runId, found: listings.length, created: 0, updated: 0, status: "queued", errors: [] };
+  } catch (error) {
+    const errors = [error instanceof Error ? error.message : "FDA listing retrieval failed"];
+    await ctx.runMutation(internal.incidents.finishRun, { runId, status: "failed", incidentsFound: 0, created: 0, updated: 0, errors });
+    return { source: source.id, runId, found: 0, created: 0, updated: 0, status: "failed", errors };
+  }
+}
+
+// Firecrawl queues the known URLs with two browsers. Persist the vendor ID
+// before polling; the complete validated result is then stored in 25-row batches.
+export const fetchFdaFirecrawlBatch = internalAction({
+  args: { runId: v.id("ingestionRuns"), index: v.number().int().nonnegative() },
+  handler: async (ctx, { runId }) => {
+    const run: Doc<"ingestionRuns"> | null = await ctx.runQuery(internal.incidents.getImportWork, { runId });
+    if (!run || run.source !== "fda-announcements" || run.status !== "running" || run.pipeline) return;
+    const prefix = fdaFirecrawlPrefix(runId);
+    let found = 0;
+    try {
+      const key = process.env.FIRECRAWL_API_KEY;
+      if (!key?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
+      const manifest = await ctx.storage.get(`${prefix}/listing.json`);
+      if (!manifest) throw new Error("FDA Firecrawl listing snapshot is missing");
+      const listings = fdaListingSnapshotSchema.parse(await readResponseJson(new Response(manifest), 20 * 1024 * 1024));
+      found = listings.length;
+      if (Date.now() - run.startedAt > 60 * 60_000) throw new Error("FDA Firecrawl import exceeded one hour");
+      const requestKey = `${prefix}/request.json`;
+      const prior = await ctx.storage.get(requestKey);
+      const urls = listings.map(item => `https://www.fda.gov${item.path}`);
+      if (!prior) {
+        const id = await startFirecrawlFdaBatch(urls, key);
+        await ctx.storage.put(requestKey, JSON.stringify({ id }));
+        await ctx.scheduler.runAfter(20_000, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
+      const { id } = v.object({ id: v.string().uuid() }).parse(await readResponseJson(new Response(prior)));
+      const byUrl = new Map(listings.map(item => [`https://www.fda.gov${item.path}`, item]));
+      const items = await readFirecrawlFdaBatch(id, urls, key, (url, html) => {
+        const item = byUrl.get(url)!;
+        return serialiseIncident(parseFdaAnnouncementDetail({ ...item, publishedAt: new Date(item.publishedAt) }, html), fdaAnnouncementsSource, runId);
+      });
+      if (!items) {
+        await ctx.scheduler.runAfter(20_000, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
+      const batches = Math.ceil(found / UPSERT_BATCH_SIZE);
+      for (let index = 0; index < batches; index++) {
+        await ctx.storage.put(`${prefix}/${index}.json`, JSON.stringify(items.slice(index * UPSERT_BATCH_SIZE, (index + 1) * UPSERT_BATCH_SIZE)));
+      }
+      await ctx.runMutation(internal.incidents.prepareImport, { runId, prefix, batches, found });
+      await ctx.storage.delete(`${prefix}/listing.json`);
+      await ctx.storage.delete(requestKey);
+    } catch (error) {
+      if (error instanceof FirecrawlBatchRetry && Date.now() - run.startedAt < 60 * 60_000) {
+        await ctx.scheduler.runAfter(error.delayMs, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
+      await ctx.runMutation(internal.incidents.finishRun, { runId, status: "failed", incidentsFound: found, created: 0, updated: 0,
+        errors: ["FDA Firecrawl detail batch failed; no partial snapshot will be published"] });
+    }
+  },
+});
+
+export const importFdaListingSnapshotInternal = internalAction({
+  args: { storageId: v.string(), fetchedAt: v.number() },
+  handler: async (ctx, { storageId, fetchedAt }): Promise<ImportResult> => {
+    try {
+      if (process.env.FDA_ANNOUNCEMENTS_FETCH_MODE !== "firecrawl") throw new Error("Cloudflare FDA Firecrawl mode is not enabled");
+      return await prepareFdaFirecrawlImport(ctx, async () => readFdaListingSnapshot(await ctx.storage.get(storageId), fetchedAt));
+    } finally { await ctx.storage.delete(storageId); }
   },
 });
 
@@ -790,7 +904,7 @@ export const queueSourceRefresh = internalMutation({
 });
 
 function scheduledSources() {
-  return sources.filter(source => !(source.id === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") && !(source.id === "fda-announcements" && process.env.FDA_ANNOUNCEMENTS_FETCH_MODE === "snapshot"));
+  return sources.filter(source => !(source.id === "fsis" && process.env.FSIS_FETCH_MODE === "snapshot") && !(source.id === "fda-announcements" && ["snapshot", "firecrawl"].includes(process.env.FDA_ANNOUNCEMENTS_FETCH_MODE ?? "")));
 }
 
 export const refreshScheduledInternal = internalAction({

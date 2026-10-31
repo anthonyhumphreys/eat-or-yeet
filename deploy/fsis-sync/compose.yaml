@@ -8,7 +8,8 @@ services:
     init: true
     environment:
       FSIS_BACKEND_URL: ${FSIS_BACKEND_URL:?Set FSIS_BACKEND_URL to the Cloudflare backend URL}
-      FDA_ANNOUNCEMENTS_SYNC_ENABLED: "true"
+      FDA_ANNOUNCEMENTS_SYNC_ENABLED: ${FDA_ANNOUNCEMENTS_SYNC_ENABLED:-true}
+      FDA_ANNOUNCEMENTS_UPLOAD_MODE: ${FDA_ANNOUNCEMENTS_UPLOAD_MODE:-full}
     secrets:
       - fsis_upload_token
       - fda_upload_token
@@ -23,12 +24,12 @@ services:
       - no-new-privileges:true
     mem_limit: 256m
     cpus: 0.5
-    stop_grace_period: 35m
+    stop_grace_period: 65m
     healthcheck:
       test: ["CMD", "node", "--import", "tsx", "scripts/fsis-sync-worker.ts", "--healthcheck"]
       interval: 5m
       timeout: 15s
-      start_period: 35m
+      start_period: 65m
       retries: 1
     logging:
       driver: json-file

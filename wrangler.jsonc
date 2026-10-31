@@ -57,7 +57,8 @@
     "FSIS_FETCH_MODE": "snapshot",
     "ALLOW_DEMO_DATA": "true",
     "BACKEND_RESTORE_ENABLED": "false",
-    "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
+    "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot",
+    "FDA_ALEXANDRIA_FALLBACK": "false"
   },
   "env": {
     "staging": {
@@ -102,7 +103,8 @@
           "BACKEND_SECRET",
           "BACKEND_ADMIN_TOKEN",
           "FSIS_UPLOAD_TOKEN",
-          "FDA_UPLOAD_TOKEN"
+          "FDA_UPLOAD_TOKEN",
+          "FIRECRAWL_API_KEY"
         ]
       },
       "vars": {
@@ -111,7 +113,8 @@
         "FSIS_FETCH_MODE": "snapshot",
         "ALLOW_DEMO_DATA": "false",
         "BACKEND_RESTORE_ENABLED": "false",
-        "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
+        "FDA_ANNOUNCEMENTS_FETCH_MODE": "firecrawl",
+        "FDA_ALEXANDRIA_FALLBACK": "true"
       },
       "preview_urls": false,
       "services": [
@@ -167,7 +170,8 @@
           "BACKEND_SECRET",
           "BACKEND_ADMIN_TOKEN",
           "FSIS_UPLOAD_TOKEN",
-          "FDA_UPLOAD_TOKEN"
+          "FDA_UPLOAD_TOKEN",
+          "FIRECRAWL_API_KEY"
         ]
       },
       "vars": {
@@ -176,7 +180,8 @@
         "FSIS_FETCH_MODE": "snapshot",
         "ALLOW_DEMO_DATA": "false",
         "BACKEND_RESTORE_ENABLED": "false",
-        "FDA_ANNOUNCEMENTS_FETCH_MODE": "snapshot"
+        "FDA_ANNOUNCEMENTS_FETCH_MODE": "firecrawl",
+        "FDA_ALEXANDRIA_FALLBACK": "true"
       },
       "preview_urls": false,
       "services": [

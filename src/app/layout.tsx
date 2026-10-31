@@ -7,6 +7,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { SponsorAcknowledgement } from "@/components/sponsor-acknowledgement";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AnalyticsConsent } from "@/components/analytics-consent";
 import { analyticsEnabled } from "@/lib/analytics/server";
@@ -46,6 +47,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <a href="#main-content" className="sr-only z-50 rounded-full bg-background px-5 py-3 font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to main content</a>
           <LocationProvider initialRegion={region} hasSavedRegion={Boolean(savedRegion)} suggestedRegion={suggestedRegion}>
             <SiteHeader />
+            <SponsorAcknowledgement />
             <RegionPrompt />
             <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col outline-none">{children}</main>
             <AnalyticsConsent enabled={analyticsEnabled()} />
