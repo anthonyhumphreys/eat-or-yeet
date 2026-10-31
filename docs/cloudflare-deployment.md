@@ -1,8 +1,8 @@
 # Cloudflare backend deployment
 
-For the optional FDA Firecrawl integration, provision `FIRECRAWL_API_KEY` as a Worker secret in the intended environment. Its cloud job and listing-uploader cutover are documented in the [Firecrawl rollout guide](firecrawl.md). The NAS and Vercel do not need this key.
+For the hosted FDA Firecrawl integration, provision `FIRECRAWL_API_KEY` as a Worker secret in the intended environment. Its cloud job and listing-uploader cutover are documented in the [Firecrawl rollout guide](firecrawl.md). The NAS and Vercel do not need this key.
 
-`FDA_ALEXANDRIA_FALLBACK=true` separately enables recovery of failed individual numbered FDA food-recall lookups. Bulk retrieval stays on openFDA. The Worker reserves from a shared 100-credit UTC daily budget before each Alexandria attempt and fails the import if the budget or record validation fails. Both Firecrawl features remain disabled in committed configuration pending environment-specific cutover.
+`FDA_ALEXANDRIA_FALLBACK=true` separately enables recovery of failed individual numbered FDA food-recall lookups. Bulk retrieval stays on openFDA. The Worker reserves from a shared 100-credit UTC daily budget before each Alexandria attempt and fails the import if the budget or record validation fails. Both features are enabled in staging and production configuration. Local development retains snapshot mode and disables fallback. The [31 October cutover record](firecrawl-cutover-2026-10-31.md) records live validation and rollback details.
 
 Production has used Cloudflare Workers, D1, Queues and private R2 since 14 October 2026. Next.js stays on Vercel. Wrangler declares separate local, staging and production resources. Both hosted stages are provisioned in `wrangler.jsonc`; confirm the selected account and environment before changing them.
 
@@ -46,14 +46,15 @@ Generate independent random 32-byte values per environment. Store operator files
 - `BACKEND_SECRET`: required in the Worker and corresponding Vercel environment. It permits declared website operations only.
 - `BACKEND_ADMIN_TOKEN`: required for `/admin/rpc`; permits internal operations. Keep it in operator tooling, never Vercel.
 - `FSIS_UPLOAD_TOKEN`: only permits `/admin/fsis`. Give this token to the NAS importer.
-- `FDA_UPLOAD_TOKEN`: only permits `/admin/fda-announcements`. Give this separate token to the same NAS importer. It cannot upload USDA data or call general operations.
+- `FDA_UPLOAD_TOKEN`: permits FDA upload/status routes `/admin/fda-announcements` (legacy full mode) and `/admin/fda-announcement-listings` (hosted Firecrawl mode). Give this separate token to the same NAS importer. It cannot upload USDA data or call general operations.
 - `NOTION_CREDENTIAL_KEY`: preserve the existing encryption key when restoring encrypted credentials. It must agree in Vercel and the Worker.
 - `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_REVIEW_CONNECTION_KEY`: needed in the Worker for enabled hosted Notion jobs. Keep the website's existing OAuth/webhook settings in Vercel.
 - `OPENFDA_API_KEY`: optional Worker secret for source fetching.
+- `FIRECRAWL_API_KEY`: required hosted Worker secret for FDA announcement detail retrieval and capped Alexandria fallback; never provision it on the NAS or Vercel.
 
 Local Wrangler uses `.dev.vars`; hosted stages use `.dev.vars.staging` or `.dev.vars.production` for local emulation only. These files are ignored. Production secrets must be explicitly provisioned remotely. Worker logs record operation identifiers and error classes, not request contents or credential envelopes.
 
-USDA and FDA announcements use `snapshot` fetch modes. The NAS validates the complete official FDA food/supplement listing and every detail page, then uploads normalized records. The Worker validates their age, schema, FDA origin, source IDs and announcement paragraphs before preparing imports. A Worker-side live test received a regional FDA "Page Not Found" response for an announcement reachable from the home connection, so the NAS fetches this source too. FSA and openFDA food/drug enforcement feeds remain on Workers. The NAS health check covers both snapshot imports, and the application's uncached source-health gate still expires missing or failed coverage.
+USDA uses `snapshot` mode; FDA announcements use `firecrawl`. The NAS validates the complete official FDA food/supplement listing and uploads listing metadata only. The Worker checks snapshot freshness and identity, then retrieves original announcement response bodies through Firecrawl and validates every detail before preparing imports. A Worker-side live test received a regional FDA "Page Not Found" response for an announcement reachable from the home connection, so the NAS retains listing retrieval while Cloudflare uses Firecrawl for detail pages. FSA and openFDA food/drug enforcement feeds remain on Workers. The NAS health check waits for both USDA and the full cloud FDA import, and the application's uncached source-health gate still expires missing or failed coverage.
 
 ## Routine release order
 
@@ -106,7 +107,7 @@ pnpm backend:deploy:staging
 
 Use the staging URL returned by Wrangler. Set Vercel Preview `BACKEND_URL` and `BACKEND_SECRET` to that stage; keep `ALLOW_DEMO_DATA=false` and `NOTION_INSTALL_ENABLED=false` for ordinary previews. Check warning browsing, details, known matches, unknown products, stale/failed sources, public shares, quotas and job recovery. Hosted Notion needs a separate live consent, signed event, review and disconnect acceptance run.
 
-`pnpm backend:run module.operation` is an operator-only CLI. It loads local environment files and calls `/admin/rpc`. For example, `pnpm backend:run incidents.refreshAllInternal` queues source refreshes. Use `incidents.queueSourceRefresh '{"sourceId":"fda-announcements"}'` for a single source; fetching a full archive in an HTTP call can outlast its client timeout. Queued jobs are not proof of successful imports.
+`pnpm backend:run module.operation` is an operator-only CLI. It loads local environment files and calls `/admin/rpc`. For example, `pnpm backend:run incidents.refreshAllInternal` queues source refreshes. Use `incidents.queueSourceRefresh '{"sourceId":"fsa"}'` for a single hosted source; fetching a full archive in an HTTP call can outlast its client timeout. USDA and FDA announcements require their external snapshot/listing uploads in the current modes. Queued jobs are not proof of successful imports.
 
 ## Migration cutover and rollback
 

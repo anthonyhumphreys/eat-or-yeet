@@ -22,7 +22,7 @@ describe("FDA listing handoff to Cloudflare", () => {
     await syncFdaAnnouncements(env);
     expect(fdaAnnouncementsSource.fetchIncidents).not.toHaveBeenCalled();
     expect(uploadSnapshot).toHaveBeenCalledWith(new URL("https://backend.example.test/admin/fda-announcement-listings"), env.FDA_UPLOAD_TOKEN,
-      "FDA announcement listings", [{ ...listing, publishedAt: listing.publishedAt.getTime() }], expect.any(Number));
+      "FDA announcement listings", [{ ...listing, publishedAt: listing.publishedAt.getTime() }], expect.any(Number), 60);
   });
 
   it("rejects duplicate notice identifiers before upload", async () => {

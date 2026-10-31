@@ -5,7 +5,8 @@ import { browseContent } from "./lib/browse_projection";
 import { readResponseJson } from "../src/lib/http/bounded-response";
 import { BackendError, v } from "./values";
 
-import { fdaAnnouncementsSource, fetchFdaAnnouncementDetail } from "../src/lib/incidents/fda-announcements";
+import { fdaAnnouncementsSource, parseFdaAnnouncementDetail } from "../src/lib/incidents/fda-announcements";
+import { FirecrawlBatchRetry, readFirecrawlFdaBatch, startFirecrawlFdaBatch } from "../src/lib/incidents/firecrawl-batch";
 import { fdaListingSnapshotSchema, readFdaListingSnapshot } from "../src/lib/incidents/fda-listing-snapshot";
 import { createFdaSource, fdaDrugSource, fdaSource, parseFdaRecord } from "../src/lib/incidents/fda";
 import { FDA_ALEXANDRIA_DAILY_CREDITS, FDA_ALEXANDRIA_LOOKUP_CREDITS, fetchAlexandriaFdaRecall } from "../src/lib/incidents/fda-alexandria";
@@ -788,52 +789,56 @@ async function prepareFdaFirecrawlImport(ctx: ActionCtx, loadListings: () => Ret
   }
 }
 
-// Fetch 25 pages per durable job, at most five concurrently. Prepared batches
-// are reusable on delivery retries and are not published until every page passes.
+// Firecrawl queues the known URLs with two browsers. Persist the vendor ID
+// before polling; the complete validated result is then stored in 25-row batches.
 export const fetchFdaFirecrawlBatch = internalAction({
   args: { runId: v.id("ingestionRuns"), index: v.number().int().nonnegative() },
-  handler: async (ctx, { runId, index }) => {
+  handler: async (ctx, { runId }) => {
     const run: Doc<"ingestionRuns"> | null = await ctx.runQuery(internal.incidents.getImportWork, { runId });
     if (!run || run.source !== "fda-announcements" || run.status !== "running" || run.pipeline) return;
     const prefix = fdaFirecrawlPrefix(runId);
     let found = 0;
     try {
-      if (!process.env.FIRECRAWL_API_KEY?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
+      const key = process.env.FIRECRAWL_API_KEY;
+      if (!key?.trim()) throw new Error("FIRECRAWL_API_KEY is missing from the Cloudflare Worker");
       const manifest = await ctx.storage.get(`${prefix}/listing.json`);
       if (!manifest) throw new Error("FDA Firecrawl listing snapshot is missing");
       const listings = fdaListingSnapshotSchema.parse(await readResponseJson(new Response(manifest), 20 * 1024 * 1024));
       found = listings.length;
+      if (Date.now() - run.startedAt > 60 * 60_000) throw new Error("FDA Firecrawl import exceeded one hour");
+      const requestKey = `${prefix}/request.json`;
+      const prior = await ctx.storage.get(requestKey);
+      const urls = listings.map(item => `https://www.fda.gov${item.path}`);
+      if (!prior) {
+        const id = await startFirecrawlFdaBatch(urls, key);
+        await ctx.storage.put(requestKey, JSON.stringify({ id }));
+        await ctx.scheduler.runAfter(20_000, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
+      const { id } = v.object({ id: v.string().uuid() }).parse(await readResponseJson(new Response(prior)));
+      const byUrl = new Map(listings.map(item => [`https://www.fda.gov${item.path}`, item]));
+      const items = await readFirecrawlFdaBatch(id, urls, key, (url, html) => {
+        const item = byUrl.get(url)!;
+        return serialiseIncident(parseFdaAnnouncementDetail({ ...item, publishedAt: new Date(item.publishedAt) }, html), fdaAnnouncementsSource, runId);
+      });
+      if (!items) {
+        await ctx.scheduler.runAfter(20_000, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
       const batches = Math.ceil(found / UPSERT_BATCH_SIZE);
-      if (index >= batches) throw new Error("FDA Firecrawl batch index exceeds the listing");
-      const key = `${prefix}/${index}.json`;
-      const prepared = await ctx.storage.get(key);
-      const expectedCount = Math.min(UPSERT_BATCH_SIZE, found - index * UPSERT_BATCH_SIZE);
-      if (prepared) {
-        const saved = v.array(schema.incidents.validator).length(expectedCount).parse(await readResponseJson(new Response(prepared), 20 * 1024 * 1024));
-        if (saved.some(item => item.sourceKey !== run.source || item.sourceRunId !== runId)) throw new Error("FDA Firecrawl batch belongs to another import");
-      } else {
-        const selected = listings.slice(index * UPSERT_BATCH_SIZE, (index + 1) * UPSERT_BATCH_SIZE);
-        const items: ImportItem[] = [];
-        for (let offset = 0; offset < selected.length; offset += 5) {
-          const details = await Promise.allSettled(selected.slice(offset, offset + 5).map(item => fetchFdaAnnouncementDetail(
-            { ...item, publishedAt: new Date(item.publishedAt) }, { mode: "firecrawl", apiKey: process.env.FIRECRAWL_API_KEY },
-          )));
-          for (const detail of details) {
-            if (detail.status === "rejected") throw new Error("FDA Firecrawl detail batch failed; no partial snapshot will be published");
-            items.push(serialiseIncident(detail.value, fdaAnnouncementsSource, runId));
-          }
-        }
-        await ctx.storage.put(key, JSON.stringify(items));
+      for (let index = 0; index < batches; index++) {
+        await ctx.storage.put(`${prefix}/${index}.json`, JSON.stringify(items.slice(index * UPSERT_BATCH_SIZE, (index + 1) * UPSERT_BATCH_SIZE)));
       }
-      if (index + 1 < batches) {
-        await ctx.scheduler.runAfter(0, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: index + 1 });
-      } else {
-        await ctx.runMutation(internal.incidents.prepareImport, { runId, prefix, batches, found });
-        await ctx.storage.delete(`${prefix}/listing.json`);
-      }
+      await ctx.runMutation(internal.incidents.prepareImport, { runId, prefix, batches, found });
+      await ctx.storage.delete(`${prefix}/listing.json`);
+      await ctx.storage.delete(requestKey);
     } catch (error) {
+      if (error instanceof FirecrawlBatchRetry && Date.now() - run.startedAt < 60 * 60_000) {
+        await ctx.scheduler.runAfter(error.delayMs, internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
+        return;
+      }
       await ctx.runMutation(internal.incidents.finishRun, { runId, status: "failed", incidentsFound: found, created: 0, updated: 0,
-        errors: [error instanceof Error ? error.message : "FDA Firecrawl retrieval failed"] });
+        errors: ["FDA Firecrawl detail batch failed; no partial snapshot will be published"] });
     }
   },
 });

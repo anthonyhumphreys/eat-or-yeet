@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Buffer } from "node:buffer";
 
 import { MAX_SOURCE_TEXT_BYTES, readResponseJson } from "@/lib/http/bounded-response";
 
@@ -19,7 +20,7 @@ const scrapeSchema = z.object({
   }),
 });
 
-function announcementUrl(value: string): URL {
+export function announcementUrl(value: string): URL {
   const url = new URL(value);
   if (url.origin !== "https://www.fda.gov" || url.username || url.password
     || !url.pathname.startsWith(FDA_ANNOUNCEMENTS_PATH) || url.pathname === FDA_ANNOUNCEMENTS_PATH
@@ -49,7 +50,7 @@ export async function fetchFirecrawlFdaHtml(value: string, apiKey: string | unde
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         url: url.href,
-        formats: ["rawHtml"],
+        formats: ["rawBase64"],
         onlyMainContent: false,
         maxAge: 0,
         timeout: 30_000,
@@ -68,9 +69,29 @@ export async function fetchFirecrawlFdaHtml(value: string, apiKey: string | unde
     throw new Error(`Firecrawl FDA detail request returned HTTP ${response.status}`);
   }
 
+  try { return parseFirecrawlFdaOriginal(url.href, await readResponseJson(response, 4 * MAX_SOURCE_TEXT_BYTES)); }
+  catch { throw new Error("Firecrawl returned an invalid, incomplete or oversized FDA detail response"); }
+}
+
+/** Decode the original HTTP body; rendered DOM HTML can omit FDA corrections. */
+export function parseFirecrawlFdaOriginal(value: string, response: unknown): string {
+  try {
+    const payload = z.object({ success: z.literal(true), warning: z.string().optional(), data: z.object({
+      rawBase64: z.string().min(4).max(Math.ceil(MAX_SOURCE_TEXT_BYTES / 3) * 4),
+    }).passthrough() }).parse(response);
+    const encoded = payload.data.rawBase64;
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.byteLength > MAX_SOURCE_TEXT_BYTES || bytes.toString("base64") !== encoded) throw new Error("Invalid source bytes");
+    const html = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return parseFirecrawlFdaHtml(value, { ...payload, data: { ...payload.data, rawHtml: html } });
+  } catch { throw new Error("Firecrawl returned an invalid, incomplete or oversized FDA detail response"); }
+}
+
+export function parseFirecrawlFdaHtml(value: string, response: unknown): string {
+  const url = announcementUrl(value);
   let payload: z.infer<typeof scrapeSchema>;
   try {
-    payload = scrapeSchema.parse(await readResponseJson(response, 4 * MAX_SOURCE_TEXT_BYTES));
+    payload = scrapeSchema.parse(response);
     const metadata = payload.data.metadata;
     const canonical = canonicalUrl(payload.data.rawHtml);
     if (payload.warning || payload.data.warning || metadata.error

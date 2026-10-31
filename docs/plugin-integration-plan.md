@@ -120,7 +120,7 @@ Apply the enable flag and cheap envelope/origin checks before application work. 
 
 Propose a small pilot budget of 1,000 checks per day across all MCP hosts, plus separately capped browse/coverage operations. That permits at most 30,000 checks in a 30-day month. This is an application admission ceiling, not a Worker/D1 capacity or price forecast. Tune it after shared-egress tests and a normal production import cycle.
 
-Retain the current product metadata cache, revision-keyed persistent warning pages and bounded prepared matcher cache. Check source health and current notice boundaries on every product check. Do not cache final verdicts across health changes. The 48-hour freshness gate remains; Workers refresh FSA/openFDA daily while the NAS supplies USDA/FDA announcement snapshots.
+Retain the current product metadata cache, revision-keyed persistent warning pages and bounded prepared matcher cache. Check source health and current notice boundaries on every product check. Do not cache final verdicts across health changes. The 48-hour freshness gate remains; Workers refresh FSA/openFDA daily while the NAS supplies USDA snapshots and FDA listings for Cloudflare Firecrawl detail retrieval.
 
 The earlier Convex samples demonstrate reduced application work, but they do not establish Cloudflare billing or capacity. A production Worker/D1 baseline is still needed. Before broad publication, measure ordinary daily imports, the weekly archive-check cycle, cold/warm checks, search CPU and Vercel active CPU. Include protocol/discovery and embedded UI requests in hosting usage. Retain 20% operating headroom or agree a small overage budget separately. See [current cost and measurement guidance](./cost-estimate.md).
 

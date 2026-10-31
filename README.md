@@ -15,7 +15,7 @@ The internal `EAT` enum remains for stored-result compatibility. It is not the p
 
 ## Architecture
 
-The production backend moved from Convex to Cloudflare on 14 October 2026. Next.js stays on Vercel; a Worker owns authenticated operations, D1 stores records, a Queue runs durable jobs, and private R2 holds temporary import batches. Cloudflare Cron Triggers publish/recover jobs and schedule maintenance. The external importer supplies both USDA FSIS and FDA announcement snapshots.
+The production backend moved from Convex to Cloudflare on 14 October 2026. Next.js stays on Vercel; a Worker owns authenticated operations, D1 stores records, a Queue runs durable jobs, and private R2 holds temporary import batches. Cloudflare Cron Triggers publish/recover jobs and schedule maintenance. The external importer supplies USDA FSIS snapshots and FDA announcement listings; Cloudflare retrieves FDA detail pages through Firecrawl.
 
 See the [architecture guide](docs/architecture.md), [migration decision in ADR 0002](docs/adr/0002-migrate-backend-to-cloudflare.md), [deployment runbook](docs/cloudflare-deployment.md) and [current cost guidance](docs/cost-estimate.md). Earlier Convex usage reports are historical.
 
@@ -53,14 +53,15 @@ For a separately managed staging backend, set `BACKEND_ENV=staging`, an HTTPS `B
 | `NEXT_PUBLIC_APP_URL` | Canonical website origin |
 | `ALLOW_DEMO_DATA` | Fictional development incidents only; false in hosted stages |
 | `FSIS_FETCH_MODE` | Worker setting: `snapshot` uses the external USDA fetcher |
-| `FDA_ANNOUNCEMENTS_FETCH_MODE` | Worker setting: `snapshot` uses the external FDA announcement fetcher |
+| `FDA_ANNOUNCEMENTS_FETCH_MODE` | Hosted Workers use `firecrawl` for detail pages following an external listing upload; `snapshot` retains legacy full uploads |
+| `FIRECRAWL_API_KEY` | Cloudflare Worker secret for FDA announcement retrieval and capped Alexandria recovery |
 | `FDA_ALEXANDRIA_FALLBACK` | Worker setting: optional recovery of failed individual FDA food-recall lookups; capped at 100 credits per UTC day |
 
 All backend credentials stay server-side. The frontend build no longer deploys backend resources. See [Cloudflare deployment](docs/cloudflare-deployment.md) for provisioning, migration, secrets and cutover.
 
 ## Coverage and operations
 
-Firecrawl is available as an explicit, default-off Cloudflare integration for FDA announcement detail pages. Its key lives in the Worker. The external importer can upload only FDA's listing, then Cloudflare Queue jobs fetch the pages and prepare the import. Provider APIs retain their bulk transport; a separate opt-in Alexandria fallback can recover failed individual FDA food-recall lookups within a shared 100-credit daily budget. See the [Firecrawl evaluation and rollout guide](docs/firecrawl.md).
+Hosted Workers use Firecrawl for FDA announcement detail pages. Its key lives in Cloudflare. The external importer uploads only FDA's validated listing, then Queue jobs retrieve original HTTP response bodies in a two-browser Firecrawl batch and prepare the import. Provider APIs retain their bulk transport; Alexandria is enabled only to recover failed individual FDA food-recall lookups within a shared 100-credit daily budget. Local development retains snapshot mode with fallback disabled. See the [Firecrawl operations guide](docs/firecrawl.md) and [full-import cutover record](docs/firecrawl-cutover-2026-10-31.md).
 
 Imports use official FSA warnings for the UK, and FDA food, beverage and dietary-supplement recall announcements, FDA food enforcement records and USDA FSIS recalls/public health alerts for the US. These sources have different scopes; the check shows its coverage.
 
@@ -70,7 +71,7 @@ Importers check pagination and reject incomplete responses. Warnings are not ass
 
 Each source has an ingestion ledger. A missing source, a latest failed/incomplete attempt or a successful refresh older than 48 hours blocks a negative result. Source health is checked on every request. Next caches compact datasets for up to five minutes per server instance and invalidates them when the dataset revision changes. The Worker schedules its hosted sources independently each day; snapshot sources use the external importer. Cleanup runs separately in bounded batches.
 
-USDA blocks requests from hosted runtimes, and a Worker-side FDA announcement fetch returned regional error content. The [NAS container](docs/usda-sync.md#nas-container) fetches and validates both sources, uploads through separate restricted endpoints, runs daily after success and retries failures hourly. Its health covers both imports. `pnpm data:sync:fsis --prod` remains the one-off USDA-only command. Only active notices and tracked closures create rows. Snapshot modes exclude both sources from hosted refreshes; source freshness still expires after 48 hours. See [source snapshot sync](docs/usda-sync.md) for setup and limitations.
+USDA blocks requests from hosted runtimes, and a Worker-side FDA announcement fetch returned regional error content. The [NAS container](docs/usda-sync.md#nas-container) fetches and validates the USDA archive and FDA listing, uploads through separate restricted endpoints, runs daily after success and retries failures hourly. Its health covers both imports. `pnpm data:sync:fsis --prod` remains the one-off USDA-only command. Only active notices and tracked closures create rows. USDA snapshot mode and FDA Firecrawl mode exclude both sources from independent hosted refreshes; source freshness still expires after 48 hours. See [source snapshot sync](docs/usda-sync.md) for setup and limitations.
 
 Public browsing loads 40 warnings per page from indexed backend queries for the selected country, with complete filter counts and revision-bound pagination. Direct list links restore requested pages. During backend rollout or an index rebuild, the complete legacy regional-list path remains available. Publisher news loads independently and caches validated articles per publisher for 30 minutes. Failed refreshes retain that publisher's last successful feed, with stories still subject to the 180-day age limit. These caches do not change the source-health checks used for food-check results.
 
@@ -126,7 +127,7 @@ Commands and the production cutover sequence are in [Cloudflare deployment](docs
 
 ## Notion shopping integration
 
-The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Cloudflare installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. The pre-migration Convex pilot verified consent, signed events, reviews and disconnect; those live checks have not yet been repeated against the Cloudflare backend. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA/FDA snapshot importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
+The managed Add to Notion flow uses same-app Vercel OAuth/webhook routes and Cloudflare installation state and review jobs. It provides native consent and copied-list setup without Notion AI, customer API keys or customer hosting. The pre-migration Convex pilot verified consent, signed events, reviews and disconnect; those live checks have not yet been repeated against the Cloudflare backend. Automatic reviews are not yet generally available; outstanding live checks are recorded in the [readiness record](docs/operators/notion-readiness.md). Connection setup is withheld unless all required settings are present. The NAS runs the separate USDA snapshot/FDA listing importer, not customer Notion services. See the [customer overview](docs/notion-shopping.md), [installation plan](docs/notion-installation-plan.md), [managed service runbook](docs/operators/notion-managed-service.md) and optional [standalone worker runbook](docs/operators/notion-shopping-worker.md).
 
 Connected lists require stored Notion identifiers and encrypted credentials. Our backend decrypts credentials to run reviews; pausing retains them and disconnect removes the connection. We do not save profile names, emails or shopping text as a history, but configured item fields can contain personal information supplied by a shopper. The public [privacy notice](https://www.eatoryeet.app/privacy) and [terms](https://www.eatoryeet.app/terms) describe these boundaries. Using the template without connecting gives Eat or Yeet no access to the Notion account or list.
 

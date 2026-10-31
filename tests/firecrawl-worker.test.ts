@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "@backend/api";
 import { fetchFdaAnnouncementDetail, fetchFdaAnnouncementListings, parseFdaAnnouncementDetail } from "@/lib/incidents/fda-announcements";
 import { createBackend } from "./backend-harness";
+import { startFirecrawlFdaBatch, readFirecrawlFdaBatch } from "@/lib/incidents/firecrawl-batch";
+
+vi.mock("../src/lib/incidents/firecrawl-batch", async importOriginal => ({
+  ...await importOriginal<typeof import("../src/lib/incidents/firecrawl-batch")>(),
+  startFirecrawlFdaBatch: vi.fn(), readFirecrawlFdaBatch: vi.fn(),
+}));
 
 vi.mock("../src/lib/incidents/fda-announcements", async importOriginal => ({
   ...await importOriginal<typeof import("../src/lib/incidents/fda-announcements")>(),
@@ -30,10 +36,26 @@ beforeEach(() => {
   vi.stubEnv("FIRECRAWL_API_KEY", "fc-private-worker-fixture");
   vi.mocked(fetchFdaAnnouncementListings).mockResolvedValue(listings);
   vi.mocked(fetchFdaAnnouncementDetail).mockImplementation(async item => parseFdaAnnouncementDetail(item, html));
+  vi.mocked(startFirecrawlFdaBatch).mockImplementation(async () => crypto.randomUUID());
+  vi.mocked(readFirecrawlFdaBatch).mockImplementation(async function<T>(_id: string, urls: string[], _key: string | undefined, parse: (url: string, html: string) => T): Promise<T[] | null> { return urls.map(url => parse(url, html)); });
 });
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs(); });
 
 describe("Cloudflare owns FDA Firecrawl retrieval", () => {
+  it("keeps polling the same paid job without publishing pending results", async () => {
+    const t = backend();
+    const queued = await t.action(internal.incidents.importFdaListingSnapshotInternal, { storageId: "listing-upload", fetchedAt: Date.now() });
+    if (!queued.runId) throw new Error("Missing run");
+    await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId: queued.runId, index: 0 });
+    vi.mocked(readFirecrawlFdaBatch).mockResolvedValueOnce(null);
+    await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId: queued.runId, index: 0 });
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
+    expect(await t.run(ctx => ctx.db.query("incidents").collect())).toEqual([]);
+    expect(await t.query(internal.incidents.getImportResult, { runId: queued.runId })).toMatchObject({ status: "running" });
+    await t.finishAllScheduledFunctions();
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
+    expect(await t.query(internal.incidents.getImportResult, { runId: queued.runId })).toMatchObject({ status: "success", found: 26 });
+  });
   it("fetches in resumable jobs and publishes only after the full listing is validated", async () => {
     const t = backend();
     const queued = await t.action(internal.incidents.importFdaListingSnapshotInternal, { storageId: "listing-upload", fetchedAt: Date.now() });
@@ -42,17 +64,19 @@ describe("Cloudflare owns FDA Firecrawl retrieval", () => {
     const runId = queued.runId;
     const rows = () => t.run(ctx => ctx.db.query("incidents").collect());
     await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
-    expect(fetchFdaAnnouncementDetail).toHaveBeenCalledTimes(25);
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
+    expect(readFirecrawlFdaBatch).not.toHaveBeenCalled();
     expect(await rows()).toEqual([]);
     await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 0 });
-    expect(fetchFdaAnnouncementDetail).toHaveBeenCalledTimes(25);
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
+    expect(readFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
     await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId, index: 1 });
-    expect(fetchFdaAnnouncementDetail).toHaveBeenCalledTimes(26);
     expect(await rows()).toEqual([]);
     await t.finishAllScheduledFunctions();
     expect(await rows()).toHaveLength(26);
     expect(await t.query(internal.incidents.getImportResult, { runId })).toMatchObject({ status: "success", found: 26 });
-    expect(fetchFdaAnnouncementDetail).toHaveBeenCalledWith(expect.anything(), { mode: "firecrawl", apiKey: "fc-private-worker-fixture" });
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledTimes(1);
+    expect(startFirecrawlFdaBatch).toHaveBeenCalledWith(expect.arrayContaining([expect.stringContaining("cloud-fixture")]), "fc-private-worker-fixture");
   });
 
   it("does not publish a partial archive when a later fetch batch fails", async () => {
@@ -60,7 +84,7 @@ describe("Cloudflare owns FDA Firecrawl retrieval", () => {
     const queued = await t.action(internal.incidents.importFdaListingSnapshotInternal, { storageId: "listing-upload", fetchedAt: Date.now() });
     if (!("runId" in queued) || !queued.runId) throw new Error("Missing run");
     await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId: queued.runId, index: 0 });
-    vi.mocked(fetchFdaAnnouncementDetail).mockRejectedValue(new Error("Credential must stay private"));
+    vi.mocked(readFirecrawlFdaBatch).mockRejectedValue(new Error("Credential must stay private"));
     await t.action(internal.incidents.fetchFdaFirecrawlBatch, { runId: queued.runId, index: 1 });
     await t.finishAllScheduledFunctions();
     expect(await t.run(ctx => ctx.db.query("incidents").collect())).toEqual([]);

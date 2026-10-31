@@ -11,7 +11,7 @@ export async function syncFdaAnnouncements(env: NodeJS.ProcessEnv) {
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) throw new Error("The backend requires HTTPS");
   if (mode === "listings") {
     const listings = fdaListingSnapshotSchema.parse((await fetchFdaAnnouncementListings()).map(item => ({ ...item, publishedAt: item.publishedAt.getTime() })));
-    return uploadSnapshot(url, env.FDA_UPLOAD_TOKEN, "FDA announcement listings", listings, Date.now());
+    return uploadSnapshot(url, env.FDA_UPLOAD_TOKEN, "FDA announcement listings", listings, Date.now(), 60);
   }
   const incidents = await fdaAnnouncementsSource.fetchIncidents();
   if (!incidents.length) throw new Error("FDA announcements archive was empty");
