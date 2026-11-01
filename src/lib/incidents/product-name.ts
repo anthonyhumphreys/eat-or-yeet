@@ -19,7 +19,9 @@ const MAX_LENGTH = 120;
 const updatePrefix = /^\s*update(?:d)?\s*\d*\s*[:–—-]\s*/i;
 // "because of undeclared milk", "due to the presence of Salmonella", "after Listeria was found".
 const reasonClause = /\s+(?:because|due to|as a precaution|following|over (?:concerns|fears)|for (?:possible|potential|undeclared)|after\s+(?=(?:undeclared|unapproved|possible|potential|suspected|presence|detection|discovery|contamination|cross[- ]contamination|salmonella|listeria|e\.?\s*coli|botulism|allergen)\b))\b.*$/i;
-const recallVerb = /^(.+?)\s+(?:voluntarily\s+|is\s+)?(?:recalls|recall|recalling|has recalled|recalled|withdraws|is withdrawing|updates its recall of)\s+(.+)$/i;
+const recallVerb = /^(.+?)\s+(?:voluntarily\s+|is\s+)?(?:recalls|recalling|has recalled|recalled|withdraws|is withdrawing|updates its recall of)\s+(.+)$/i;
+// "SuperValu and Centra recall …": the plural verb only after two named companies, so "Fixture recall 12" stays whole.
+const jointRecall = /^(.+?\s(?:and|&)\s.+?)\s+recall\s+(.+)$/i;
 // "various", "several", "three", "specific batches of" say how many, not what.
 const quantity = /^(?:(?:several|various|multiple|some|certain|selected|specific batches of|batches of|a number of|a range of|two|three|four|five|six|seven|eight|nine|ten)\s+)+/i;
 // FDA announcements: "Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars".
@@ -76,7 +78,7 @@ function fromTitle(title: string): RecallName | null {
     return { company: tidy(issued[1]), product: shorten(product), reason: reasonFrom(issued[2]) ?? (/^(undeclared\s+.+?)\s+in\s+/i.exec(subject)?.[1] ? capitalise(/^(undeclared\s+.+?)\s+in\s+/i.exec(subject)![1]) : undefined) };
   }
 
-  const recalled = recallVerb.exec(text);
+  const recalled = recallVerb.exec(text) ?? jointRecall.exec(text);
   if (recalled) {
     const company = tidy(recalled[1]);
     const reason = reasonFrom(recalled[2]);

@@ -31,8 +31,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function render(params = {}, region: "UK" | "US" = "UK") {
-  const content = await WarningFeed({ params, region, path: "/" });
+async function render(params = {}, region: "UK" | "US" = "UK", path: "/" | "/incidents" = "/") {
+  const content = await WarningFeed({ params, region, path });
   return renderToStaticMarkup(createElement("div", null, content));
 }
 
@@ -169,7 +169,7 @@ describe("warnings landing feed", () => {
     listWarnings.mockResolvedValue(Array.from({ length: 125 }, (_, index) => ({
       ...rows[0], id: String(index), slug: `recall-${index}`, title: `Waitrose chocolate recall ${index}`,
     })));
-    const html = await render({ q: "chocolate", category: "Snacks & sweets", store: "Waitrose", page: "2" });
+    const html = await render({ q: "chocolate", category: "Snacks & sweets", store: "Waitrose", page: "2" }, "UK", "/incidents");
     expect(warningLinks(html)).toHaveLength(80);
     expect(html).toContain("Showing 80 of 125");
     expect(html).toContain("Show 40 more");
@@ -178,7 +178,16 @@ describe("warnings landing feed", () => {
 
   it("falls back to the first step for invalid page numbers", async () => {
     listWarnings.mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...rows[0], id: String(index), slug: `recall-${index}` })));
-    expect(warningLinks(await render({ page: "-2" }))).toHaveLength(40);
-    expect(warningLinks(await render({ page: "999999" }))).toHaveLength(40);
+    expect(warningLinks(await render({ page: "-2" }, "UK", "/incidents"))).toHaveLength(40);
+    expect(warningLinks(await render({ page: "999999" }, "UK", "/incidents"))).toHaveLength(40);
+  });
+
+  it("shows the newest 10 on the home page and links to the full list", async () => {
+    listWarnings.mockResolvedValue(Array.from({ length: 25 }, (_, index) => ({ ...rows[0], id: String(index), slug: `recall-${index}` })));
+    const html = await render({ category: "Snacks & sweets" });
+    expect(warningLinks(html)).toHaveLength(10);
+    expect(html).toContain("Newest 10 of 25");
+    expect(html).toContain('href="/incidents?region=UK&amp;category=Snacks+%26+sweets"');
+    expect(html).not.toContain("Show 15 more");
   });
 });

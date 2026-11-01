@@ -82,3 +82,7 @@ describe("real UK notice titles", () => {
     expect(recallReason(name, { kind: "allergen", label: "Undeclared allergen" })).toBe("Recalled for undeclared allergens");
   });
 });
+
+it("keeps titles like 'Fixture recall 12' whole", () => {
+  expect(recallName({ title: "Fixture recall 12" })).toEqual({ product: "Fixture recall 12" });
+});

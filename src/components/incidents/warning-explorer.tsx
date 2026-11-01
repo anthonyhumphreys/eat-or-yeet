@@ -30,6 +30,10 @@ export type ExplorerRow = {
 export type { ExplorerFilters } from "@/lib/incidents/browse-navigation";
 
 const STEP = BROWSE_PAGE_SIZE;
+// The home page shows the newest few and links to the full list.
+const HOME_LIMIT = 10;
+// "Medical" stays the stored value and URL; people see "Pharmaceutical".
+const superCategoryLabels: Partial<Record<SuperCategory, string>> = { Medical: "Pharmaceutical" };
 const sourceNames: Record<WarningRegion, string> = { UK: "Food Standards Agency", US: "FDA and USDA FSIS" };
 const officialUrls: Record<WarningRegion, string> = {
   UK: "https://alerts.food.gov.uk/",
@@ -187,7 +191,8 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
 
   const { results } = view;
   const total = indexed.page?.total ?? results.length;
-  const visible = results.slice(0, limit);
+  const home = path === "/";
+  const visible = results.slice(0, home ? HOME_LIMIT : limit);
   const page = Math.max(1, Math.ceil((indexed.page ? limit : Math.min(limit, results.length)) / STEP));
   const returnTo = filterUrl(path, region, filters, page);
   const filtered = Boolean(q || hazard || type || category || store);
@@ -269,7 +274,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             </Chip>
             {tabs.types.map((item) => (
               <Chip key={item} href={filterUrl(path, region, { ...filters, type: item, category: undefined })} active={type === item} onSelect={() => update({ type: type === item ? undefined : item, category: undefined })}>
-                {item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
+                {superCategoryLabels[item] ?? item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
               </Chip>
             ))}
           </div>
@@ -278,7 +283,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
       <div ref={chipsRef} className="relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by category">
         <div className="flex gap-2 sm:flex-wrap">
           <Chip href={filterUrl(path, region, { ...filters, category: undefined })} active={!category} onSelect={() => update({ category: undefined })}>
-            {type ? `All ${type.toLowerCase()}` : "All categories"}
+            {type ? `All ${(superCategoryLabels[type] ?? type).toLowerCase()}` : "All categories"}
           </Chip>
           {tabs.categories.map((item) => {
             const count = view.categoryCounts.get(item) ?? 0;
@@ -383,7 +388,14 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
       {indexed.notice ? <p role="status" className="mt-3 text-sm text-muted-foreground">{indexed.notice}</p> : null}
       {indexed.error ? <p role="alert" className="mt-4 text-sm">{indexed.error} <button type="button" onClick={indexed.retry} className="min-h-10 underline">Retry</button></p> : null}
       {indexed.loading ? <p role="status" className="mt-3 text-sm text-muted-foreground">Updating recalls…</p> : null}
-      {total > visible.length ? (
+      {home && total > visible.length ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <p className="text-sm tabular-nums text-muted-foreground">Newest {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
+          <Link href={filterUrl("/incidents", region, filters)} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            See all {countLabel}<ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </div>
+      ) : total > visible.length ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
           <a
