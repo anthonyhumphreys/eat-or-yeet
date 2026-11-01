@@ -8,7 +8,6 @@ import { useBrowsePage } from "./use-browse-page";
 import type { BrowsePage } from "@/lib/incidents/browse-view";
 import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
 import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
-import { ShareButton } from "@/components/share-button";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
 import { recallName, recallReason } from "@/lib/incidents/product-name";
@@ -351,7 +350,6 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             {filtered ? (
               <button type="button" onClick={() => update({ q: "", hazard: undefined, type: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
             ) : null}
-            {rows ? <ShareButton label="Share this list" title={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls`} text={`${region} ${type ? `${type.toLowerCase()} ` : ""}recall reports from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
           </div>
         </div>
       </ViewTransition>
