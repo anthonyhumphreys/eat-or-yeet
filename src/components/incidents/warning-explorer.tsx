@@ -9,7 +9,7 @@ import type { BrowsePage } from "@/lib/incidents/browse-view";
 import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
 import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
-import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
+import { hazardKindNames, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
 import { recallName, recallReason } from "@/lib/incidents/product-name";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
@@ -321,22 +321,15 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         </div>
       </form>
 
-      <div className="mt-3 flex gap-2">
-        <FacetSelect id="hazard-filter" label="Hazard" value={hazard ?? ""} onChange={(value) => update({ hazard: (value || undefined) as HazardKind | undefined })}>
-          <option value="">All hazards ({view.hazardTotal.toLocaleString("en-GB")})</option>
-          {hazardKinds.map((kind) => {
-            const count = view.hazardCounts.get(kind) ?? 0;
-            if (!count && hazard !== kind) return null;
-            return <option key={kind} value={kind}>{hazardKindNames[kind]} ({count.toLocaleString("en-GB")})</option>;
-          })}
-        </FacetSelect>
-        {view.stores.length ? (
+      {/* No hazard filter: each row's tag names the hazard. Old ?hazard= links still filter and can be cleared. */}
+      {view.stores.length ? (
+        <div className="mt-3 flex gap-2">
           <FacetSelect id="store-filter" label="Shop" value={store ?? ""} onChange={(value) => update({ store: value || undefined })}>
             <option value="">All shops</option>
             {view.stores.map((item) => <option key={item}>{item}</option>)}
           </FacetSelect>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <ViewTransition name="warning-context" default="none" update="warning-context" share="warning-context">
         <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-3">

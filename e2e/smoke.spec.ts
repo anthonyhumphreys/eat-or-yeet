@@ -249,12 +249,14 @@ test("warning browsing works with reduced motion and without view transition sup
   await page.goto("/?region=UK");
   await chooseRegion(page, "United States");
   await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
-  await page.getByLabel("Hazard", { exact: true }).selectOption("allergen");
+  const category = page.getByRole("group", { name: "Filter by category" }).getByRole("link").nth(1);
+  await category.click();
+  await expect(category).toHaveAttribute("aria-current", "true");
   await searchBox(page).fill("no such food warning");
   await expect(page.getByText("No recall reports match.")).toBeVisible();
   await page.getByRole("button", { name: "Remove “no such food warning”" }).click();
   await expect(page.getByRole("heading", { name: /recalls? found$/ })).toBeVisible();
-  await expect(page.getByLabel("Hazard", { exact: true })).toHaveValue("allergen");
+  await expect(category).toHaveAttribute("aria-current", "true");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("auto");
   expect(errors).toEqual([]);
 });
