@@ -62,3 +62,23 @@ describe("recallReason", () => {
     expect(recallReason(name, { kind: "other", label: "See notice" })).toBe("Recalled, see the notice for why");
   });
 });
+
+describe("real UK notice titles", () => {
+  it.each([
+    ["Update 1 – PepsiCo updates its recall of Walkers Variety Snacks Sharing Box because of undeclared wheat (gluten)", "Walkers Variety Snacks Sharing Box", "PepsiCo"],
+    ["SuperValu and Centra recall salmon and prawn cocktail products because of contamination with Listeria monocytogenes", "Salmon and prawn cocktail products", "SuperValu and Centra"],
+    ["Arla Foods Ltd recalls various Arla Protein Pudding products because they may contain glass", "Arla Protein Pudding products", "Arla Foods Ltd"],
+    ["Greencore recalls three pasta products because of possible contamination with Listeria monocytogenes", "Pasta products", "Greencore"],
+    ["Capri Sun UK recalls specific batches of Capri-Sun Orange 10 pack because they contain some cartons of Capri-Sun Zero which were filled with the full sugar variety", "Capri-Sun Orange 10 pack", "Capri Sun UK"],
+    ["Lidl Northern Ireland recalls 1001 Delights Dubai Style Pistachio Ice Cream because of undeclared cashew (nuts)", "1001 Delights Dubai Style Pistachio Ice Cream", "Lidl Northern Ireland"],
+    ["Summit Foods is recalling various products because of possible contamination with Shiga-toxin producing E. coli (STEC)", "Summit Foods products", "Summit Foods"],
+  ])("%s", (title, product, company) => {
+    expect(recallName({ title })).toMatchObject({ product, company });
+  });
+
+  it("names the allergens when the notice only says undeclared allergens", () => {
+    const name = recallName({ title: "Full On Flapjacks recalls various Flapjack products because of undeclared allergens" });
+    expect(recallReason(name, { kind: "allergen", label: "Nuts, gluten & soya" })).toBe("Recalled for undeclared nuts, gluten & soya");
+    expect(recallReason(name, { kind: "allergen", label: "Undeclared allergen" })).toBe("Recalled for undeclared allergens");
+  });
+});

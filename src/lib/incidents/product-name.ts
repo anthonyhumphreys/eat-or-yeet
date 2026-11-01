@@ -15,10 +15,13 @@ export type RecallName = {
 type NameTarget = { type: string; value: string; groupId?: string | null };
 
 const MAX_LENGTH = 120;
-const updatePrefix = /^\s*update(?:d)?\s*\d*\s*:\s*/i;
+// "Update 1:", "Updated:", "Update 1 –".
+const updatePrefix = /^\s*update(?:d)?\s*\d*\s*[:–—-]\s*/i;
 // "because of undeclared milk", "due to the presence of Salmonella", "after Listeria was found".
 const reasonClause = /\s+(?:because|due to|as a precaution|following|over (?:concerns|fears)|for (?:possible|potential|undeclared)|after\s+(?=(?:undeclared|unapproved|possible|potential|suspected|presence|detection|discovery|contamination|cross[- ]contamination|salmonella|listeria|e\.?\s*coli|botulism|allergen)\b))\b.*$/i;
-const recallVerb = /^(.+?)\s+(?:voluntarily\s+|is\s+)?(?:recalls|recalling|has recalled|recalled|withdraws|is withdrawing)\s+(.+)$/i;
+const recallVerb = /^(.+?)\s+(?:voluntarily\s+|is\s+)?(?:recalls|recall|recalling|has recalled|recalled|withdraws|is withdrawing|updates its recall of)\s+(.+)$/i;
+// "various", "several", "three", "specific batches of" say how many, not what.
+const quantity = /^(?:(?:several|various|multiple|some|certain|selected|specific batches of|batches of|a number of|a range of|two|three|four|five|six|seven|eight|nine|ten)\s+)+/i;
 // FDA announcements: "Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars".
 const issuesAlert = /^(.+?)\s+issues\s+(?:an?\s+)?(?:voluntary\s+|nationwide\s+|precautionary\s+)*(?:allergy alert|alert|recall)\s+(?:of|on|for)\s+(.+)$/i;
 const genericProducts = /^(?:a\s+)?(?:several|various|multiple|some|certain|a number of|a range of|range of|selected)?\s*(?:of\s+its\s+)?products?$/i;
@@ -77,7 +80,8 @@ function fromTitle(title: string): RecallName | null {
   if (recalled) {
     const company = tidy(recalled[1]);
     const reason = reasonFrom(recalled[2]);
-    const product = tidy(recalled[2].replace(reasonClause, "").replace(/^(?:the|its)\s+/i, ""));
+    const named = tidy(recalled[2].replace(reasonClause, "").replace(/^(?:the|its)\s+/i, ""));
+    const product = genericProducts.test(named) ? named : tidy(named.replace(quantity, "")) || named;
     if (!product) return null;
     if (genericProducts.test(product)) return { company, product: `${company} products`, reason };
     return { company, product: shorten(product), reason };
@@ -142,7 +146,9 @@ function hazardWords(hazard: HazardTag) {
  * "Recalled because allergens are not declared in English on the label".
  */
 export function recallReason(name: RecallName, hazard: HazardTag) {
-  if (name.reason) return sentence.test(name.reason) ? `Recalled because ${lowerFirst(name.reason)}` : `Recalled for ${lowerFirst(name.reason)}`;
+  // "Undeclared allergens" says less than the tag, which names them.
+  const vague = name.reason && /^undeclared allergens?$/i.test(name.reason) && hazard.kind === "allergen" && hazard.label !== "Undeclared allergen" && hazard.label !== "Allergen";
+  if (name.reason && !vague) return sentence.test(name.reason) ? `Recalled because ${lowerFirst(name.reason)}` : `Recalled for ${lowerFirst(name.reason)}`;
   const words = hazardWords(hazard);
   return words ? `Recalled for ${words}` : "Recalled, see the notice for why";
 }
