@@ -10,6 +10,7 @@ import { listActivePublicIncidents } from "@/db/queries";
 import { isSuperCategory, productCategories, type ProductCategory } from "@/lib/incidents/browse";
 import { warningSearchText } from "@/lib/incidents/warning-search";
 import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/hazard";
+import { recallName } from "@/lib/incidents/product-name";
 import { formatRecallDate, pickTopAlert, timeAgo } from "@/lib/incidents/recency";
 import { type WarningRegion } from "@/lib/location";
 import { getFoodSafetyNews } from "@/lib/news/feed";
@@ -91,6 +92,7 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
 
 /** The one recall to see first: the newest food-poisoning recall this month, otherwise the newest recall. */
 function TopAlert({ row, summary, returnTo }: { row: ExplorerRow; summary?: string; returnTo: string }) {
+  const name = recallName(row);
   return (
     <RecallLink
       slug={row.slug}
@@ -105,7 +107,8 @@ function TopAlert({ row, summary, returnTo }: { row: ExplorerRow; summary?: stri
           <time dateTime={new Date(row.updatedAt).toISOString()} className="tabular-nums">{formatRecallDate(row.updatedAt)}</time> · {timeAgo(row.updatedAt)}
         </span>
       </span>
-      <span className="mt-2 block break-words text-lg font-black leading-snug tracking-tight sm:text-2xl">{row.title}</span>
+      <span className="mt-2 block break-words text-lg font-black leading-snug tracking-tight sm:text-2xl">{name.product}</span>
+      {name.company ? <span className="mt-0.5 block text-sm font-semibold text-muted-foreground"><span className="sr-only">Recalled by </span>{name.company}</span> : null}
       {summary ? <span className="mt-1.5 hidden max-w-[65ch] text-sm leading-6 text-muted-foreground sm:line-clamp-2">{summary}</span> : null}
       <span className="mt-3 hidden items-center gap-1 text-sm font-bold text-link sm:inline-flex">
         See full warning<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />

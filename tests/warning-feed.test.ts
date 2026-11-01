@@ -85,7 +85,7 @@ describe("warnings landing feed", () => {
     const html = await render();
     expect(html).not.toContain("US eggs recalled");
     expect(warningLinks(html)).toHaveLength(2);
-    expect(list(html).indexOf("Waitrose recalls milk chocolate")).toBeLessThan(list(html).indexOf("Bread recall"));
+    expect(list(html).indexOf(">Milk chocolate<")).toBeLessThan(list(html).indexOf("Bread recall"));
     expect(html).toContain('aria-label="Filter by category"');
     expect(html).toContain('href="/?region=UK&amp;category=Bakery+%26+grains"');
     expect(html).toContain('href="/?region=UK&amp;category=Supplements"');
@@ -135,7 +135,7 @@ describe("warnings landing feed", () => {
 
   it("keeps official warnings visible and explains when news fails", async () => {
     getNews.mockRejectedValue(new Error("Feed unavailable"));
-    expect(await render()).toContain("Waitrose recalls milk chocolate");
+    expect(await render()).toContain(">Milk chocolate<");
     const news = renderToStaticMarkup(await RegionalNews({ region: "UK" }));
     expect(news).toContain("News is temporarily unavailable.");
     expect(news).not.toContain("No recent reporting found");
@@ -159,7 +159,7 @@ describe("warnings landing feed", () => {
   it("renders warnings without waiting for a stalled publisher", async () => {
     getNews.mockImplementation(() => new Promise(() => {}));
     const html = await render();
-    expect(html).toContain("Waitrose recalls milk chocolate");
+    expect(html).toContain(">Milk chocolate<");
     expect(html).toContain("Loading news…");
     expect(listWarnings).toHaveBeenCalledWith("UK");
   });

@@ -11,6 +11,7 @@ import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } fr
 import { ShareButton } from "@/components/share-button";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
+import { recallName } from "@/lib/incidents/product-name";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
 import { regionNames, type WarningRegion } from "@/lib/location";
@@ -57,6 +58,7 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
   const date = formatRecallDate(row.updatedAt);
   // "x ago" depends on the viewer's clock, so a render either side of midnight may differ from the server's.
   const ago = timeAgo(row.updatedAt);
+  const name = recallName(row);
   return (
     <li className="border-b last:border-b-0">
       <RecallLink slug={row.slug} returnTo={returnTo} className="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[6.75rem_minmax(0,1fr)_auto] sm:gap-x-4">
@@ -65,7 +67,8 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
           <span suppressHydrationWarning className="block text-muted-foreground">{ago}</span>
         </span>
         <span className="min-w-0">
-          <span className="block text-[0.9375rem] font-semibold leading-snug sm:text-base"><Highlight text={row.title} query={query} /></span>
+          <span className="block text-[0.9375rem] font-semibold leading-snug sm:text-base"><Highlight text={name.product} query={query} /></span>
+          {name.company ? <span className="mt-0.5 block text-[13px] leading-5 text-muted-foreground"><span className="sr-only">Recalled by </span><Highlight text={name.company} query={query} /></span> : null}
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-5 text-muted-foreground">
             <span className={`rounded-full px-2 font-semibold ${tagTone[row.hazard.kind]}`}><span className="sr-only">Hazard: </span>{row.hazard.label}</span>
             <span>{row.categories.join(", ")}</span>
