@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recallName } from "@/lib/incidents/product-name";
+import { recallName, recallReason } from "@/lib/incidents/product-name";
 
 describe("recallName", () => {
   it.each([
@@ -40,5 +40,25 @@ describe("recallName", () => {
 
   it("falls back to the notice title", () => {
     expect(recallName({ title: "Update 2: Advice on raw milk cheese" })).toEqual({ product: "Advice on raw milk cheese" });
+  });
+});
+
+describe("recallReason", () => {
+  const allergen = { kind: "allergen" as const, label: "Milk, egg +1" };
+  it.each([
+    ["Unilever recalls Pot Noodle Piri Piri Chicken Flavour because of undeclared milk", "Recalled for undeclared milk"],
+    ["Greencore recalls several products due to the presence of Salmonella", "Recalled for Salmonella"],
+    ["Lambertz recalls Lambertz Mini Spekulatius because allergens are not declared in English on the label", "Recalled because allergens are not declared in English on the label"],
+    ["Lucky Saint recalls Hazy IPA products because of risk of cans exploding", "Recalled for risk of cans exploding"],
+  ])("%s", (title, reason) => {
+    expect(recallReason(recallName({ title }), allergen)).toBe(reason);
+  });
+
+  it("explains the hazard tag when the title gives no reason", () => {
+    const name = recallName({ title: "Acme Snacks recall: Peanut Butter Pretzel Bites" });
+    expect(recallReason(name, allergen)).toBe("Recalled for undeclared milk, egg and 1 more allergen");
+    expect(recallReason(name, { kind: "pathogen", label: "Listeria" })).toBe("Recalled for Listeria");
+    expect(recallReason(name, { kind: "foreign", label: "Glass" })).toBe("Recalled for glass");
+    expect(recallReason(name, { kind: "other", label: "See notice" })).toBe("Recalled, see the notice for why");
   });
 });

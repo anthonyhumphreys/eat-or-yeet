@@ -114,3 +114,35 @@ export function recallName({ title, targets }: { title: string; targets?: readon
   const name = parsed ?? { product: tidy(title.replace(updatePrefix, "")) || title };
   return { ...name, product: capitalise(name.product) };
 }
+
+type HazardTag = { kind: "pathogen" | "allergen" | "foreign" | "spoilage" | "other"; label: string };
+
+const properNoun = /^(?:salmonella|listeria|e\.?\s*coli|campylobacter|cronobacter|cyclospora|bacillus|clostridium|hepatitis|norovirus|stec|fd&c)\b/i;
+const sentence = /\b(?:are|is|was|were|has|have|had|may|might|could|can|did|does|do)\b/i;
+
+function lowerFirst(text: string) {
+  return properNoun.test(text) ? text : text[0].toLowerCase() + text.slice(1);
+}
+
+/** What the hazard tag means in words, for notices whose titles give no reason. */
+function hazardWords(hazard: HazardTag) {
+  if (hazard.kind === "pathogen") return hazard.label === "Botulism risk" ? "botulism risk" : hazard.label;
+  if (hazard.kind === "allergen") {
+    if (hazard.label === "Allergen") return "an undeclared allergen";
+    const more = /\s*\+(\d+)$/.exec(hazard.label);
+    const names = hazard.label.replace(/\s*\+\d+$/, "").toLowerCase();
+    return more ? `undeclared ${names} and ${more[1]} more ${more[1] === "1" ? "allergen" : "allergens"}` : `undeclared ${names}`;
+  }
+  if (hazard.label === "See notice") return null;
+  return hazard.label.toLowerCase();
+}
+
+/**
+ * Why it was recalled, as a short phrase for list rows: "Recalled for undeclared milk",
+ * "Recalled because allergens are not declared in English on the label".
+ */
+export function recallReason(name: RecallName, hazard: HazardTag) {
+  if (name.reason) return sentence.test(name.reason) ? `Recalled because ${lowerFirst(name.reason)}` : `Recalled for ${lowerFirst(name.reason)}`;
+  const words = hazardWords(hazard);
+  return words ? `Recalled for ${words}` : "Recalled, see the notice for why";
+}

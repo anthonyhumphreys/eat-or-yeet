@@ -11,7 +11,7 @@ import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } fr
 import { ShareButton } from "@/components/share-button";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
 import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
-import { recallName } from "@/lib/incidents/product-name";
+import { recallName, recallReason } from "@/lib/incidents/product-name";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
 import { regionNames, type WarningRegion } from "@/lib/location";
@@ -67,7 +67,7 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
           <span suppressHydrationWarning className="block text-muted-foreground">{ago}</span>
         </span>
         <span className="min-w-0">
-          <span className="block text-[0.9375rem] leading-snug sm:text-base"><strong className="font-bold"><Highlight text={name.product} query={query} /></strong><span className="text-muted-foreground">: <Highlight text={name.reason ?? row.hazard.label} query={query} /></span></span>
+          <span className="block text-[0.9375rem] leading-snug sm:text-base"><strong className="font-bold"><Highlight text={name.product} query={query} /></strong><span className="text-muted-foreground">: <Highlight text={recallReason(name, row.hazard)} query={query} /></span></span>
           {name.company ? <span className="mt-0.5 block text-[13px] leading-5 text-muted-foreground"><span className="sr-only">Recalled by </span><Highlight text={name.company} query={query} /></span> : null}
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-5 text-muted-foreground">
             <span className={`rounded-full px-2 font-semibold ${tagTone[row.hazard.kind]}`}><span className="sr-only">Hazard: </span>{row.hazard.label}</span>
@@ -283,6 +283,8 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
           </Chip>
           {tabs.categories.map((item) => {
             const count = view.categoryCounts.get(item) ?? 0;
+            // Empty categories are hidden, except the one already chosen so it can be cleared.
+            if (count === 0 && category !== item) return null;
             return (
               <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
                 {item} <span className="tabular-nums">{count.toLocaleString("en-GB")}</span>

@@ -88,7 +88,8 @@ describe("warnings landing feed", () => {
     expect(list(html).indexOf(">Milk chocolate<")).toBeLessThan(list(html).indexOf("Bread recall"));
     expect(html).toContain('aria-label="Filter by category"');
     expect(html).toContain('href="/?region=UK&amp;category=Bakery+%26+grains"');
-    expect(html).toContain('href="/?region=UK&amp;category=Supplements"');
+    // Categories with no recalls are hidden.
+    expect(html).not.toContain('href="/?region=UK&amp;category=Supplements"');
   });
 
   it("matches search words separately and combines them with category and retailer", async () => {
