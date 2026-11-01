@@ -13,7 +13,16 @@ describe("recallName", () => {
     ["Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars", "Chocolate Bars", "Acme Foods"],
     ["Acme Foods recall: Peanut Butter Cups, 12 oz, UPC 012345678905, sold in clear plastic tubs at retail", "Peanut Butter Cups", "Acme Foods"],
   ])("%s", (title, product, company) => {
-    expect(recallName({ title })).toEqual({ product, company });
+    expect(recallName({ title })).toMatchObject({ product, company });
+  });
+
+  it.each([
+    ["Unilever recalls Pot Noodle Piri Piri Chicken Flavour because of undeclared milk", "Undeclared milk"],
+    ["Greencore recalls several products due to the presence of Salmonella", "Salmonella"],
+    ["Lucky Saint recalls Hazy IPA products because of risk of cans exploding", "Risk of cans exploding"],
+    ["Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars", "Undeclared Peanut"],
+  ])("gives the reason for %s", (title, reason) => {
+    expect(recallName({ title }).reason).toBe(reason);
   });
 
   it("names the product a Food Alert For Action is about", () => {
@@ -26,7 +35,7 @@ describe("recallName", () => {
       { type: "gtin", value: "5000000000005", groupId: "a" },
       { type: "product", value: "Greencore Egg Sandwich", groupId: "b" },
     ];
-    expect(recallName({ title: "Greencore recalls several products due to the presence of Salmonella", targets })).toEqual({ company: "Greencore", product: "Greencore Chicken Sandwich and 1 more" });
+    expect(recallName({ title: "Greencore recalls several products due to the presence of Salmonella", targets })).toEqual({ company: "Greencore", reason: "Salmonella", product: "Greencore Chicken Sandwich and 1 more" });
   });
 
   it("falls back to the notice title", () => {

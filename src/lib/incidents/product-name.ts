@@ -8,6 +8,8 @@ export type RecallName = {
   product: string;
   /** Who recalled it, when the notice names them. */
   company?: string;
+  /** Why, in the notice's words, e.g. "Undeclared milk". */
+  reason?: string;
 };
 
 type NameTarget = { type: string; value: string; groupId?: string | null };
@@ -20,6 +22,17 @@ const recallVerb = /^(.+?)\s+(?:voluntarily\s+|is\s+)?(?:recalls|recalling|has r
 // FDA announcements: "Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars".
 const issuesAlert = /^(.+?)\s+issues\s+(?:an?\s+)?(?:voluntary\s+|nationwide\s+|precautionary\s+)*(?:allergy alert|alert|recall)\s+(?:of|on|for)\s+(.+)$/i;
 const genericProducts = /^(?:a\s+)?(?:several|various|multiple|some|certain|a number of|a range of|range of|selected)?\s*(?:of\s+its\s+)?products?$/i;
+
+const reasonStart = /\s+(?:because(?:\s+of)?|due to|as a precaution(?: because(?: of)?| due to)?|following|over (?:concerns|fears)(?: (?:about|that|of))?|after)\s+(.+)$/i;
+
+/** "because of undeclared milk" → "Undeclared milk"; "due to the presence of Salmonella" → "Salmonella". */
+function reasonFrom(text: string) {
+  if (!reasonClause.test(text)) return undefined;
+  const match = reasonStart.exec(text);
+  if (!match) return undefined;
+  const reason = tidy(match[1].replace(/^(?:the\s+)?(?:possible\s+|potential\s+)?presence of\s+/i, "").replace(/^(?:a|an|the)\s+/i, ""));
+  return reason ? capitalise(reason) : undefined;
+}
 
 function tidy(text: string) {
   return text.replace(/\s+/g, " ").replace(/^[\s,;:–-]+|[\s,;:.–-]+$/g, "").trim();
@@ -57,16 +70,17 @@ function fromTitle(title: string): RecallName | null {
     const subject = tidy(issued[2].replace(reasonClause, ""));
     // "Undeclared Milk in Chocolate Bars" names the hazard first and the product after "in".
     const product = /^(?:undeclared|possible|potential)\b.*?\s+in\s+(.+)$/i.exec(subject)?.[1] ?? subject;
-    return { company: tidy(issued[1]), product: shorten(product) };
+    return { company: tidy(issued[1]), product: shorten(product), reason: reasonFrom(issued[2]) ?? (/^(undeclared\s+.+?)\s+in\s+/i.exec(subject)?.[1] ? capitalise(/^(undeclared\s+.+?)\s+in\s+/i.exec(subject)![1]) : undefined) };
   }
 
   const recalled = recallVerb.exec(text);
   if (recalled) {
     const company = tidy(recalled[1]);
+    const reason = reasonFrom(recalled[2]);
     const product = tidy(recalled[2].replace(reasonClause, "").replace(/^(?:the|its)\s+/i, ""));
     if (!product) return null;
-    if (genericProducts.test(product)) return { company, product: `${company} products` };
-    return { company, product: shorten(product) };
+    if (genericProducts.test(product)) return { company, product: `${company} products`, reason };
+    return { company, product: shorten(product), reason };
   }
   return null;
 }
@@ -91,10 +105,10 @@ export function recallName({ title, targets }: { title: string; targets?: readon
   const generic = !parsed || (parsed.company !== undefined && parsed.product === `${parsed.company} products`);
   if (generic && targets?.length) {
     const products = targetProducts(targets);
-    if (products.length === 1) return { company: parsed?.company, product: capitalise(shorten(products[0])) };
+    if (products.length === 1) return { company: parsed?.company, reason: parsed?.reason, product: capitalise(shorten(products[0])) };
     if (products.length > 1) {
       const first = shorten(products[0]);
-      return { company: parsed?.company, product: capitalise(`${first} and ${products.length - 1} more`) };
+      return { company: parsed?.company, reason: parsed?.reason, product: capitalise(`${first} and ${products.length - 1} more`) };
     }
   }
   const name = parsed ?? { product: tidy(title.replace(updatePrefix, "")) || title };

@@ -107,7 +107,7 @@ function TopAlert({ row, summary, returnTo }: { row: ExplorerRow; summary?: stri
           <time dateTime={new Date(row.updatedAt).toISOString()} className="tabular-nums">{formatRecallDate(row.updatedAt)}</time> · {timeAgo(row.updatedAt)}
         </span>
       </span>
-      <span className="mt-2 block break-words text-lg font-black leading-snug tracking-tight sm:text-2xl">{name.product}</span>
+      <span className="mt-2 block break-words text-lg font-black leading-snug tracking-tight sm:text-2xl">{name.product}<span className="font-semibold text-muted-foreground">: {name.reason ?? row.hazard.label}</span></span>
       {name.company ? <span className="mt-0.5 block text-sm font-semibold text-muted-foreground"><span className="sr-only">Recalled by </span>{name.company}</span> : null}
       {summary ? <span className="mt-1.5 hidden max-w-[65ch] text-sm leading-6 text-muted-foreground sm:line-clamp-2">{summary}</span> : null}
       <span className="mt-3 hidden items-center gap-1 text-sm font-bold text-link sm:inline-flex">
