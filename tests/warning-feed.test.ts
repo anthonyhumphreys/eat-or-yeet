@@ -41,7 +41,7 @@ describe("warnings landing feed", () => {
     listWarnings.mockResolvedValue([{ ...rows[0], title: "Various products recalled", hazard: "Undeclared milk, egg and sesame allergens", searchText: "northstar sesame crunch" }]);
     const html = await render({ q: "sesame northstar" });
     expect(warningLinks(html)).toHaveLength(1);
-    expect(html).toContain("Milk, egg +1");
+    expect(html).toContain("Milk, egg &amp; sesame");
     expect(warningLinks(await render({ q: "sesame absent" }))).toHaveLength(0);
   });
 

@@ -128,9 +128,9 @@ function lowerFirst(text: string) {
 function hazardWords(hazard: HazardTag) {
   if (hazard.kind === "pathogen") return hazard.label === "Botulism risk" ? "botulism risk" : hazard.label;
   if (hazard.kind === "allergen") {
-    if (hazard.label === "Allergen") return "an undeclared allergen";
-    const more = /\s*\+(\d+)$/.exec(hazard.label);
-    const names = hazard.label.replace(/\s*\+\d+$/, "").toLowerCase();
+    if (hazard.label === "Undeclared allergen" || hazard.label === "Allergen") return "an undeclared allergen";
+    const more = /\s*\+(\d+)(?: more)?$/.exec(hazard.label);
+    const names = hazard.label.replace(/\s*\+\d+(?: more)?$/, "").toLowerCase();
     return more ? `undeclared ${names} and ${more[1]} more ${more[1] === "1" ? "allergen" : "allergens"}` : `undeclared ${names}`;
   }
   if (hazard.label === "See notice") return null;

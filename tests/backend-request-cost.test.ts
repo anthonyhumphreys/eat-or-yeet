@@ -31,7 +31,7 @@ describe("combined backend request queries and mutations", () => {
       const { page } = await t.query(api.incidents.listActivePage, { region: "UK", cursor: null });
       expect(page[0].searchText).toContain("sesame");
       expect(page[0].searchText).toContain("mustard");
-      expect(page[0].browseHazard).toMatchObject({ kind: "allergen", label: "Milk, egg +2" });
+      expect(page[0].browseHazard).toMatchObject({ kind: "allergen", label: "Milk, egg, sesame +1 more" });
       expect(page[0]).not.toHaveProperty("originalSourceData");
     }
   });
