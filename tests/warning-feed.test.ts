@@ -45,6 +45,17 @@ describe("warnings landing feed", () => {
     expect(warningLinks(await render({ q: "sesame absent" }))).toHaveLength(0);
   });
 
+  it("explains the undeclared allergen without including product ingredients", async () => {
+    listWarnings.mockResolvedValue([{
+      ...rows[0], title: "Acme Foods recalls cookies because of undeclared allergens",
+      hazard: "Undeclared allergens", summary: "The peanut butter cookies may contain undeclared milk.",
+    }]);
+    const html = await render();
+    expect(html).toContain("Recalled for undeclared milk");
+    expect(list(html)).not.toContain("peanuts");
+    expect(list(html)).toContain("Snacks &amp; sweets, Dairy &amp; eggs");
+  });
+
   it("adds a kind-of-product row once a region has more than food, and filters by it", async () => {
     const medicine = { ...rows[2], id: "4", slug: "infant-drops", title: "Infant drops recalled", hazard: "Subpotent drug", pathogen: null, categories: ["Over-the-counter medicines"], superCategories: ["Baby", "Medical"], updatedAt: new Date("2026-10-04T12:00:00Z") };
     listWarnings.mockResolvedValue([...rows, medicine]);

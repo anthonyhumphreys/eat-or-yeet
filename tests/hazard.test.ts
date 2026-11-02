@@ -58,4 +58,20 @@ describe("allergen tags", () => {
   it("says undeclared allergen when no allergen is named anywhere", () => {
     expect(classifyHazard({ title: "Lambertz recalls cookies because allergens are not declared in English on the label" })).toEqual({ kind: "allergen", label: "Undeclared allergen" });
   });
+
+  it.each([
+    ["The peanut butter cookies may contain undeclared milk.", "Milk"],
+    ["The milk chocolate cookies contain undeclared peanuts.", "Peanuts"],
+    ["Undeclared milk in peanut butter cookies.", "Milk"],
+    ["The peanut butter cookies contain milk, egg and sesame.", "Milk, egg & sesame"],
+    ["The peanut butter cookies contain undeclared milk. The label also fails to declare soya.", "Milk & soya"],
+    ["The peanut butter cookies contain milk which is not declared on the label.", "Milk"],
+    ["Peanut butter cookies are recalled because milk is not declared on the label.", "Milk"],
+    ["The peanut butter cookies are sold in packs of six.", "Undeclared allergen"],
+    ["The peanut butter cookies do not contain milk.", "Undeclared allergen"],
+    ["The peanut butter cookies contain no milk.", "Undeclared allergen"],
+  ])("uses the recall wording rather than the product ingredients in %s", (summary, label) => {
+    expect(classifyHazard({ title: "Acme Foods recalls cookies because of undeclared allergens", summary }))
+      .toEqual({ kind: "allergen", label });
+  });
 });

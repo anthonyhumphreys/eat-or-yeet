@@ -41,6 +41,33 @@ describe("recallName", () => {
   it("falls back to the notice title", () => {
     expect(recallName({ title: "Update 2: Advice on raw milk cheese" })).toEqual({ product: "Advice on raw milk cheese" });
   });
+
+  it.each([
+    "Chocolate Chip Cookies, Belgian Chocolate Brownies and Rich Chocolate Fudge Cake",
+    "Chocolate Chip Cookies; Belgian Chocolate Brownies; Rich Chocolate Fudge Cake",
+    "Chocolate Chip Cookies (Original, Double Chocolate and White Chocolate varieties)",
+    "Old Mill Family Milk Chocolate Cookies (12 oz and 20 oz packs)",
+    "Chocolate Chip Cookies, 12 oz Belgian Chocolate Brownies and Rich Chocolate Fudge Cake",
+  ])("preserves the affected products and varieties in %s", (product) => {
+    expect(recallName({ title: `Acme Foods recalls ${product} because of undeclared milk` }))
+      .toEqual({ company: "Acme Foods", product, reason: "Undeclared milk" });
+    expect(recallName({ title: `Acme Foods recall: ${product}` }).product).toBe(product);
+  });
+
+  it("keeps product lists before packaging details", () => {
+    const product = "Chocolate Chip Cookies, Belgian Chocolate Brownies and Rich Chocolate Fudge Cake";
+    expect(recallName({ title: `Acme Foods recall: ${product}, 12 oz, UPC 012345678905, sold in clear plastic tubs` }).product)
+      .toBe(product);
+  });
+
+  it("marks a word-boundary cut when product names exceed the headline limit", () => {
+    const product = "Original Chocolate Chip Cookies, Belgian Chocolate Brownies, Rich Chocolate Fudge Cake and White Chocolate Raspberry Cheesecake Bars";
+    const name = recallName({ title: `Acme Foods recalls ${product} because of undeclared milk` });
+    expect(name.product).toContain("Belgian Chocolate Brownies");
+    expect(name.product).toMatch(/\S…$/);
+    expect(name.product.length).toBeLessThanOrEqual(121);
+    expect(product.startsWith(name.product.slice(0, -1))).toBe(true);
+  });
 });
 
 describe("recallReason", () => {

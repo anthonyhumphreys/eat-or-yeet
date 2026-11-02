@@ -64,6 +64,23 @@ function allergenLabel(found: string[]) {
   return capitalise(found.length > 1 ? `${found.slice(0, -1).join(", ")} & ${found.at(-1)}` : found[0]);
 }
 
+/** Summaries mix product names with risk wording. Read only the declaration or contents clause. */
+function summaryAllergenText(summary: string) {
+  const declarations = [
+    ...Array.from(summary.matchAll(/\bundeclared\s+([^.;\n]+)/gi), match => match[1]),
+    ...Array.from(summary.matchAll(/\b(?:does not|fails? to)\s+(?:declare|mention|identify|list)\s+([^.;\n]+)/gi), match => match[1]),
+    ...Array.from(summary.matchAll(/(?:^|[.;\n])\s*([^.;\n]+?)\s+(?:(?:which|that)\s+)?(?:is|are|was|were)\s+not\s+(?:declared|mentioned|identified|listed|emphasi[sz]ed)\b/gi), match =>
+      match[1].split(/\b(?:because(?: of)?|due to|contains?|containing|has|have)\s+/i).at(-1)!),
+  ];
+  const contents = Array.from(summary.matchAll(/\bcontains?\s+([^.;\n]+)/gi))
+    .filter(match => !/\b(?:not|never)\s*$/i.test(summary.slice(0, match.index)) && !/^(?:no|neither)\b/i.test(match[1]))
+    .map(match => match[1]);
+  // Explicitly undeclared ingredients take precedence over a general contents list.
+  return (declarations.length ? declarations : contents)
+    .map(clause => clause.split(/\s+(?:in|on|which|that|making|but)\b/i)[0])
+    .join("\n");
+}
+
 /** Groups an official hazard statement into one plain-language tag. The tag never replaces the source wording. */
 export function classifyHazard({ title, hazard, pathogen, summary, superCategories }: { title: string; hazard?: string | null; pathogen?: string | null; summary?: string | null; superCategories?: readonly string[] }): HazardSummary {
   const text = `${pathogen ?? ""}\n${hazard ?? ""}\n${title}`;
@@ -78,7 +95,7 @@ export function classifyHazard({ title, hazard, pathogen, summary, superCategori
     const named = (scope: string) => [...new Set(allergens.filter(([pattern]) => pattern.test(scope)).map(([, name]) => name))];
     let found = named(hazard || title);
     // The summary names the allergen when the hazard statement and title only say "allergens".
-    if (!found.length && summary) found = named(summary);
+    if (!found.length && summary) found = named(summaryAllergenText(summary));
     if (found.length) return { kind: "allergen", label: allergenLabel(found) };
     if (/allerg/i.test(text)) return { kind: "allergen", label: "Undeclared allergen" };
   }

@@ -27,6 +27,8 @@ const quantity = /^(?:(?:several|various|multiple|some|certain|selected|specific
 // FDA announcements: "Acme Foods Issues Allergy Alert on Undeclared Peanut in Chocolate Bars".
 const issuesAlert = /^(.+?)\s+issues\s+(?:an?\s+)?(?:voluntary\s+|nationwide\s+|precautionary\s+)*(?:allergy alert|alert|recall)\s+(?:of|on|for)\s+(.+)$/i;
 const genericProducts = /^(?:a\s+)?(?:several|various|multiple|some|certain|a number of|a range of|range of|selected)?\s*(?:of\s+its\s+)?products?$/i;
+// A comma may separate affected products. Only discard a suffix that clearly describes packaging.
+const packagingDetails = /[,;]\s*(?=\d+(?:\.\d+)?\s*(?:fl\.?\s*oz|oz|lbs?|kg|g|ml|cl|litres?|liters?|l)\b\s*(?:[,;]|$)|(?:UPC|GTIN|EAN)\b|(?:sold|packed|packaged|distributed)\s+(?:in|at|by)\b).*$/i;
 
 const reasonStart = /\s+(?:because(?:\s+of)?|due to|as a precaution(?: because(?: of)?| due to)?|following|over (?:concerns|fears)(?: (?:about|that|of))?|after)\s+(.+)$/i;
 
@@ -47,13 +49,9 @@ function capitalise(text: string) {
   return text ? text[0].toUpperCase() + text.slice(1) : text;
 }
 
-/** Long product descriptions (mostly FDA) keep their first clause, then a word-boundary cut. */
+/** Trim known packaging details; preserve product lists and mark any word-boundary cut. */
 function shorten(text: string) {
-  let name = tidy(text);
-  if (name.length > 60) {
-    const first = tidy(name.split(/[;,(]|\s[–-]\s/)[0]);
-    if (first.length >= 3) name = first;
-  }
+  const name = tidy(tidy(text).replace(packagingDetails, ""));
   if (name.length <= MAX_LENGTH) return name;
   const cut = name.slice(0, MAX_LENGTH);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 40)).replace(/[\s,;:–-]+$/, "")}…`;
