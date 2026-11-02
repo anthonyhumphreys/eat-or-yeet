@@ -241,7 +241,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || target.closest("input, textarea, select, [contenteditable]")) return;
+      if (!inputRef.current || event.key !== "/" || event.metaKey || event.ctrlKey || target.closest("input, textarea, select, [contenteditable]")) return;
       event.preventDefault();
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -298,7 +298,8 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         </div>
       </div>
 
-      <form role="search" action={path} className="mt-3" onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
+      {/* The home page has no search box: "Check a product" covers looking something up. */}
+      {home ? null : <form role="search" action={path} className="mt-3" onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
         <input type="hidden" name="region" value={region} />
         <label htmlFor="warning-search" className="sr-only">Search {region} recalls</label>
         <div className="relative">
@@ -324,7 +325,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             <kbd aria-hidden className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground sm:block">/</kbd>
           )}
         </div>
-      </form>
+      </form>}
 
       {/* No hazard filter: each row's tag names the hazard. Old ?hazard= links still filter and can be cleared. */}
       {view.stores.length ? (

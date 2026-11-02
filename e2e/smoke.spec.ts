@@ -19,7 +19,7 @@ test("home leads with recalls and one way to check a product", async ({ page }) 
   await expect(page.getByRole("heading", { name: "UK recalls", level: 1 })).toBeVisible();
   await expect(checkLink(page)).toBeVisible();
   await expect(checkLink(page)).toHaveAttribute("href", "/search");
-  await expect(page.getByRole("search")).toBeVisible();
+  await expect(page.getByRole("search")).toHaveCount(0);
   await expect(listHeading(page, "UK")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.getByRole("link", { name: /Take a photo/ })).toHaveCount(0);
@@ -44,8 +44,8 @@ test("news finishes loading and stays visible through filtering and country chan
   const news = page.locator("#news");
   await expect(news.getByRole("heading", { name: "In the news", exact: true })).toBeVisible();
   await expect(news.getByRole("status")).toHaveCount(0);
-  await searchBox(page).fill("milk");
-  await expect(page).toHaveURL(/q=milk/);
+  await page.getByRole("group", { name: "Filter by category" }).getByRole("link").nth(1).click();
+  await expect(page).toHaveURL(/category=/);
   await expect(news.getByRole("heading", { name: "In the news", exact: true })).toBeVisible();
   await chooseRegion(page, "United States");
   await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
@@ -113,7 +113,7 @@ test("warning search filters instantly, keeps a shareable URL and preserves the 
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-  await page.goto("/?region=US");
+  await page.goto("/incidents?region=US");
   const serverRequests: string[] = [];
   page.on("request", (request) => { if (request.resourceType() === "document" || request.headers().rsc === "1") serverRequests.push(request.url()); });
   await page.waitForLoadState("networkidle");
@@ -246,7 +246,7 @@ test("warning browsing works with reduced motion and without view transition sup
   await page.addInitScript(() => {
     Object.defineProperty(document, "startViewTransition", { configurable: true, value: undefined });
   });
-  await page.goto("/?region=UK");
+  await page.goto("/incidents?region=UK");
   await chooseRegion(page, "United States");
   await expect(listHeading(page, "US")).toBeVisible({ timeout: 15_000 });
   const category = page.getByRole("group", { name: "Filter by category" }).getByRole("link").nth(1);
