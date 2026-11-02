@@ -31,8 +31,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function render(params = {}, region: "UK" | "US" = "UK") {
-  const content = await WarningFeed({ params, region, path: "/" });
+async function render(params = {}, region: "UK" | "US" = "UK", path: "/" | "/incidents" = "/") {
+  const content = await WarningFeed({ params, region, path });
   return renderToStaticMarkup(createElement("div", null, content));
 }
 
@@ -41,7 +41,7 @@ describe("warnings landing feed", () => {
     listWarnings.mockResolvedValue([{ ...rows[0], title: "Various products recalled", hazard: "Undeclared milk, egg and sesame allergens", searchText: "northstar sesame crunch" }]);
     const html = await render({ q: "sesame northstar" });
     expect(warningLinks(html)).toHaveLength(1);
-    expect(html).toContain("Milk, egg +1");
+    expect(html).toContain("Milk, egg &amp; sesame");
     expect(warningLinks(await render({ q: "sesame absent" }))).toHaveLength(0);
   });
 
@@ -85,10 +85,11 @@ describe("warnings landing feed", () => {
     const html = await render();
     expect(html).not.toContain("US eggs recalled");
     expect(warningLinks(html)).toHaveLength(2);
-    expect(list(html).indexOf("Waitrose recalls milk chocolate")).toBeLessThan(list(html).indexOf("Bread recall"));
+    expect(list(html).indexOf(">Milk chocolate<")).toBeLessThan(list(html).indexOf("Bread recall"));
     expect(html).toContain('aria-label="Filter by category"');
     expect(html).toContain('href="/?region=UK&amp;category=Bakery+%26+grains"');
-    expect(html).toContain('href="/?region=UK&amp;category=Supplements"');
+    // Categories with no recalls are hidden.
+    expect(html).not.toContain('href="/?region=UK&amp;category=Supplements"');
   });
 
   it("matches search words separately and combines them with category and retailer", async () => {
@@ -135,7 +136,7 @@ describe("warnings landing feed", () => {
 
   it("keeps official warnings visible and explains when news fails", async () => {
     getNews.mockRejectedValue(new Error("Feed unavailable"));
-    expect(await render()).toContain("Waitrose recalls milk chocolate");
+    expect(await render()).toContain(">Milk chocolate<");
     const news = renderToStaticMarkup(await RegionalNews({ region: "UK" }));
     expect(news).toContain("News is temporarily unavailable.");
     expect(news).not.toContain("No recent reporting found");
@@ -159,7 +160,7 @@ describe("warnings landing feed", () => {
   it("renders warnings without waiting for a stalled publisher", async () => {
     getNews.mockImplementation(() => new Promise(() => {}));
     const html = await render();
-    expect(html).toContain("Waitrose recalls milk chocolate");
+    expect(html).toContain(">Milk chocolate<");
     expect(html).toContain("Loading news…");
     expect(listWarnings).toHaveBeenCalledWith("UK");
   });
@@ -168,7 +169,7 @@ describe("warnings landing feed", () => {
     listWarnings.mockResolvedValue(Array.from({ length: 125 }, (_, index) => ({
       ...rows[0], id: String(index), slug: `recall-${index}`, title: `Waitrose chocolate recall ${index}`,
     })));
-    const html = await render({ q: "chocolate", category: "Snacks & sweets", store: "Waitrose", page: "2" });
+    const html = await render({ q: "chocolate", category: "Snacks & sweets", store: "Waitrose", page: "2" }, "UK", "/incidents");
     expect(warningLinks(html)).toHaveLength(80);
     expect(html).toContain("Showing 80 of 125");
     expect(html).toContain("Show 40 more");
@@ -177,7 +178,16 @@ describe("warnings landing feed", () => {
 
   it("falls back to the first step for invalid page numbers", async () => {
     listWarnings.mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...rows[0], id: String(index), slug: `recall-${index}` })));
-    expect(warningLinks(await render({ page: "-2" }))).toHaveLength(40);
-    expect(warningLinks(await render({ page: "999999" }))).toHaveLength(40);
+    expect(warningLinks(await render({ page: "-2" }, "UK", "/incidents"))).toHaveLength(40);
+    expect(warningLinks(await render({ page: "999999" }, "UK", "/incidents"))).toHaveLength(40);
+  });
+
+  it("shows the newest 10 on the home page and links to the full list", async () => {
+    listWarnings.mockResolvedValue(Array.from({ length: 25 }, (_, index) => ({ ...rows[0], id: String(index), slug: `recall-${index}` })));
+    const html = await render({ category: "Snacks & sweets" });
+    expect(warningLinks(html)).toHaveLength(10);
+    expect(html).toContain("Newest 10 of 25");
+    expect(html).toContain('href="/incidents?region=UK&amp;category=Snacks+%26+sweets"');
+    expect(html).not.toContain("Show 15 more");
   });
 });

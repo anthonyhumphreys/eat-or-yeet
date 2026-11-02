@@ -58,8 +58,14 @@ function capitalise(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/** "Milk", "Milk & egg", "Milk, egg & soya", then "Milk, egg, soya +2 more" so the tag stays short. */
+function allergenLabel(found: string[]) {
+  if (found.length > 3) return capitalise(`${found.slice(0, 3).join(", ")} +${found.length - 3} more`);
+  return capitalise(found.length > 1 ? `${found.slice(0, -1).join(", ")} & ${found.at(-1)}` : found[0]);
+}
+
 /** Groups an official hazard statement into one plain-language tag. The tag never replaces the source wording. */
-export function classifyHazard({ title, hazard, pathogen, superCategories }: { title: string; hazard?: string | null; pathogen?: string | null; superCategories?: readonly string[] }): HazardSummary {
+export function classifyHazard({ title, hazard, pathogen, summary, superCategories }: { title: string; hazard?: string | null; pathogen?: string | null; summary?: string | null; superCategories?: readonly string[] }): HazardSummary {
   const text = `${pathogen ?? ""}\n${hazard ?? ""}\n${title}`;
   for (const [pattern, label] of pathogens) if (pattern.test(pathogen ?? "") || pattern.test(text)) return { kind: "pathogen", label };
 
@@ -69,10 +75,12 @@ export function classifyHazard({ title, hazard, pathogen, superCategories }: { t
 
   if (allergenSignal.test(text)) {
     // Product names in titles ("Milk Chocolate") would add false allergens, so prefer the hazard statement.
-    const scope = hazard || title;
-    const found = [...new Set(allergens.filter(([pattern]) => pattern.test(scope)).map(([, name]) => name))];
-    if (found.length) return { kind: "allergen", label: capitalise(found.length > 2 ? `${found.slice(0, 2).join(", ")} +${found.length - 2}` : found.join(" & ")) };
-    if (/allerg/i.test(text)) return { kind: "allergen", label: "Allergen" };
+    const named = (scope: string) => [...new Set(allergens.filter(([pattern]) => pattern.test(scope)).map(([, name]) => name))];
+    let found = named(hazard || title);
+    // The summary names the allergen when the hazard statement and title only say "allergens".
+    if (!found.length && summary) found = named(summary);
+    if (found.length) return { kind: "allergen", label: allergenLabel(found) };
+    if (/allerg/i.test(text)) return { kind: "allergen", label: "Undeclared allergen" };
   }
 
   for (const [pattern, label] of foreign) if (pattern.test(text) && /contain|piece|fragment|foreign|presence|found|object|particulate|extraneous/i.test(text)) return { kind: "foreign", label };

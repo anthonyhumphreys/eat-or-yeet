@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const listUrl = "/?region=UK&q=fixture&hazard=allergen&store=Waitrose&page=3";
+const listUrl = "/incidents?region=UK&q=fixture&hazard=allergen&store=Waitrose&page=3";
 const rows = (page: import("@playwright/test").Page) => page.locator("#warnings [data-recall-slug]");
 
 test.beforeEach(async ({ context, baseURL, page }) => {
@@ -25,7 +25,7 @@ test("restores filters, loaded rows and focus after detail navigation and reload
 });
 
 test("show more updates the URL and browser Back restores the expanded list", async ({ page }) => {
-  await page.goto("/?region=UK&q=fixture");
+  await page.goto("/incidents?region=UK&q=fixture");
   await expect(rows(page)).toHaveCount(40);
   await page.getByRole("link", { name: "Show 40 more" }).click();
   await expect(rows(page)).toHaveCount(80);
@@ -49,7 +49,7 @@ test("direct recalls reject external return targets and keep canonical sharing",
 
 
 test("clamps an expanded list when fewer results remain",async({page})=>{
-  await page.goto("/?region=UK&q=fixture&page=999");
+  await page.goto("/incidents?region=UK&q=fixture&page=999");
   await expect(rows(page)).toHaveCount(130);
   await expect(page).toHaveURL(/page=4/);
   await expect(page.getByRole("link",{name:/Show .* more/})).toHaveCount(0);
