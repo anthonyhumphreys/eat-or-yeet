@@ -30,7 +30,7 @@ test("aborts obsolete filter requests and keeps the latest search",async({page})
     await page.getByRole("searchbox").fill("fixture 12");
     await expect(rows(page)).toHaveCount(12);
     release();
-    await expect(page.locator("#warnings")).toHaveAttribute("aria-busy","false");
+    await expect(page.locator("#warnings > [aria-busy]")).toHaveAttribute("aria-busy","false");
     expect(await rows(page).allTextContents()).toEqual(expect.arrayContaining([expect.stringContaining("Fixture recall 12")]));
     await expect(page.getByRole("searchbox")).toHaveValue("fixture 12");
   } finally {release();}
@@ -39,7 +39,7 @@ test("aborts obsolete filter requests and keeps the latest search",async({page})
 test("restarts pagination visibly when the dataset revision changes",async({page,request})=>{
   await page.goto("/incidents?region=UK&q=fixture");
   await expect(rows(page)).toHaveCount(40);
-  const rebuilt=await request.post("http://127.0.0.1:9161/rpc",{headers:{Authorization:"Bearer fixture-backend-secret"},data:{operation:"browse.rebuild",args:{}}});
+  const rebuilt=await request.post(`${process.env.BROWSE_FIXTURE_BACKEND_URL ?? "http://127.0.0.1:9161"}/rpc`,{headers:{Authorization:"Bearer fixture-backend-secret"},data:{operation:"browse.rebuild",args:{}}});
   expect(rebuilt.ok()).toBe(true);
   await page.getByRole("link",{name:"Show 40 more"}).click();
   await expect(page.getByRole("status").filter({hasText:"The recall list changed"})).toBeVisible();

@@ -1,0 +1,1988 @@
+[
+  {
+    "route": "/?region=UK",
+    "run": 0,
+    "lcp": 2456,
+    "cls": 0,
+    "longTasks": 449,
+    "fcp": 1004,
+    "ttfb": 25.69999998807907,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 222,
+        "transfer": 522,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1262,
+        "transfer": 1562,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1338,
+        "transfer": 1638,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1281,
+        "transfer": 1581,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1285,
+        "transfer": 1585,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 181.1057920000003,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 11
+  },
+  {
+    "route": "/?region=UK",
+    "run": 1,
+    "lcp": 2428,
+    "cls": 0,
+    "longTasks": 244,
+    "fcp": 848,
+    "ttfb": 20.599999964237213,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 222,
+        "transfer": 522,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1231,
+        "transfer": 1531,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1260,
+        "transfer": 1560,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1254,
+        "transfer": 1554,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1335,
+        "transfer": 1635,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1284,
+        "transfer": 1584,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1285,
+        "transfer": 1585,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 659.1246250000004,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 11
+  },
+  {
+    "route": "/?region=UK",
+    "run": 2,
+    "lcp": 2500,
+    "cls": 0,
+    "longTasks": 214,
+    "fcp": 916,
+    "ttfb": 40.39999997615814,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 223,
+        "transfer": 523,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=5CB68i4pnAekjehf",
+        "bytes": 222,
+        "transfer": 522,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1229,
+        "transfer": 1529,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-fafa-03-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1334,
+        "transfer": 1634,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-prin-48-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1280,
+        "transfer": 1580,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsa-aa-44-2026?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1290,
+        "transfer": 1590,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 136.67345899999964,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 11
+  },
+  {
+    "route": "/?region=US",
+    "run": 0,
+    "lcp": 4208,
+    "cls": 0,
+    "longTasks": 183,
+    "fcp": 872,
+    "ttfb": 19.600000023841858,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1260,
+        "transfer": 1560,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1253,
+        "transfer": 1553,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 276,
+        "transfer": 576,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 271,
+        "transfer": 571,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 268,
+        "transfer": 568,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1414,
+        "transfer": 1714,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1391,
+        "transfer": 1691,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1397,
+        "transfer": 1697,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1440,
+        "transfer": 1740,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 115.69254199999705,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  },
+  {
+    "route": "/?region=US",
+    "run": 1,
+    "lcp": 4440,
+    "cls": 0,
+    "longTasks": 190,
+    "fcp": 1100,
+    "ttfb": 11,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1232,
+        "transfer": 1532,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1253,
+        "transfer": 1553,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 276,
+        "transfer": 576,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 271,
+        "transfer": 571,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 268,
+        "transfer": 568,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1414,
+        "transfer": 1714,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1391,
+        "transfer": 1691,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1397,
+        "transfer": 1697,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1439,
+        "transfer": 1739,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 103.30199999999968,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  },
+  {
+    "route": "/?region=US",
+    "run": 2,
+    "lcp": 4220,
+    "cls": 0,
+    "longTasks": 149,
+    "fcp": 872,
+    "ttfb": 15.300000011920929,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1k-deu9isgfl-.js",
+        "bytes": 7363,
+        "transfer": 7663,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1231,
+        "transfer": 1531,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 276,
+        "transfer": 576,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 271,
+        "transfer": 571,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 268,
+        "transfer": 568,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1414,
+        "transfer": 1714,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1392,
+        "transfer": 1692,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1395,
+        "transfer": 1695,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1438,
+        "transfer": 1738,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 124.19270799999504,
+    "scriptBytes": 209434,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  },
+  {
+    "route": "/search",
+    "run": 0,
+    "lcp": 824,
+    "cls": 0,
+    "longTasks": 103,
+    "fcp": 824,
+    "ttfb": 49.39999997615814,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3xdax1pgcanua.js",
+        "bytes": 9505,
+        "transfer": 9805,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/terms?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/privacy?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/support?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 182,
+        "transfer": 482,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/scan?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 178,
+        "transfer": 478,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=MnWTrh3l-09yAlSG",
+        "bytes": 1231,
+        "transfer": 1531,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 211576,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  },
+  {
+    "route": "/search",
+    "run": 1,
+    "lcp": 772,
+    "cls": 0,
+    "longTasks": 117,
+    "fcp": 772,
+    "ttfb": 16.19999998807907,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3xdax1pgcanua.js",
+        "bytes": 9505,
+        "transfer": 9805,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/terms?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/privacy?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/support?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 182,
+        "transfer": 482,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/scan?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 178,
+        "transfer": 478,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=MnWTrh3l-09yAlSG",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 211576,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  },
+  {
+    "route": "/search",
+    "run": 2,
+    "lcp": 808,
+    "cls": 0,
+    "longTasks": 121,
+    "fcp": 808,
+    "ttfb": 11.800000011920929,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3xdax1pgcanua.js",
+        "bytes": 9505,
+        "transfer": 9805,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/terms?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/privacy?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/support?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 182,
+        "transfer": 482,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/scan?_rsc=6grVij_EUBxTWnLP",
+        "bytes": 178,
+        "transfer": 478,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=MnWTrh3l-09yAlSG",
+        "bytes": 1229,
+        "transfer": 1529,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 211576,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  },
+  {
+    "route": "/incidents/fsa-fafa-03-2026",
+    "run": 0,
+    "lcp": 832,
+    "cls": 0.00012004468127443084,
+    "longTasks": 104,
+    "fcp": 832,
+    "ttfb": 23,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0voz9fl-3xmcc.js",
+        "bytes": 1012,
+        "transfer": 1312,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 177,
+        "transfer": 477,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1231,
+        "transfer": 1531,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1260,
+        "transfer": 1560,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1251,
+        "transfer": 1551,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1240,
+        "transfer": 1540,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 203083,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  },
+  {
+    "route": "/incidents/fsa-fafa-03-2026",
+    "run": 1,
+    "lcp": 872,
+    "cls": 0.00012004468127443084,
+    "longTasks": 117,
+    "fcp": 872,
+    "ttfb": 60.5,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0voz9fl-3xmcc.js",
+        "bytes": 1012,
+        "transfer": 1312,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 177,
+        "transfer": 477,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1262,
+        "transfer": 1562,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1241,
+        "transfer": 1541,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 203083,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  },
+  {
+    "route": "/incidents/fsa-fafa-03-2026",
+    "run": 2,
+    "lcp": 832,
+    "cls": 0,
+    "longTasks": 112,
+    "fcp": 832,
+    "ttfb": 33,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3br8r_eejsjzw.css",
+        "bytes": 13433,
+        "transfer": 13733,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/30uebev50plqn.js",
+        "bytes": 7618,
+        "transfer": 7918,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0kh4vc_77hn2w.js",
+        "bytes": 46356,
+        "transfer": 46656,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1lo711rs39b8-.js",
+        "bytes": 5780,
+        "transfer": 6080,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1vwl12npl1-0z.js",
+        "bytes": 16661,
+        "transfer": 16961,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3ga1nyjpq6v9e.js",
+        "bytes": 31666,
+        "transfer": 31966,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0voz9fl-3xmcc.js",
+        "bytes": 1012,
+        "transfer": 1312,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 167,
+        "transfer": 467,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 185,
+        "transfer": 485,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 180,
+        "transfer": 480,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=CG3xjX0kH38T1B1U",
+        "bytes": 177,
+        "transfer": 477,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1229,
+        "transfer": 1529,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1260,
+        "transfer": 1560,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?region=UK&_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1242,
+        "transfer": 1542,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=oJ46apBmrJt8AnNQ",
+        "bytes": 1250,
+        "transfer": 1550,
+        "type": "fetch"
+      }
+    ],
+    "rows": 0,
+    "scriptBytes": 203083,
+    "scriptRequests": 12,
+    "prefetchRequests": 8
+  }
+]

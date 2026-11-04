@@ -173,6 +173,8 @@ describe("warnings landing feed", () => {
     const html = await render();
     expect(html).toContain(">Milk chocolate<");
     expect(html).toContain("Loading news…");
+    expect(html).toContain('href="#news"');
+    expect(html).toContain("See the news");
     expect(listWarnings).toHaveBeenCalledWith("UK");
   });
 

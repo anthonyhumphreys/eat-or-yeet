@@ -21,6 +21,7 @@
     "pretest": "pnpm build:mcp-app",
     "pretest:e2e": "pnpm build:mcp-app",
     "test:watch": "vitest",
+    "perf:web": "node scripts/measure-web-performance.mjs",
     "test:e2e": "playwright test",
     "test:e2e:fixtures": "playwright test --config playwright.fixture.config.ts",
     "test:mcp": "tsx scripts/mcp-smoke.ts",

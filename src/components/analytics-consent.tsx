@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useLocation } from "./location-provider";
-import { ANALYTICS_CHOICE_DAYS, ANALYTICS_CONSENT_COOKIE, ANALYTICS_CONSENT_VERSION, analyticsPage } from "@/lib/analytics/contracts";
+import { ANALYTICS_CHOICE_DAYS, ANALYTICS_CONSENT_COOKIE, ANALYTICS_CONSENT_VERSION, analyticsPage } from "@/lib/analytics/shared";
 import { ANALYTICS_CHOICE_EVENT, ANALYTICS_PREFERENCES_EVENT, analyticsChoice, configureBrowserAnalytics, privacySignal, stopBrowserAnalytics, trackWebsiteEvent } from "@/lib/analytics/browser";
 
 function subscribe(listener: () => void) {

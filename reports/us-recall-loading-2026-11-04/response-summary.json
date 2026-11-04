@@ -1,0 +1,34 @@
+{
+  "total": 4518,
+  "visible": 40,
+  "typeCounts": {
+    "Food": 1753,
+    "Medical": 2765,
+    "Baby": 75
+  },
+  "categoryCounts": {
+    "Fish & seafood": 60,
+    "Pantry": 167,
+    "Produce": 225,
+    "Other foods": 358,
+    "Meat & poultry": 100,
+    "Supplements": 113,
+    "Pharmaceutical": 65,
+    "Snacks & sweets": 193,
+    "Dairy & eggs": 176,
+    "Other medicines": 1710,
+    "Prescription medicines": 850,
+    "Over-the-counter medicines": 205,
+    "Bakery & grains": 192,
+    "Prepared foods": 112,
+    "Drinks": 89,
+    "Baby food": 59
+  },
+  "filteredRequest": [
+    {
+      "bytes": 16597,
+      "duration": 49.200000047683716
+    }
+  ],
+  "captureNotice": "The filtered request was intercepted for the waiting-state screenshot; its timing is not a performance measurement."
+}

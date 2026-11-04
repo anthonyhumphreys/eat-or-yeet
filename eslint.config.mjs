@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     ".wrangler/**",
+    ".local-backups/**",
     "next-env.d.ts",
     "video/**",
   ]),

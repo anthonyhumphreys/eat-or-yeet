@@ -220,7 +220,7 @@ The header is a single row at every width. Recall pages use a single column unti
 
 ## Elevation & Depth
 
-The warning interface uses tonal grouping and borders without ambient card shadows. The check-mode switch lifts its selected segment on a soft 1px-offset shadow; the search field carries a hairline shadow. Hard offset shadows are retired. The first-visit country pop-up is the only overlay: a bottom sheet on phones, a centred dialog on wider screens. Filter changes on the warning list animate rows through View Transitions (`warning-row`, `warning-enter`, `warning-exit`); typing filters instantly without animation. Scanner beam and verdict-reveal animations already exist; reduced-motion preferences suppress animations, transitions, and smooth scrolling.
+The warning interface uses tonal grouping and borders without ambient card shadows. The check-mode switch lifts its selected segment on a soft 1px-offset shadow; the search field carries a hairline shadow. Hard offset shadows are retired. The first-visit country pop-up is the only overlay: a bottom sheet on phones, a centred dialog on wider screens. Filter changes on the warning list animate rows through View Transitions (`warning-row`, `warning-enter`, `warning-exit`); typing stays immediate while indexed results refresh without list animation. Scanner beam and verdict-reveal animations already exist; reduced-motion preferences suppress animations, transitions, and smooth scrolling.
 
 ## Shapes
 
@@ -249,3 +249,7 @@ The sidecar records representative component snippets from the current implement
 - Don't replace Geist, the marigold brand colour, or the light and dark palettes during an extension.
 - Don't use a full-screen traffic-light colour treatment or a reassuring safe badge.
 - Don't add decorative imagery that competes with official advice.
+
+## Loading feedback
+
+Indexed browsing retains complete facet totals and revision-aware pagination. Pending counts show a short dot wave before the returned total settles into place; reduced motion keeps this feedback static. Recall news streams separately from official advice, and the mobile news shortcut is present before publisher feeds finish.

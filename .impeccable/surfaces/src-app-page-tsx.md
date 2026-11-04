@@ -21,7 +21,7 @@ FIRST VIEWPORT: A short title ("UK food recalls"), the top alert, food-type tabs
 
 FORM: Existing application layout with a new visual identity: cream and marigold, shield logo.
 
-MOTION: Food tab, hazard, shop and "show more" changes animate rows into place with View Transitions; typing filters instantly with no animation. The result heading crossfades. Honour reduced motion and support browsers without View Transitions.
+MOTION: Food tab, hazard, shop and "show more" changes animate rows into place with View Transitions; typing stays immediate and fetches compact JSON results after a short debounce, with no list animation. Counts show pending dots and settle to the complete returned totals; they never display a partial-snapshot count. The result heading crossfades. Honour reduced motion and support browsers without View Transitions.
 
 FINISH: Verify light and dark rendering from 320px to desktop, country persistence, in-page filter submission, history navigation, news hydration, and news failures. Keep deployment status separate from local interface validation.
 

@@ -2,9 +2,10 @@
 
 import { ArrowRight, ChevronDown, ChevronRight, Search, SearchX, X } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
+import { memo, startTransition, useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from "react";
 
 import { useBrowsePage } from "./use-browse-page";
+import { RecallCount } from "./recall-count";
 import type { BrowsePage } from "@/lib/incidents/browse-view";
 import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
 import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
@@ -56,9 +57,8 @@ function Highlight({ text, query }: { text: string; query: string }) {
     : part);
 }
 
-function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string; returnTo: string }) {
-  const iso = new Date(row.updatedAt).toISOString();
-  const date = formatRecallDate(row.updatedAt);
+const WarningRow = memo(function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string; returnTo: string }) {
+  const { iso, date } = useMemo(() => ({ iso: new Date(row.updatedAt).toISOString(), date: formatRecallDate(row.updatedAt) }), [row.updatedAt]);
   // "x ago" depends on the viewer's clock, so a render either side of midnight may differ from the server's.
   const ago = timeAgo(row.updatedAt);
   const name = recallName(row);
@@ -86,14 +86,14 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
       </RecallLink>
     </li>
   );
-}
+});
 
 function Chip({ href, active, onSelect, children }: { href: string; active: boolean; onSelect: () => void; children: ReactNode }) {
   return (
     <a
       href={href}
       aria-current={active ? "true" : undefined}
-      onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onSelect(); }}
+      onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onSelect(); }}
       className={`inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${active ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:border-muted-foreground"}`}
     >
       {children}
@@ -208,6 +208,18 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
   }, [returnTo, rows, countLabel]);
 
   useEffect(() => {
+    const restore = () => {
+      const url = new URL(window.location.href);
+      if (url.pathname !== path || url.searchParams.get("region") !== region) return;
+      const restored = currentBrowseState(initial, initialPage);
+      setFilters(restored.filters);
+      setLimit(STEP * restored.page);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [path, region, initial, initialPage]);
+
+  useEffect(() => {
     if (!rows) return;
     let frame = 0;
     try {
@@ -265,16 +277,16 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
   ];
 
   return (
-    <div id="warnings" aria-busy={indexed.loading} className="min-w-0 scroll-mt-4">
+    <div id="warnings" className="min-w-0 scroll-mt-4">
       {tabs.types.length > 1 ? (
         <div ref={typesRef} className="relative -mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by kind of product">
           <div className="flex gap-2 border-b pb-3 sm:flex-wrap">
             <Chip href={filterUrl(path, region, { ...filters, type: undefined, category: undefined })} active={!type} onSelect={() => update({ type: undefined, category: undefined })}>
-              Everything <span className="tabular-nums">{view.typeTotal.toLocaleString("en-GB")}</span>
+              Everything <RecallCount value={view.typeTotal} pending={indexed.loading} />
             </Chip>
             {tabs.types.map((item) => (
               <Chip key={item} href={filterUrl(path, region, { ...filters, type: item, category: undefined })} active={type === item} onSelect={() => update({ type: type === item ? undefined : item, category: undefined })}>
-                {superCategoryLabels[item] ?? item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
+                {superCategoryLabels[item] ?? item} <RecallCount value={view.typeCounts.get(item) ?? 0} pending={indexed.loading} />
               </Chip>
             ))}
           </div>
@@ -291,7 +303,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             if (count === 0 && category !== item) return null;
             return (
               <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
-                {item} <span className="tabular-nums">{count.toLocaleString("en-GB")}</span>
+                {item} <RecallCount value={count} pending={indexed.loading} />
               </Chip>
             );
           })}
@@ -341,7 +353,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-3">
           <div className="min-w-0">
             <h2 className="text-lg font-bold tracking-tight">
-              {rows ? <><span className="tabular-nums">{countLabel}</span>{filtered ? " found" : ` in the ${region}`}</> : `${region} recalls`}
+              {rows ? <><RecallCount value={total} pending={indexed.loading} /> {total === 1 ? "recall" : "recalls"}{filtered ? " found" : ` in the ${region}`}</> : `${region} recalls`}
             </h2>
             <p className="text-xs text-muted-foreground">Newest first · {sourceNames[region]}</p>
           </div>
@@ -354,6 +366,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
       </ViewTransition>
       <p aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</p>
 
+      <div aria-busy={indexed.loading} inert={indexed.loading}>
       {!rows ? (
         <div role="status" className="py-10">
           <p className="font-bold">Warnings are temporarily unavailable.</p>
@@ -363,7 +376,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         <ul>
           {visible.map((row) => (
             <ViewTransition key={row.id} name={`warning-${Array.from(new TextEncoder().encode(row.id), value => value.toString(16).padStart(2,"0")).join("")}`} default="none" share="warning-row" update="warning-row" enter="warning-enter" exit="warning-exit">
-              <WarningRow row={row} query={q} returnTo={returnTo} />
+              <WarningRow row={row} query={indexed.page?.filters.q ?? q} returnTo={returnTo} />
             </ViewTransition>
           ))}
         </ul>
@@ -386,9 +399,10 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         </div>
       )}
 
+      </div>
       {indexed.notice ? <p role="status" className="mt-3 text-sm text-muted-foreground">{indexed.notice}</p> : null}
       {indexed.error ? <p role="alert" className="mt-4 text-sm">{indexed.error} <button type="button" onClick={indexed.retry} className="min-h-10 underline">Retry</button></p> : null}
-      {indexed.loading ? <p role="status" className="mt-3 text-sm text-muted-foreground">Updating recalls…</p> : null}
+      {indexed.loading ? <p role="status" className="mt-3 text-sm text-muted-foreground">Updating recalls and counts…</p> : null}
       {home && total > visible.length ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="text-sm tabular-nums text-muted-foreground">Newest {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
@@ -401,10 +415,11 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
           <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
           <a
             href={filterUrl(path, region, filters, Math.floor(limit / STEP) + 1)}
+            aria-disabled={indexed.loading || undefined}
             onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); if (indexed.loading) return; startTransition(() => setLimit((current) => current + STEP)); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            Show {Math.min(STEP, total - visible.length)} more<ArrowRight className="size-4 rotate-90" aria-hidden />
+            {indexed.loading ? "Loading…" : `Show ${Math.min(STEP, total - visible.length)} more`}<ArrowRight className="size-4 rotate-90" aria-hidden />
           </a>
         </div>
       ) : null}

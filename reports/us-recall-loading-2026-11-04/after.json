@@ -1,0 +1,560 @@
+[
+  {
+    "route": "/?region=US",
+    "run": 0,
+    "lcp": 1008,
+    "cls": 0,
+    "longTasks": 193,
+    "documentBytes": 31349,
+    "documentTransfer": 31649,
+    "fcp": 1008,
+    "ttfb": 124.69999998807907,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3nv8f2v4ckpa5.css",
+        "bytes": 13666,
+        "transfer": 13966,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/40685ojgm4ikx.js",
+        "bytes": 2088,
+        "transfer": 2388,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/32kcbi7u2b3ua.js",
+        "bytes": 8392,
+        "transfer": 8692,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2fo2_l5ee_47-.js",
+        "bytes": 43983,
+        "transfer": 44283,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0x7e1sqt4hbnx.js",
+        "bytes": 6711,
+        "transfer": 7011,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1xstwhebw_ser.js",
+        "bytes": 8021,
+        "transfer": 8321,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/38rcjrtpbvis2.js",
+        "bytes": 16660,
+        "transfer": 16960,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 186,
+        "transfer": 486,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 283,
+        "transfer": 583,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 286,
+        "transfer": 586,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 274,
+        "transfer": 574,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1229,
+        "transfer": 1529,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=O5kqlIIvqopvM0DJ",
+        "bytes": 2120,
+        "transfer": 2420,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=oUpNwA7nl5j0ElY8",
+        "bytes": 1999,
+        "transfer": 2299,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=zn7o-fyplPaXnVzH",
+        "bytes": 2006,
+        "transfer": 2306,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=J7ES3KZ27uoIsNBi",
+        "bytes": 2047,
+        "transfer": 2347,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 864.4737500000001,
+    "scriptBytes": 179845,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  },
+  {
+    "route": "/?region=US",
+    "run": 1,
+    "lcp": 736,
+    "cls": 0,
+    "longTasks": 43,
+    "documentBytes": 31349,
+    "documentTransfer": 31649,
+    "fcp": 736,
+    "ttfb": 7.400000035762787,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/40685ojgm4ikx.js",
+        "bytes": 2088,
+        "transfer": 2388,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/32kcbi7u2b3ua.js",
+        "bytes": 8392,
+        "transfer": 8692,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3nv8f2v4ckpa5.css",
+        "bytes": 13666,
+        "transfer": 13966,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2fo2_l5ee_47-.js",
+        "bytes": 43983,
+        "transfer": 44283,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0x7e1sqt4hbnx.js",
+        "bytes": 6711,
+        "transfer": 7011,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/38rcjrtpbvis2.js",
+        "bytes": 16660,
+        "transfer": 16960,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1xstwhebw_ser.js",
+        "bytes": 8021,
+        "transfer": 8321,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 186,
+        "transfer": 486,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 283,
+        "transfer": 583,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 286,
+        "transfer": 586,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 274,
+        "transfer": 574,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1253,
+        "transfer": 1553,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=O5kqlIIvqopvM0DJ",
+        "bytes": 2119,
+        "transfer": 2419,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=oUpNwA7nl5j0ElY8",
+        "bytes": 1999,
+        "transfer": 2299,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=zn7o-fyplPaXnVzH",
+        "bytes": 2008,
+        "transfer": 2308,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=J7ES3KZ27uoIsNBi",
+        "bytes": 2044,
+        "transfer": 2344,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 838.7374170000003,
+    "scriptBytes": 179845,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  },
+  {
+    "route": "/?region=US",
+    "run": 2,
+    "lcp": 736,
+    "cls": 0.002328190818260263,
+    "longTasks": 52,
+    "documentBytes": 31349,
+    "documentTransfer": 31649,
+    "fcp": 736,
+    "ttfb": 7,
+    "resources": [
+      {
+        "name": "http://localhost:3100/_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2",
+        "bytes": 23108,
+        "transfer": 23408,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/media/caa3a2e1cccd8315-s.p.0wgildi0cnwt9.woff2",
+        "bytes": 29288,
+        "transfer": 29588,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/40685ojgm4ikx.js",
+        "bytes": 2088,
+        "transfer": 2388,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3nv8f2v4ckpa5.css",
+        "bytes": 13666,
+        "transfer": 13966,
+        "type": "link"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/32kcbi7u2b3ua.js",
+        "bytes": 8392,
+        "transfer": 8692,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2fo2_l5ee_47-.js",
+        "bytes": 43983,
+        "transfer": 44283,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0zg9zi9his93m.js",
+        "bytes": 73506,
+        "transfer": 73806,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+        "bytes": 4396,
+        "transfer": 4696,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/3jcbhejji2wf9.js",
+        "bytes": 3525,
+        "transfer": 3825,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0x7e1sqt4hbnx.js",
+        "bytes": 6711,
+        "transfer": 7011,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/2oddsspqjnl_2.js",
+        "bytes": 834,
+        "transfer": 1134,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1ec6v7b4n1qwc.js",
+        "bytes": 625,
+        "transfer": 925,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/0avyo0kxh1st8.js",
+        "bytes": 11104,
+        "transfer": 11404,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/1xstwhebw_ser.js",
+        "bytes": 8021,
+        "transfer": 8321,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/_next/static/chunks/38rcjrtpbvis2.js",
+        "bytes": 16660,
+        "transfer": 16960,
+        "type": "script"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=5CB68i4pnAekjehf",
+        "bytes": 186,
+        "transfer": 486,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=5CB68i4pnAekjehf",
+        "bytes": 181,
+        "transfer": 481,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=5CB68i4pnAekjehf",
+        "bytes": 283,
+        "transfer": 583,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=5CB68i4pnAekjehf",
+        "bytes": 279,
+        "transfer": 579,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=5CB68i4pnAekjehf",
+        "bytes": 286,
+        "transfer": 586,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=5CB68i4pnAekjehf",
+        "bytes": 274,
+        "transfer": 574,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1230,
+        "transfer": 1530,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/integrations?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1261,
+        "transfer": 1561,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/search?_rsc=tXyZJ52UQVBCVsD3",
+        "bytes": 1252,
+        "transfer": 1552,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-krasnyi-oktyabr-inc-recalls-starfish-seafood-trio-because-possible-health-risk?_rsc=O5kqlIIvqopvM0DJ",
+        "bytes": 2118,
+        "transfer": 2418,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-oliva-llc-issues-allergy-alert-undeclared-sesame-baba-ghanouj-spicy-baba-ghanouj-an?_rsc=oUpNwA7nl5j0ElY8",
+        "bytes": 2002,
+        "transfer": 2302,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fda-announcement-gardeners-basics-recalls-waltham-29-broccoli-sprouting-seeds-due-possible-salmonell?_rsc=zn7o-fyplPaXnVzH",
+        "bytes": 2007,
+        "transfer": 2307,
+        "type": "fetch"
+      },
+      {
+        "name": "http://localhost:3100/incidents/fsis-inexport-logistics-llc-recalls-ineligible-pork-cracklings-products-imported-republic?_rsc=J7ES3KZ27uoIsNBi",
+        "bytes": 2044,
+        "transfer": 2344,
+        "type": "fetch"
+      }
+    ],
+    "rows": 40,
+    "filterMs": 841.6936670000014,
+    "scriptBytes": 179845,
+    "scriptRequests": 12,
+    "prefetchRequests": 13
+  }
+]

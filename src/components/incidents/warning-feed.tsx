@@ -13,8 +13,6 @@ import { classifyHazard, hazardKinds, type HazardKind } from "@/lib/incidents/ha
 import { recallName, recallReason } from "@/lib/incidents/product-name";
 import { formatRecallDate, pickTopAlert, timeAgo } from "@/lib/incidents/recency";
 import { type WarningRegion } from "@/lib/location";
-import { getFoodSafetyNews } from "@/lib/news/feed";
-import { newsForRegion } from "@/lib/news/related";
 
 export type WarningParams = Record<string, string | string[] | undefined>;
 
@@ -66,9 +64,7 @@ export async function WarningFeed({ params, region, path }: { params: WarningPar
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
       <div className="min-w-0">
         {top ? <TopAlert row={top} returnTo={returnTo} summary={indexed?.top?.summary ?? regional?.find((row) => row.id === top.id)?.summary} /> : null}
-        <Suspense key={region} fallback={null}>
-          <NewsButton region={region} />
-        </Suspense>
+        <NewsButton />
         <div className="mt-6">
           <WarningExplorer
             rows={rows}
@@ -118,17 +114,14 @@ function TopAlert({ row, summary, returnTo }: { row: ExplorerRow; summary?: stri
 }
 
 /** Same shape as the top alert, so it reads as the second thing to look at. Hidden where the news is already beside the list. */
-async function NewsButton({ region }: { region: WarningRegion }) {
-  const feed = await getFoodSafetyNews().catch(() => null);
-  const count = feed ? Math.min(newsForRegion(feed.articles, region).length, HOME_NEWS_LIMIT) : 0;
-  if (!count) return null;
+function NewsButton() {
   return (
     <a
       href="#news"
       className="group mt-2 flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-5 lg:hidden"
     >
       <span className="min-w-0">
-        <span className="block text-xs font-semibold text-muted-foreground">In the news · {count} {count === 1 ? "story" : "stories"}</span>
+        <span className="block text-xs font-semibold text-muted-foreground">Reporting from news publishers</span>
         <span className="block font-bold">See the news</span>
       </span>
       <ArrowDown className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" aria-hidden />

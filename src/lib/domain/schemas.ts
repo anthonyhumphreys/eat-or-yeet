@@ -65,21 +65,4 @@ export type TargetType = z.infer<typeof TargetTypeSchema>;
 export const RegionSchema = z.enum(["UK", "US"]);
 export type Region = z.infer<typeof RegionSchema>;
 
-export function emptyObservation(): ProductObservation {
-  return {
-    productName: null,
-    brand: null,
-    barcode: null,
-    batchCode: null,
-    lotCode: null,
-    producer: null,
-    farmCode: null,
-    countryOfOrigin: null,
-    establishmentNumber: null,
-    approvalNumber: null,
-    retailer: null,
-    category: null,
-    eggMark: null,
-    dates: null,
-  };
-}
+export { emptyObservation } from "./observation";

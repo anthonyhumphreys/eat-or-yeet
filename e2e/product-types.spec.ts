@@ -34,8 +34,8 @@ test("switching from a food category to Medical clears the category and restores
 
 test("a medicine search with no matches offers pharmacist advice instead of the food checker", async ({ page }) => {
   await page.goto("/?region=US&type=Medical&q=zzzznotarealmedicine");
-  await expect(page.getByText("No recall reports match.")).toBeVisible();
-  await expect(page.getByText(/For a medicine, check the latest official information or ask a pharmacist/)).toBeVisible();
+  await expect(page.getByRole("main").getByText("No recall reports match.")).toBeVisible();
+  await expect(page.getByRole("main").getByText(/For a medicine, check the latest official information or ask a pharmacist/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Check its codes and dates", exact: true })).toHaveCount(0);
 });
 

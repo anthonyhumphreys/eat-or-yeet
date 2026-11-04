@@ -2,10 +2,11 @@ import { expect, test } from "@playwright/test";
 import { mountMcpApp, toolResult, checkResult } from "./fixtures/mcp-host";
 
 // Run with a fixture PostHog token; interception ensures no browser test submits to production.
-test("website consent can be declined, accepted and withdrawn without exposing inputs", async ({ page, context }) => {
-  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: "http://localhost:3000" }]);
+test("website consent can be declined, accepted and withdrawn without exposing inputs", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }]);
   const events: unknown[] = [];
   await page.route("**/api/analytics", async (route) => { events.push(route.request().postDataJSON()); await route.fulfill({ status: 204 }); });
+  await context.clearCookies({ name: "eat-or-yeet-analytics" });
   await page.goto("/search?private=not-for-analytics");
   const consent = page.getByRole("region", { name: "Help us improve Eat or Yeet?" });
   await expect(consent).toBeVisible();
@@ -25,8 +26,8 @@ test("website consent can be declined, accepted and withdrawn without exposing i
   expect((await context.cookies()).find((cookie) => cookie.name === "eat-or-yeet-analytics")?.value).toBe("v1.declined");
 });
 
-test("browser privacy signals keep optional website analytics off", async ({ page, context }) => {
-  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: "http://localhost:3000" }, { name: "eat-or-yeet-analytics", value: "v1.accepted", url: "http://localhost:3000" }]);
+test("browser privacy signals keep optional website analytics off", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "eat-or-yeet-region", value: "UK", url: baseURL! }, { name: "eat-or-yeet-analytics", value: "v1.accepted", url: baseURL! }]);
   await page.addInitScript(() => Object.defineProperty(navigator, "globalPrivacyControl", { value: true }));
   const events: unknown[] = [];
   await page.route("**/api/analytics", async (route) => { events.push(route.request().postDataJSON()); await route.fulfill({ status: 204 }); });
