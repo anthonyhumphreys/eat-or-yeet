@@ -167,13 +167,13 @@ describe("extra tags", () => {
     expect(browseCategories({ title: "Recall", targets: [product("Fruit pouch", "p0"), gtin("5000328657950", "p0")], productCategoryTags: { "05000328657950": ["en:baby-foods", "en:fruits"] } })).toEqual(["Produce", "Baby food"]);
   });
 
-  it("adds Pharmaceutical for hidden drugs and medicine residues", () => {
+  it("adds Pharmaceutical for hidden drugs, not medicine residues in food", () => {
     expect(browseCategories({ title: "Royal Honey VIP recalled because of undeclared tadalafil", targets: [product("Royal Honey VIP")] })).toEqual(["Pantry", "Pharmaceutical"]);
     expect(browseCategories({ title: "Recall", targets: [product("Slimming capsules")], hazard: "Contains undeclared sibutramine" })).toEqual(["Supplements", "Pharmaceutical"]);
     expect(browseCategories({
       title: "Graham’s Family Dairy recalls Graham’s Family Dairy Semi-Skimmed Milk due to the presence of veterinary medicines including antibiotics (penicillin)",
       targets: [product("Graham's Family Dairy Semi-Skimmed Milk")],
-    })).toEqual(["Dairy & eggs", "Pharmaceutical"]);
+    })).toEqual(["Dairy & eggs"]);
   });
 
   it("does not add extra tags without a signal", () => {

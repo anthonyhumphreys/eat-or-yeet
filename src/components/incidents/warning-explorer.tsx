@@ -8,9 +8,9 @@ import { useBrowsePage } from "./use-browse-page";
 import type { BrowsePage } from "@/lib/incidents/browse-view";
 import { BROWSE_POSITION_KEY, RecallLink, rememberBrowsePosition } from "./recall-link";
 import { BROWSE_PAGE_SIZE, browseReturnUrl, filterUrl, type ExplorerFilters } from "@/lib/incidents/browse-navigation";
-import { ShareButton } from "@/components/share-button";
 import { foodCategories, productCategories, superCategories, type ProductCategory, type SuperCategory } from "@/lib/incidents/browse";
-import { hazardKindNames, hazardKinds, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
+import { hazardKindNames, type HazardKind, type HazardSummary } from "@/lib/incidents/hazard";
+import { recallName, recallReason } from "@/lib/incidents/product-name";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 import { warningSearchMatchesText, warningSearchTerms, warningSearchText } from "@/lib/incidents/warning-search";
 import { regionNames, type WarningRegion } from "@/lib/location";
@@ -30,6 +30,10 @@ export type ExplorerRow = {
 export type { ExplorerFilters } from "@/lib/incidents/browse-navigation";
 
 const STEP = BROWSE_PAGE_SIZE;
+// The home page shows the newest few and links to the full list.
+const HOME_LIMIT = 10;
+// "Medical" stays the stored value and URL; people see "Pharmaceutical".
+const superCategoryLabels: Partial<Record<SuperCategory, string>> = { Medical: "Pharmaceutical" };
 const sourceNames: Record<WarningRegion, string> = { UK: "Food Standards Agency", US: "FDA and USDA FSIS" };
 const officialUrls: Record<WarningRegion, string> = {
   UK: "https://alerts.food.gov.uk/",
@@ -57,6 +61,7 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
   const date = formatRecallDate(row.updatedAt);
   // "x ago" depends on the viewer's clock, so a render either side of midnight may differ from the server's.
   const ago = timeAgo(row.updatedAt);
+  const name = recallName(row);
   return (
     <li className="border-b last:border-b-0">
       <RecallLink slug={row.slug} returnTo={returnTo} className="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg px-3 py-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:grid-cols-[6.75rem_minmax(0,1fr)_auto] sm:gap-x-4">
@@ -65,7 +70,8 @@ function WarningRow({ row, query, returnTo }: { row: ExplorerRow; query: string;
           <span suppressHydrationWarning className="block text-muted-foreground">{ago}</span>
         </span>
         <span className="min-w-0">
-          <span className="block text-[0.9375rem] font-semibold leading-snug sm:text-base"><Highlight text={row.title} query={query} /></span>
+          <span className="block text-[0.9375rem] leading-snug sm:text-base"><strong className="font-bold"><Highlight text={name.product} query={query} /></strong><span className="text-muted-foreground">: <Highlight text={recallReason(name, row.hazard)} query={query} /></span></span>
+          {name.company ? <span className="mt-0.5 block text-[13px] leading-5 text-muted-foreground"><span className="sr-only">Recalled by </span><Highlight text={name.company} query={query} /></span> : null}
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-5 text-muted-foreground">
             <span className={`rounded-full px-2 font-semibold ${tagTone[row.hazard.kind]}`}><span className="sr-only">Hazard: </span>{row.hazard.label}</span>
             <span>{row.categories.join(", ")}</span>
@@ -185,7 +191,8 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
 
   const { results } = view;
   const total = indexed.page?.total ?? results.length;
-  const visible = results.slice(0, limit);
+  const home = path === "/";
+  const visible = results.slice(0, home ? HOME_LIMIT : limit);
   const page = Math.max(1, Math.ceil((indexed.page ? limit : Math.min(limit, results.length)) / STEP));
   const returnTo = filterUrl(path, region, filters, page);
   const filtered = Boolean(q || hazard || type || category || store);
@@ -234,7 +241,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || target.closest("input, textarea, select, [contenteditable]")) return;
+      if (!inputRef.current || event.key !== "/" || event.metaKey || event.ctrlKey || target.closest("input, textarea, select, [contenteditable]")) return;
       event.preventDefault();
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -267,7 +274,7 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             </Chip>
             {tabs.types.map((item) => (
               <Chip key={item} href={filterUrl(path, region, { ...filters, type: item, category: undefined })} active={type === item} onSelect={() => update({ type: type === item ? undefined : item, category: undefined })}>
-                {item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
+                {superCategoryLabels[item] ?? item} <span className="tabular-nums">{(view.typeCounts.get(item) ?? 0).toLocaleString("en-GB")}</span>
               </Chip>
             ))}
           </div>
@@ -276,10 +283,12 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
       <div ref={chipsRef} className="relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by category">
         <div className="flex gap-2 sm:flex-wrap">
           <Chip href={filterUrl(path, region, { ...filters, category: undefined })} active={!category} onSelect={() => update({ category: undefined })}>
-            {type ? `All ${type.toLowerCase()}` : "All categories"}
+            {type ? `All ${(superCategoryLabels[type] ?? type).toLowerCase()}` : "All categories"}
           </Chip>
           {tabs.categories.map((item) => {
             const count = view.categoryCounts.get(item) ?? 0;
+            // Empty categories are hidden, except the one already chosen so it can be cleared.
+            if (count === 0 && category !== item) return null;
             return (
               <Chip key={item} href={filterUrl(path, region, { ...filters, category: item })} active={category === item} onSelect={() => update({ category: category === item ? undefined : item })}>
                 {item} <span className="tabular-nums">{count.toLocaleString("en-GB")}</span>
@@ -289,7 +298,8 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
         </div>
       </div>
 
-      <form role="search" action={path} className="mt-3" onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
+      {/* The home page has no search box: "Check a product" covers looking something up. */}
+      {home ? null : <form role="search" action={path} className="mt-3" onSubmit={(event) => { event.preventDefault(); inputRef.current?.blur(); }}>
         <input type="hidden" name="region" value={region} />
         <label htmlFor="warning-search" className="sr-only">Search {region} recalls</label>
         <div className="relative">
@@ -315,24 +325,17 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             <kbd aria-hidden className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground sm:block">/</kbd>
           )}
         </div>
-      </form>
+      </form>}
 
-      <div className="mt-3 flex gap-2">
-        <FacetSelect id="hazard-filter" label="Hazard" value={hazard ?? ""} onChange={(value) => update({ hazard: (value || undefined) as HazardKind | undefined })}>
-          <option value="">All hazards ({view.hazardTotal.toLocaleString("en-GB")})</option>
-          {hazardKinds.map((kind) => {
-            const count = view.hazardCounts.get(kind) ?? 0;
-            if (!count && hazard !== kind) return null;
-            return <option key={kind} value={kind}>{hazardKindNames[kind]} ({count.toLocaleString("en-GB")})</option>;
-          })}
-        </FacetSelect>
-        {view.stores.length ? (
+      {/* No hazard filter: each row's tag names the hazard. Old ?hazard= links still filter and can be cleared. */}
+      {view.stores.length ? (
+        <div className="mt-3 flex gap-2">
           <FacetSelect id="store-filter" label="Shop" value={store ?? ""} onChange={(value) => update({ store: value || undefined })}>
             <option value="">All shops</option>
             {view.stores.map((item) => <option key={item}>{item}</option>)}
           </FacetSelect>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <ViewTransition name="warning-context" default="none" update="warning-context" share="warning-context">
         <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-3">
@@ -346,7 +349,6 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
             {filtered ? (
               <button type="button" onClick={() => update({ q: "", hazard: undefined, type: undefined, category: undefined, store: undefined })} className="min-h-10 rounded-sm text-sm font-semibold underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Clear all</button>
             ) : null}
-            {rows ? <ShareButton label="Share this list" title={`${region} ${type ? `${type.toLowerCase()} ` : ""}recalls`} text={`${region} ${type ? `${type.toLowerCase()} ` : ""}recall reports from the official sources.`} url={filterUrl(path, region, filters)} /> : null}
           </div>
         </div>
       </ViewTransition>
@@ -387,7 +389,14 @@ export function WarningExplorer({ rows, region, path, initial, initialPage = 1, 
       {indexed.notice ? <p role="status" className="mt-3 text-sm text-muted-foreground">{indexed.notice}</p> : null}
       {indexed.error ? <p role="alert" className="mt-4 text-sm">{indexed.error} <button type="button" onClick={indexed.retry} className="min-h-10 underline">Retry</button></p> : null}
       {indexed.loading ? <p role="status" className="mt-3 text-sm text-muted-foreground">Updating recalls…</p> : null}
-      {total > visible.length ? (
+      {home && total > visible.length ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <p className="text-sm tabular-nums text-muted-foreground">Newest {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
+          <Link href={filterUrl("/incidents", region, filters)} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-sm font-bold hover:border-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            See all {countLabel}<ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </div>
+      ) : total > visible.length ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="text-sm tabular-nums text-muted-foreground">Showing {visible.length.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}</p>
           <a

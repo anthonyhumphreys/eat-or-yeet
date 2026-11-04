@@ -13,7 +13,7 @@ test("switching from a food category to Medical clears the category and restores
   await expect(page).toHaveURL(/category=Snacks/);
 
   // Counts describe the selection after switching kind, which clears the category.
-  const medical = kinds.getByRole("link", { name: /^Medical [1-9]/ });
+  const medical = kinds.getByRole("link", { name: /^Pharmaceutical [1-9]/ });
   await expect(medical).toBeVisible();
   await medical.click();
   await expect(page).toHaveURL(/type=Medical/);

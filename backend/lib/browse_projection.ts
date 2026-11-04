@@ -13,7 +13,7 @@ export const browseRowSchema = z.object({
 });
 export type BrowseRow = z.infer<typeof browseRowSchema>;
 
-export function browseContent(row: Pick<Doc<"incidentMatchData">, "title" | "hazard" | "pathogen" | "targets" | "categories" | "stores" | "superCategories">, originalSourceData?: unknown) {
+export function browseContent(row: Pick<Doc<"incidentMatchData">, "title" | "hazard" | "pathogen" | "summary" | "targets" | "categories" | "stores" | "superCategories">, originalSourceData?: unknown) {
   const hazardText = sourceHazardText(originalSourceData, row.hazard);
   const browseHazard = classifyHazard({ ...row, hazard: hazardText });
   return { browseHazard, browseSearchText: warningSearchText({ ...row, hazard: browseHazard, hazardText }) };

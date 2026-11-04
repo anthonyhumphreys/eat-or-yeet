@@ -6,7 +6,7 @@ test.beforeEach(async ({context,baseURL,page}) => {
 });
 
 test("loads only the next page through the bounded API",async({page})=>{
-  await page.goto("/?region=UK&q=fixture");
+  await page.goto("/incidents?region=UK&q=fixture");
   await expect(rows(page)).toHaveCount(40);
   const next=page.waitForResponse(response=>response.url().includes("/api/warnings") && response.status()===200);
   await page.getByRole("link",{name:"Show 40 more"}).click();
@@ -16,7 +16,7 @@ test("loads only the next page through the bounded API",async({page})=>{
 });
 
 test("aborts obsolete filter requests and keeps the latest search",async({page})=>{
-  await page.goto("/?region=UK");
+  await page.goto("/incidents?region=UK");
   let release!:()=>void;
   let requested!:()=>void;
   const blocked=new Promise<void>(resolve=>{release=resolve;});
@@ -37,7 +37,7 @@ test("aborts obsolete filter requests and keeps the latest search",async({page})
 });
 
 test("restarts pagination visibly when the dataset revision changes",async({page,request})=>{
-  await page.goto("/?region=UK&q=fixture");
+  await page.goto("/incidents?region=UK&q=fixture");
   await expect(rows(page)).toHaveCount(40);
   const rebuilt=await request.post("http://127.0.0.1:9161/rpc",{headers:{Authorization:"Bearer fixture-backend-secret"},data:{operation:"browse.rebuild",args:{}}});
   expect(rebuilt.ok()).toBe(true);

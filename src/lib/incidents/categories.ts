@@ -15,6 +15,8 @@ import { containsWords, words } from "./words";
 //   4. a known product line named in the notice title.
 // "Baby food" and "Pharmaceutical" are extra tags added on top of the food
 // type, so a fruit pouch is listed under both Produce and Baby food.
+// Pharmaceutical means hidden drugs in the product. Medicine residues in food
+// (antibiotics in milk) are a hazard, shown on the hazard tag instead.
 
 export const foodCategories = [
   "Produce",
@@ -120,7 +122,7 @@ const babySignals = /\b(?:baby (?:foods?|milk|formula|rice|porridge|cereal|snack
 
 // A medicine in or as the product: hidden drugs in supplements and honey,
 // or veterinary medicine residues in food.
-const pharmaceuticalSignals = /\b(?:tadalafil|sildenafil|vardenafil|sibutramine|phenolphthalein|tianeptine|phenibut|dmaa|dmha|undeclared (?:drug|pharmaceutical)s?|drug ingredients?|unapproved (?:new )?drugs?|hidden drugs?|pharmaceuticals?|prescription (?:drugs?|medicines?)|veterinary (?:medicines?|drugs?)|(?:antibiotic|drug|medicine) residues?|penicillin)\b/i;
+const pharmaceuticalSignals = /\b(?:tadalafil|sildenafil|vardenafil|sibutramine|phenolphthalein|tianeptine|phenibut|dmaa|dmha|undeclared (?:drug|pharmaceutical)s?|drug ingredients?|unapproved (?:new )?drugs?|hidden drugs?|pharmaceuticals?|prescription (?:drugs?|medicines?))\b/i;
 
 // First match wins. Optional plurals are spelled out so each list stays readable.
 const categoryRules: Array<[FoodCategory, RegExp]> = [

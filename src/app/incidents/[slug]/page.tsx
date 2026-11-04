@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { browseReturnUrl } from "@/lib/incidents/browse-navigation";
 import { rowSuperCategories } from "@/lib/incidents/browse";
 import { classifyHazard } from "@/lib/incidents/hazard";
+import { recallName } from "@/lib/incidents/product-name";
 import { publicOfficialSource } from "@/lib/incidents/public-source";
 import { formatRecallDate, timeAgo } from "@/lib/incidents/recency";
 
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const incident = await getIncidentBySlug(slug);
   if (!incident) return { title: "Warning not found" };
-  return { title: incident.title, description: incident.summary.slice(0, 160), alternates: { canonical: `/incidents/${slug}` } };
+  return { title: `${recallName(incident).product} recall`, description: incident.summary.slice(0, 160), alternates: { canonical: `/incidents/${slug}` } };
 }
 
 // One page per recall, however people arrive (the list, a check, or a link from a chat or an AI assistant):
@@ -37,6 +38,7 @@ export default async function IncidentPage({ params, searchParams }: { params: P
   const listUrl = returnTo ?? `/?region=${incident.region}`;
   const source = publicOfficialSource(incident);
   const hazard = classifyHazard(incident);
+  const name = recallName(incident);
   const hazardText = incident.hazard?.trim() || incident.pathogen;
   // The FDA publishes recalling companies' own announcements as its recall notices.
   const companyAnnouncement = incident.authority === FDA && source.label === "Official source";
@@ -55,11 +57,12 @@ export default async function IncidentPage({ params, searchParams }: { params: P
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-yeet px-2.5 py-0.5 text-xs font-bold text-white dark:text-background"><TriangleAlert className="size-3.5" aria-hidden />{reported ? "Published recall report" : incident.status === "resolved" ? "Resolved recall" : "Active recall"} · {hazard.label}</span>
                 <span className="text-muted-foreground">Updated <time dateTime={incident.updatedAt.toISOString()}>{formatRecallDate(incident.updatedAt)}</time> · {timeAgo(incident.updatedAt.valueOf())}</span>
               </p>
-              <h1 className="mt-4 max-w-3xl text-[1.75rem] font-black leading-[1.12] tracking-[-0.03em] sm:text-4xl">{incident.title}</h1>
+              <h1 className="mt-4 max-w-3xl text-[1.75rem] font-black leading-[1.12] tracking-[-0.03em] sm:text-4xl">{name.product}</h1>
+              {name.company ? <p className="mt-2 font-semibold text-muted-foreground">Recalled by {name.company}</p> : null}
               {incident.summary ? <p className="mt-3 max-w-[65ch] leading-7 text-muted-foreground">{incident.summary}</p> : null}
               {reported ? <p className="mt-3 max-w-[65ch] text-sm leading-6 text-muted-foreground">Current recall status is unverified. FDA does not update drug-enforcement status after publication. Check the latest official information or ask a pharmacist.</p> : null}
             </div>
-            <ShareButton url={`/incidents/${incident.slug}`} label="Share this recall" title={`Recall: ${incident.title}`} text={`Heads up: ${incident.title} has been recalled (${hazard.label}).`} className="self-start" />
+            <ShareButton url={`/incidents/${incident.slug}`} label="Share this recall" title={`Recall: ${name.product}`} text={`Heads up: ${name.product}${name.company ? ` from ${name.company}` : ""} has been recalled (${hazard.label}).`} className="self-start" />
           </header>
 
           <section aria-labelledby="advice-heading" className="mt-7 rounded-xl bg-yeet-soft p-5 sm:p-6">
@@ -101,6 +104,7 @@ export default async function IncidentPage({ params, searchParams }: { params: P
           <section aria-labelledby="official-heading" className="rounded-xl border bg-card p-5 text-sm">
             <h2 id="official-heading" className="text-base font-black tracking-tight">Official information</h2>
             <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3">
+              <dt className="text-muted-foreground">Notice</dt><dd className="font-semibold leading-5">{incident.title}</dd>
               <dt className="text-muted-foreground">Authority</dt><dd className="font-semibold">{incident.authority}</dd>
               <dt className="text-muted-foreground">Published</dt><dd className="font-semibold tabular-nums">{formatRecallDate(incident.publishedAt)}</dd>
               <dt className="text-muted-foreground">Updated</dt><dd className="font-semibold tabular-nums">{formatRecallDate(incident.updatedAt)}, {timeFormat.format(incident.updatedAt)}</dd>
