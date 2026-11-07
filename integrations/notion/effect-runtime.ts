@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { WorkerError, isRecord } from "./shopping-core";
 
 const MCP_CONNECT_TIMEOUT_MS = 15_000;
@@ -9,52 +9,50 @@ export interface ScopedMcpClient {
   close(): Promise<void>;
 }
 
-type ReviewRuntimeService = {
-  withClient<Client extends ScopedMcpClient, Result>(
-    createClient: () => Client,
-    actionSignal: AbortSignal,
-    reviewWithClient: (client: Client, signal: AbortSignal) => Promise<Result>,
-  ): Effect.Effect<Result, unknown>;
-};
+export type McpOperationPhase = "connect" | "review";
+
+/** An unexpected SDK rejection, kept distinct from WorkerError and interruption. */
+export class McpOperationError extends Error {
+  readonly _tag = "McpOperationError";
+
+  constructor(readonly phase: McpOperationPhase, cause: unknown) {
+    super(`Notion MCP ${phase} failed`, { cause });
+    this.name = "McpOperationError";
+  }
+}
+
+export type McpReviewError = WorkerError | McpOperationError;
 type CloseOutcome = "closed" | "timed_out" | "failed";
 
-class ReviewRuntime extends Context.Service<ReviewRuntime, ReviewRuntimeService>()(
-  "eat-or-yeet/notion/ReviewRuntime",
-) {
-  static readonly layer = Layer.succeed(ReviewRuntime, ReviewRuntime.of({
-    withClient: (createClient, actionSignal, reviewWithClient) => Effect.scoped(
-      Effect.gen(function*() {
-        const client = yield* Effect.acquireRelease(
-          Effect.sync(createClient),
-          (acquired) => Effect.tryPromise({
-            try: () => closeWithin(acquired, MCP_CLEANUP_TIMEOUT_MS),
-            catch: () => new Error("MCP client cleanup failed"),
-          }).pipe(
-            Effect.catch(() => Effect.succeed<CloseOutcome>("failed")),
-            Effect.flatMap((outcome) => outcome === "closed"
-              ? Effect.void
-              : Effect.sync(() => console.warn(outcome === "timed_out"
-                ? "Notion MCP client cleanup exceeded its one-second bound"
-                : "Notion MCP client cleanup failed"))),
-          ),
-        );
+/** Builds a lazy, typed Effect around one scoped MCP connection. */
+export function scopedMcpReview<Client extends ScopedMcpClient, Result>(
+  createClient: () => Client,
+  reviewWithClient: (client: Client, signal: AbortSignal) => Promise<Result>,
+): Effect.Effect<Result, McpReviewError> {
+  return Effect.scoped(
+    Effect.gen(function*() {
+      const client = yield* Effect.acquireRelease(
+        Effect.sync(createClient),
+        (acquired) => Effect.promise(() => closeWithin(acquired, MCP_CLEANUP_TIMEOUT_MS)).pipe(
+          Effect.flatMap((outcome) => outcome === "closed"
+            ? Effect.void
+            : Effect.sync(() => console.warn(outcome === "timed_out"
+              ? "Notion MCP client cleanup exceeded its one-second bound"
+              : "Notion MCP client cleanup failed"))),
+        ),
+      );
 
-        yield* Effect.tryPromise({
-          try: (fiberSignal) => connectWithin(
-            client,
-            AbortSignal.any([actionSignal, fiberSignal]),
-            MCP_CONNECT_TIMEOUT_MS,
-          ),
-          catch: classifyConnectFailure,
-        });
+      yield* Effect.tryPromise({
+        try: (fiberSignal) => connectWithin(client, fiberSignal, MCP_CONNECT_TIMEOUT_MS),
+        catch: classifyConnectFailure,
+      });
 
-        return yield* Effect.tryPromise({
-          try: (fiberSignal) => reviewWithClient(client, AbortSignal.any([actionSignal, fiberSignal])),
-          catch: (error) => error,
-        });
-      }),
-    ),
-  }));
+      return yield* Effect.tryPromise({
+        try: (fiberSignal) => reviewWithClient(client, fiberSignal),
+        catch: (cause) => classifyReviewFailure(cause),
+      });
+    }),
+  );
 }
 
 /** Promise facade for managed actions that need a fresh, scoped MCP connection. */
@@ -65,32 +63,34 @@ export async function runScopedMcpReview<Client extends ScopedMcpClient, Result>
 ): Promise<Result> {
   if (actionSignal.aborted) throw actionSignal.reason;
 
-  const program = Effect.gen(function*() {
-    const runtime = yield* ReviewRuntime;
-    return yield* runtime.withClient(createClient, actionSignal, reviewWithClient);
-  }).pipe(Effect.provide(ReviewRuntime.layer));
-
-  const exit = await Effect.runPromiseExit(program, { signal: actionSignal });
+  const exit = await Effect.runPromiseExit(
+    scopedMcpReview(createClient, reviewWithClient),
+    { signal: actionSignal },
+  );
   if (Exit.isSuccess(exit)) return exit.value;
 
   const typedFailure = Cause.findErrorOption(exit.cause);
-  if (Option.isSome(typedFailure)) throw typedFailure.value;
+  if (Option.isSome(typedFailure)) {
+    const error = typedFailure.value;
+    if (error instanceof McpOperationError) throw error.cause;
+    throw error;
+  }
   if (actionSignal.aborted) throw actionSignal.reason;
   throw Cause.squash(exit.cause);
 }
 
 async function connectWithin(
   client: ScopedMcpClient,
-  actionSignal: AbortSignal,
+  fiberSignal: AbortSignal,
   timeoutMs: number,
 ): Promise<void> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = AbortSignal.any([actionSignal, timeoutSignal]);
+  const signal = AbortSignal.any([fiberSignal, timeoutSignal]);
   try {
     if (signal.aborted) throw signal.reason;
     await raceAbort(client.connect(signal), signal);
   } catch (error) {
-    if (actionSignal.aborted) throw actionSignal.reason;
+    if (fiberSignal.aborted) throw fiberSignal.reason;
     if (timeoutSignal.aborted) {
       throw new WorkerError("Review MCP connection timed out", "temporary", undefined, "mcp");
     }
@@ -121,12 +121,17 @@ function raceAbort<A>(promise: Promise<A>, signal: AbortSignal): Promise<A> {
   });
 }
 
-function classifyConnectFailure(error: unknown): unknown {
+function classifyConnectFailure(error: unknown): McpReviewError {
   if (error instanceof WorkerError) return error;
   if (isRecord(error) && isRecord(error.data) && [401, 403].includes(Number(error.data.status))) {
     return new WorkerError("Review MCP access was revoked or denied", "revoked", undefined, "mcp");
   }
-  return error;
+  return new McpOperationError("connect", error);
+}
+
+function classifyReviewFailure(error: unknown): McpReviewError {
+  if (error instanceof WorkerError) return error;
+  return new McpOperationError("review", error);
 }
 
 function closeWithin(client: ScopedMcpClient, timeoutMs: number): Promise<CloseOutcome> {
