@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runScopedMcpReview, type ScopedMcpClient } from "../integrations/notion/effect-runtime";
 import { WorkerError } from "../integrations/notion/shopping-core";
@@ -77,5 +78,66 @@ describe("managed Notion MCP Effect runtime", () => {
       new AbortController().signal,
       async () => "unreachable",
     )).rejects.toMatchObject({ code: "revoked", source: "mcp" });
+  });
+
+  it("does not start an already-cancelled SDK handshake or leak a late connect rejection", () => {
+    const effectRuntimeUrl = new URL("../integrations/notion/effect-runtime.ts", import.meta.url).href;
+    const shoppingCoreUrl = new URL("../integrations/notion/shopping-core.ts", import.meta.url).href;
+    const script = `
+      import assert from "node:assert/strict";
+      import { runScopedMcpReview } from ${JSON.stringify(effectRuntimeUrl)};
+      import { McpReviewClient } from ${JSON.stringify(shoppingCoreUrl)};
+
+      const unhandled = [];
+      process.on("unhandledRejection", (reason) => unhandled.push(reason));
+      let networkCalls = 0;
+      globalThis.fetch = async () => {
+        networkCalls += 1;
+        throw new Error("unexpected network request");
+      };
+
+      const alreadyCancelled = new AbortController();
+      const deadline = new Error("deadline expired before MCP admission");
+      alreadyCancelled.abort(deadline);
+      await assert.rejects(
+        runScopedMcpReview(
+          () => new McpReviewClient("https://example.test/mcp", "not-a-real-key"),
+          alreadyCancelled.signal,
+          async () => undefined,
+        ),
+        (error) => error === deadline,
+      );
+
+      const connecting = new AbortController();
+      const actionReason = new Error("deadline fired during connect");
+      const handshakeFailure = new Error("late handshake rejection");
+      let closeCount = 0;
+      await assert.rejects(
+        runScopedMcpReview(
+          () => ({
+            connect: () => {
+              connecting.abort(actionReason);
+              return Promise.reject(handshakeFailure);
+            },
+            close: async () => { closeCount += 1; },
+          }),
+          connecting.signal,
+          async () => undefined,
+        ),
+        (error) => error === actionReason,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      assert.equal(closeCount, 1);
+      assert.equal(networkCalls, 0);
+      assert.deepEqual(unhandled, []);
+    `;
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+
+    expect(child.status, child.error?.message || child.stderr || child.stdout).toBe(0);
   });
 });

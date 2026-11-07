@@ -63,6 +63,8 @@ export async function runScopedMcpReview<Client extends ScopedMcpClient, Result>
   actionSignal: AbortSignal,
   reviewWithClient: (client: Client, signal: AbortSignal) => Promise<Result>,
 ): Promise<Result> {
+  if (actionSignal.aborted) throw actionSignal.reason;
+
   const program = Effect.gen(function*() {
     const runtime = yield* ReviewRuntime;
     return yield* runtime.withClient(createClient, actionSignal, reviewWithClient);
@@ -85,6 +87,7 @@ async function connectWithin(
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = AbortSignal.any([actionSignal, timeoutSignal]);
   try {
+    if (signal.aborted) throw signal.reason;
     await raceAbort(client.connect(signal), signal);
   } catch (error) {
     if (actionSignal.aborted) throw actionSignal.reason;
@@ -96,7 +99,10 @@ async function connectWithin(
 }
 
 function raceAbort<A>(promise: Promise<A>, signal: AbortSignal): Promise<A> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    void promise.catch(() => undefined);
+    return Promise.reject(signal.reason);
+  }
   return new Promise<A>((resolve, reject) => {
     let settled = false;
     const finish = (resume: () => void) => {
