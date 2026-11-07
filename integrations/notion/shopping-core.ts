@@ -82,12 +82,14 @@ export type ShoppingWorkerEvent = {
 };
 export class WorkerError extends Error {
   readonly code: "revoked" | "missing_property" | "out_of_scope" | "invalid_config" | "temporary";
+  readonly source?: "notion" | "mcp";
   readonly retryAfterMs?: number;
-  constructor(message: string, code: "revoked" | "missing_property" | "out_of_scope" | "invalid_config" | "temporary" = "temporary", retryAfterMs?: number) {
+  constructor(message: string, code: "revoked" | "missing_property" | "out_of_scope" | "invalid_config" | "temporary" = "temporary", retryAfterMs?: number, source?: "notion" | "mcp") {
     super(message);
     this.name = "WorkerError";
     this.code = code;
     this.retryAfterMs = retryAfterMs;
+    this.source = source;
   }
 }
 export type NotionPage = {
@@ -152,12 +154,12 @@ export class NotionRestClient implements NotionClient {
         throw new WorkerError("Notion write requires a fresh preflight before retry", "temporary", retryAfterMs);
       }
       if (!retryable || attempt === MAX_RETRIES) {
-        if (response.status === 401 || response.status === 403) throw new WorkerError("Notion access was revoked or denied", "revoked");
+        if (response.status === 401 || response.status === 403) throw new WorkerError("Notion access was revoked or denied", "revoked", undefined, "notion");
         if (response.status === 404) throw new WorkerError("Notion resource is unavailable", path.startsWith("/pages/") ? "out_of_scope" : "missing_property");
         if (response.status === 400) throw new WorkerError("Notion rejected the configured request; check selected database and property configuration", "invalid_config");
         throw new WorkerError(`Notion request failed (${response.status})`, "temporary");
       }
-      if (response.status === 429 && await isBlocked(response)) throw new WorkerError("Notion blocked this integration's API access", "revoked");
+      if (response.status === 429 && await isBlocked(response)) throw new WorkerError("Notion blocked this integration's API access", "revoked", undefined, "notion");
       const requestedWait = retryAfterMilliseconds(response.headers.get("retry-after"));
       if (requestedWait !== undefined && requestedWait > MAX_IN_PROCESS_RETRY_AFTER_MS) {
         await response.body?.cancel();
@@ -210,14 +212,21 @@ export class McpReviewClient implements ReviewClient {
     this.#client = new Client({ name: "eat-or-yeet-notion-shopping", version: "1.0.0" });
     this.#transport = new StreamableHTTPClientTransport(parsed, { requestInit: { headers: { Authorization: `Bearer ${connectionKey}` } } });
   }
-  async connect(): Promise<void> { await this.#client.connect(this.#transport); }
+  async connect(signal?: AbortSignal): Promise<void> {
+    await this.#client.connect(this.#transport, {
+      ...(signal ? { signal } : {}),
+      timeout: MCP_REQUEST_TIMEOUT_MS,
+    });
+  }
   async review(item: ShoppingItem, region: string, signal: AbortSignal): Promise<ReviewResponse> {
     const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS)]);
     let result: Awaited<ReturnType<Client["callTool"]>>;
     try { result = await this.#client.callTool({ name: this.#toolName, arguments: { region, items: [item] } }, { signal: requestSignal }); }
     catch (error) {
-      if (isRecord(error) && isRecord(error.data) && [401, 403].includes(Number(error.data.status))) throw new WorkerError("Review MCP access was revoked or denied", "revoked");
-      throw new WorkerError("Review MCP transport failed");
+      if (signal.aborted) throw signal.reason;
+      if (requestSignal.aborted) throw new WorkerError("Review MCP request timed out", "temporary", undefined, "mcp");
+      if (isRecord(error) && isRecord(error.data) && [401, 403].includes(Number(error.data.status))) throw new WorkerError("Review MCP access was revoked or denied", "revoked", undefined, "mcp");
+      throw new WorkerError("Review MCP transport failed", "temporary", undefined, "mcp");
     }
     if (result.isError) {
       throw classifyMcpToolResultError(result) ?? new WorkerError("Review MCP tool was unavailable");
@@ -248,20 +257,20 @@ export function inputFingerprint(item: ShoppingItem, bought: boolean, packetFing
 export function classifyMcpToolResultError(result: { [key: string]: unknown; isError?: unknown; _meta?: unknown }): WorkerError | undefined {
   if (!result.isError) return undefined;
   const metadata = isRecord(result._meta) && isRecord(result._meta.publicError) ? result._meta.publicError : undefined;
-  if (!metadata) return new WorkerError("Review MCP tool was unavailable");
+  if (!metadata) return new WorkerError("Review MCP tool was unavailable", "temporary", undefined, "mcp");
 
   const retryAfterSeconds = metadata.retryAfterSeconds;
   const retryAfterMs = typeof retryAfterSeconds === "number" && Number.isFinite(retryAfterSeconds)
     ? Math.min(Math.max(0, retryAfterSeconds * 1_000), MAX_DURABLE_RETRY_AFTER_MS)
     : undefined;
   if (metadata.recoverable === true || (metadata.recoverable === undefined && metadata.code === "quota_exceeded")) {
-    return new WorkerError("Review MCP returned a recoverable tool error", "temporary", retryAfterMs);
+    return new WorkerError("Review MCP returned a recoverable tool error", "temporary", retryAfterMs, "mcp");
   }
-  if (metadata.recoverable === false) return new WorkerError("Review MCP rejected the configured tool request", "invalid_config");
+  if (metadata.recoverable === false) return new WorkerError("Review MCP rejected the configured tool request", "invalid_config", undefined, "mcp");
   if (metadata.code === "unavailable" || metadata.code === "interrupted" || metadata.code === "INTERNAL_ERROR") {
-    return new WorkerError("Review MCP tool was unavailable");
+    return new WorkerError("Review MCP tool was unavailable", "temporary", undefined, "mcp");
   }
-  return new WorkerError("Review MCP rejected the configured tool request", "invalid_config");
+  return new WorkerError("Review MCP rejected the configured tool request", "invalid_config", undefined, "mcp");
 }
 export function canReviewItem(item: ShoppingItem): boolean {
   const barcode = item.barcode?.trim();

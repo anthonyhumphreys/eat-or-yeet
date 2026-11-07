@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/checks/service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/checks/service")>();
+  return { ...actual, checkProduct: vi.fn(actual.checkProduct) };
+});
 vi.mock("@/db/queries", () => ({
   getCheckDataset: vi.fn(async () => ({
     incidents: [],
@@ -18,8 +22,10 @@ vi.mock("@/lib/security/rate-limit", () => ({ takeRateLimits: vi.fn(async () => 
 ]) }));
 
 import { getCheckDataset } from "@/db/queries";
+import { checkProduct } from "@/lib/checks/service";
 import { POST } from "@/app/api/check/route";
 import { emptyObservation } from "@/lib/domain/schemas";
+import type { VerdictResult } from "@/lib/domain/types";
 import { takeRateLimits } from "@/lib/security/rate-limit";
 
 const healthyDataset = {
@@ -38,7 +44,58 @@ describe("POST /api/check", () => {
     const response = await POST(request as never);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ verdict: "NO_CLUE", matchLevel: "none" });
+    expect(checkProduct).toHaveBeenCalledWith(emptyObservation(), "UK", { signal: request.signal });
     expect(getCheckDataset).toHaveBeenCalledWith("UK");
+  });
+
+  it("does not return a verdict or share token when the request is aborted during the check", async () => {
+    const controller = new AbortController();
+    const request = new Request("http://localhost/api/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observation: emptyObservation(), region: "UK" }),
+      signal: controller.signal,
+    });
+    const result: VerdictResult = {
+      verdict: "EAT",
+      matchLevel: "none",
+      observation: emptyObservation(),
+      matches: [],
+      checkedAt: "2026-10-07T12:00:00.000Z",
+      datasetRegions: ["UK"],
+    };
+    vi.mocked(checkProduct).mockImplementationOnce(async () => {
+      controller.abort();
+      return { result, submittedObservation: emptyObservation(), enrichedObservation: emptyObservation() };
+    });
+
+    const response = await POST(request as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ error: expect.any(String) });
+    expect(body).not.toHaveProperty("verdict");
+    expect(body).not.toHaveProperty("shareToken");
+  });
+
+  it("does not return a verdict or share token for an already aborted request", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const request = new Request("http://localhost/api/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observation: emptyObservation(), region: "UK" }),
+      signal: controller.signal,
+    });
+
+    const response = await POST(request as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ error: expect.any(String) });
+    expect(body).not.toHaveProperty("verdict");
+    expect(body).not.toHaveProperty("shareToken");
+    expect(checkProduct).toHaveBeenCalledWith(emptyObservation(), "UK", { signal: request.signal });
   });
 
   it("rejects malformed observations", async () => {

@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCredentialSession } from "../backend/notionActions";
+import { classifyNotionRevocation, createCredentialSession } from "../backend/notionActions";
+import { WorkerError } from "../integrations/notion/shopping-core";
 
 describe("hosted Notion credential request wrapper", () => {
+  it("only treats typed Notion revocation as a credential failure after review", () => {
+    const notionRevocation = new WorkerError("Notion access denied", "revoked", undefined, "notion");
+    const mcpRevocation = new WorkerError("Review MCP access denied", "revoked", undefined, "mcp");
+
+    expect(classifyNotionRevocation(notionRevocation, false)).toBe("require_reconnect");
+    expect(classifyNotionRevocation(notionRevocation, true)).toBe("retry_after_rotation");
+    expect(classifyNotionRevocation(mcpRevocation, true)).toBe("unrelated");
+  });
+
   it("pins requests to the Notion API and replaces caller authorization", async () => {
     const fetcher = vi.fn(async (_input: string | URL, init?: RequestInit) => {
       expect(init?.redirect).toBe("error");

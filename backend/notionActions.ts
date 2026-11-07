@@ -6,6 +6,7 @@ import { internal } from "./api";
 import type { Id } from "./model";
 import { internalAction } from "./operations";
 import { decryptCredentials, encryptCredentials } from "../integrations/notion/hosted/crypto";
+import { runScopedMcpReview } from "../integrations/notion/effect-runtime";
 import { NotionOAuthApi } from "../integrations/notion/managed/notion-api";
 import {
   assertSelectedDatabase,
@@ -114,42 +115,17 @@ function scopedCredentials(envelope: string, scope: Scope) {
   return decryptCredentials(envelope, scope, requiredEnv("NOTION_CREDENTIAL_KEY"));
 }
 
-function isAbort(error: unknown): boolean {
-  return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
-}
-
-async function connectReviewClient(client: McpReviewClient, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
-  let onAbort: (() => void) | undefined;
-  const aborted = new Promise<never>((_, reject) => {
-    onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-  try {
-    await Promise.race([client.connect(), aborted]);
-  } finally {
-    if (onAbort) signal.removeEventListener("abort", onAbort);
-  }
-}
-
-async function closeReviewClient(client: McpReviewClient): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      client.close(),
-      new Promise<void>((resolve) => { timer = setTimeout(resolve, 1_000); }),
-    ]);
-  } catch {
-    // Closing a timed-out remote transport must not retain the durable lease.
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 function safeCode(error: unknown): string {
   if (error instanceof WorkerError) return error.code;
-  if (isAbort(error)) return "temporary";
   return "temporary";
+}
+
+export function classifyNotionRevocation(
+  error: unknown,
+  refreshSucceeded: boolean,
+): "retry_after_rotation" | "require_reconnect" | "unrelated" {
+  if (!(error instanceof WorkerError) || error.code !== "revoked" || error.source !== "notion") return "unrelated";
+  return refreshSucceeded ? "retry_after_rotation" : "require_reconnect";
 }
 
 function retryAt(error: unknown, now: number): number {
@@ -360,13 +336,11 @@ export const run = internalAction({
             if (row.invalidPacket || !canReviewItem(row.item)) {
               review = resultFor(row, "unable_to_review");
             } else {
-              const mcp = new McpReviewClient(config.reviewMcpUrl, config.reviewConnectionKey, config.reviewToolName);
-              try {
-                await connectReviewClient(mcp, signal);
-                review = await mcp.review(row.item, job.region, signal);
-              } finally {
-                await closeReviewClient(mcp);
-              }
+              review = await runScopedMcpReview(
+                () => new McpReviewClient(config.reviewMcpUrl, config.reviewConnectionKey, config.reviewToolName),
+                signal,
+                (mcp, reviewSignal) => mcp.review(row.item, job.region, reviewSignal),
+              );
             }
             const leaseCurrent = await ctx.runQuery(internal.notion.leaseCurrent, {
               installationId: job.installationId,
@@ -413,11 +387,12 @@ export const run = internalAction({
         }
       }
     } catch (error) {
-      if (error instanceof WorkerError && error.code === "revoked") {
-        if (refreshSucceeded) {
+      const revocation = classifyNotionRevocation(error, refreshSucceeded);
+      if (revocation !== "unrelated") {
+        if (revocation === "retry_after_rotation") {
           result = "retry";
           retry = Date.now() + 1_000;
-        } else if (error.message.includes("Notion access") && !error.message.includes("MCP") && !error.message.includes("Review")) {
+        } else {
           await ctx.runMutation(internal.notion.failRefresh, { installationId: job.installationId, expectedRevision: job.credentialRevision, now: Date.now() });
         }
       }
