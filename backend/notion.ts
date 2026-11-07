@@ -4,6 +4,7 @@ import { internal } from "./api";
 import type { Doc, Id } from "./model";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./operations";
 import { requireServerSecret } from "./security";
+import { transitionControl, transitionExpiredLease, transitionFinishJob, transitionFinishSetup, type NotionScheduleCommand } from "./lib/notion-transitions";
 
 const DAY = 86_400_000;
 const OAUTH_TTL = 10 * 60_000;
@@ -42,36 +43,30 @@ function inputIds(binding: Installation): Set<string> {
   return new Set(inputPropertyNames.flatMap((name) => properties?.[name] ? [decodePropertyId(properties[name]!.id)] : []));
 }
 
+async function scheduleNotionCommands(ctx: MutationCtx, installationId: InstallationId, commands: NotionScheduleCommand[]): Promise<void> {
+  for (const command of commands) {
+    if (command.type === "setup") {
+      await ctx.scheduler.runAfter(command.delayMs, notionActions.setup, { installationId, expectedGeneration: command.expectedGeneration });
+    } else if (command.type === "run") {
+      await ctx.scheduler.runAfter(command.delayMs, notionActions.run, { installationId });
+    } else {
+      await ctx.scheduler.runAfter(command.delayMs, notionActions.disconnect, { installationId });
+    }
+  }
+}
+
 async function recoverExpiredLease(ctx: MutationCtx, installationId: InstallationId, leaseId: string, now: number): Promise<void> {
   const installation = await ctx.db.get("notionInstallations", installationId);
   const slots = await ctx.db.query("notionProcessingSlots").withIndex("by_slot").take(MAX_GLOBAL_LEASES);
   const slot = slots.find((row) => row.installationId === installationId && row.leaseId === leaseId);
-  if (slot && (!installation || installation.leaseId !== leaseId || (installation.leaseUntil ?? 0) <= now)) {
-    if (slot.jobId) {
-      const job = await ctx.db.get("notionJobs", slot.jobId);
-      if (job?.leaseId === leaseId) await ctx.db.patch(job._id, { leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, dueAt: Math.min(job.dueAt, now), touchedAt: now });
-    }
-    await ctx.db.delete(slot._id);
+  const job = slot?.jobId ? await ctx.db.get("notionJobs", slot.jobId) : null;
+  const transition = transitionExpiredLease({ installation, job, slot: slot ?? null }, { type: "lease_expired", leaseId, now });
+  if (transition.jobPatch && slot?.jobId) await ctx.db.patch(slot.jobId, transition.jobPatch);
+  if (transition.deleteSlot && slot) await ctx.db.delete(slot._id);
+  if (transition.recoverInstallation && installation && transition.installationPatch) {
+    await ctx.db.patch(installation._id, transition.installationPatch);
+    await scheduleNotionCommands(ctx, installationId, transition.commands);
   }
-  if (!installation || installation.leaseId !== leaseId || (installation.leaseUntil ?? 0) > now) return;
-
-  const pendingCredentials = installation.pendingCredentialEnvelope;
-  const disconnecting = installation.status === "disconnecting" || installation.disconnectAfterDrain;
-  const refreshAmbiguous = installation.refreshLeaseUntil !== undefined && installation.refreshLeaseUntil <= now &&
-    installation.refreshAttemptRevision === installation.credentialRevision && !pendingCredentials && !disconnecting;
-  const nextStatus = disconnecting ? "disconnecting" : refreshAmbiguous ? "needs_reconnect" : pendingCredentials ? "setting_up" : installation.status;
-  await ctx.db.patch(installation._id, {
-    leaseId: undefined, leaseUntil: undefined,
-    ...(pendingCredentials ? { credentialEnvelope: pendingCredentials, credentialRevision: installation.credentialRevision + 1, pendingCredentialEnvelope: undefined, refreshLeaseUntil: undefined, refreshAttemptRevision: undefined } : {}),
-    ...(refreshAmbiguous ? { generation: installation.generation + 1, errorCode: "access_revoked", refreshLeaseUntil: undefined } : {}),
-    status: nextStatus,
-    controlBusy: nextStatus === "setting_up" || nextStatus === "disconnecting",
-    controlAction: nextStatus === "setting_up" ? "setup" : nextStatus === "disconnecting" ? "disconnect" : undefined,
-    updatedAt: now,
-  });
-  if (nextStatus === "disconnecting") await ctx.scheduler.runAfter(0, notionActions.disconnect, { installationId });
-  else if (nextStatus === "setting_up") await ctx.scheduler.runAfter(0, notionActions.setup, { installationId, expectedGeneration: installation.generation });
-  else if (nextStatus === "active") await ctx.scheduler.runAfter(0, notionActions.run, { installationId });
 }
 
 export const beginOAuth = mutation({
@@ -196,25 +191,11 @@ export const control = mutation({
     if (!session || session.expiresAt <= args.now || session.csrfHash !== args.csrfHash) unauthorized();
     const installation = await ctx.db.get("notionInstallations", session.installationId);
     if (!installation || installation.status === "disconnecting") unauthorized();
-    const hasLease = installation.leaseUntil !== undefined && installation.leaseUntil > args.now;
-    if (args.action === "pause") {
-      await ctx.db.patch(installation._id, { status: "paused", generation: installation.generation + 1, controlBusy: hasLease, controlAction: hasLease ? "pause" : undefined, updatedAt: args.now });
-    } else if (args.action === "resume" || args.action === "retry") {
-      const needsSetup = !installation.databaseId || !installation.dataSourceId || args.action === "retry";
-      const status = needsSetup || hasLease ? "setting_up" : "active";
-      await ctx.db.patch(installation._id, { status, generation: installation.generation + 1, controlBusy: hasLease || needsSetup, controlAction: needsSetup ? "setup" : hasLease ? "resume" : undefined, updatedAt: args.now });
-      if (!hasLease) {
-        if (needsSetup) await ctx.scheduler.runAfter(0, notionActions.setup, { installationId: installation._id, expectedGeneration: installation.generation + 1 });
-        else await ctx.scheduler.runAfter(0, notionActions.run, { installationId: installation._id });
-      }
-    } else if (args.action === "region") {
-      if (!args.region) throw new BackendError("A region is required.");
-      await ctx.db.patch(installation._id, { region: args.region, status: "setting_up", generation: installation.generation + 1, controlBusy: true, controlAction: "setup", updatedAt: args.now });
-      if (!hasLease) await ctx.scheduler.runAfter(0, notionActions.setup, { installationId: installation._id, expectedGeneration: installation.generation + 1 });
-    } else {
-      await ctx.db.patch(installation._id, { status: "disconnecting", generation: installation.generation + 1, controlBusy: true, controlAction: "disconnect", disconnectAfterDrain: true, updatedAt: args.now });
-      if (!hasLease) await ctx.scheduler.runAfter(0, notionActions.disconnect, { installationId: installation._id });
-    }
+    if (args.action === "region" && !args.region) throw new BackendError("A region is required.");
+    const transition = transitionControl(installation, { type: "control", action: args.action, region: args.region, now: args.now });
+    if (!transition.accepted) unauthorized();
+    await ctx.db.patch(installation._id, transition.installationPatch);
+    await scheduleNotionCommands(ctx, installation._id, transition.commands);
     return { accepted: true as const };
   },
 });
@@ -366,22 +347,12 @@ export const finishSetup = internalMutation({
   args: { installationId: v.id("notionInstallations"), expectedGeneration: v.number(), leaseId: v.string(), now: v.number(), errorCode: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const installation = await ctx.db.get("notionInstallations", args.installationId);
-    if (!installation || installation.leaseId !== args.leaseId || installation.leaseUntil === undefined || installation.leaseUntil <= args.now) return false;
+    const transition = transitionFinishSetup({ installation }, { type: "setup_finished", ...args });
+    if (!transition.accepted || !installation) return false;
     const slots = await ctx.db.query("notionProcessingSlots").withIndex("by_slot").take(MAX_GLOBAL_LEASES);
-    for (const slot of slots) if (slot.leaseId === args.leaseId) await ctx.db.delete(slot._id);
-    const pending = installation.pendingCredentialEnvelope;
-    const stillCurrent = installation.generation === args.expectedGeneration && installation.status === "setting_up";
-    const setupFailed = Boolean(args.errorCode && stillCurrent);
-    const retrySetup = installation.status === "setting_up" && !setupFailed;
-    await ctx.db.patch(installation._id, {
-      leaseId: undefined, leaseUntil: undefined, controlBusy: installation.status === "disconnecting" || retrySetup,
-      controlAction: installation.status === "disconnecting" ? "disconnect" : retrySetup ? "setup" : undefined,
-      ...(pending ? { credentialEnvelope: pending, credentialRevision: installation.credentialRevision + 1, pendingCredentialEnvelope: undefined } : {}),
-      ...(setupFailed ? { status: "setup_failed", generation: installation.generation + 1, errorCode: args.errorCode } : {}), updatedAt: args.now,
-    });
-    if (installation.status === "disconnecting") await ctx.scheduler.runAfter(0, notionActions.disconnect, { installationId: installation._id });
-    else if (pending || retrySetup) await ctx.scheduler.runAfter(0, notionActions.setup, { installationId: installation._id, expectedGeneration: installation.generation });
-    else if (installation.status === "active") await ctx.scheduler.runAfter(0, notionActions.run, { installationId: installation._id });
+    if (transition.deleteLeaseSlot) for (const slot of slots) if (slot.leaseId === args.leaseId) await ctx.db.delete(slot._id);
+    await ctx.db.patch(installation._id, transition.installationPatch);
+    await scheduleNotionCommands(ctx, installation._id, transition.commands);
     return true;
   },
 });
@@ -488,45 +459,14 @@ export const finishJob = internalMutation({
   args: { installationId: v.id("notionInstallations"), jobId: v.id("notionJobs"), leaseId: v.string(), claimedRevision: v.number(), result: v.union(v.literal("success"), v.literal("retry"), v.literal("failed")), now: v.number(), retryAt: v.optional(v.number()), errorCode: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const [installation, job] = await Promise.all([ctx.db.get("notionInstallations", args.installationId), ctx.db.get("notionJobs", args.jobId)]);
-    if (!installation || !job || job.leaseId !== args.leaseId || installation.leaseId !== args.leaseId || (installation.leaseUntil ?? 0) <= args.now || (job.leaseUntil ?? 0) <= args.now) return { finished: false as const };
+    const transition = transitionFinishJob({ installation, job }, { type: "job_finished", ...args });
+    if (!transition.accepted || !installation || !job || !transition.jobMutation) return { finished: false as const };
     const slot = await ctx.db.query("notionProcessingSlots").withIndex("by_slot").take(MAX_GLOBAL_LEASES);
-    for (const row of slot) if (row.leaseId === args.leaseId) await ctx.db.delete(row._id);
-    const newerInputArrived = job.revision > args.claimedRevision;
-    // Resume may arrive before the invalidated review drains; keep its job in either case.
-    const pausedReview = installation.generation !== job.leasedGeneration &&
-      (installation.status === "paused" || installation.controlAction === "resume") && !installation.disconnectAfterDrain;
-    const structuralFailure = !newerInputArrived && args.result === "failed" &&
-      (args.errorCode === "invalid_config" || args.errorCode === "missing_property") &&
-      installation.status === "active" && !installation.controlBusy && installation.generation === job.leasedGeneration &&
-      !installation.pendingCredentialEnvelope && !installation.disconnectAfterDrain;
-    const retryJob = args.result === "retry" && installation.status === "active";
-    if (newerInputArrived || pausedReview) {
-      await ctx.db.patch(job._id, { dueAt: Math.min(job.dueAt, args.now), leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, touchedAt: args.now });
-    } else if (structuralFailure) {
-      await ctx.db.patch(job._id, { leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, touchedAt: args.now });
-    } else if (retryJob) {
-      await ctx.db.patch(job._id, { dueAt: Math.max(args.retryAt ?? args.now + 5_000, args.now + 1_000), leaseId: undefined, leaseUntil: undefined, leasedGeneration: undefined, touchedAt: args.now });
-    } else {
-      await ctx.db.delete(job._id);
-    }
-    const pendingCredentials = installation.pendingCredentialEnvelope;
-    const disconnecting = installation.disconnectAfterDrain || installation.status === "disconnecting";
-    const nextStatus = disconnecting ? "disconnecting" : structuralFailure ? "setup_failed" : pendingCredentials || installation.controlAction === "setup" ? "setting_up" : installation.controlAction === "resume" ? "active" : installation.status;
-    await ctx.db.patch(installation._id, {
-      leaseId: undefined, leaseUntil: undefined,
-      controlBusy: nextStatus === "setting_up" || disconnecting,
-      controlAction: disconnecting ? "disconnect" : nextStatus === "setting_up" ? "setup" : undefined,
-      pendingCount: Math.max(0, installation.pendingCount - (newerInputArrived || pausedReview || structuralFailure || retryJob ? 0 : 1)),
-      ...(pendingCredentials ? { credentialEnvelope: pendingCredentials, credentialRevision: installation.credentialRevision + 1, pendingCredentialEnvelope: undefined, status: nextStatus } : {}),
-      ...(!pendingCredentials && installation.controlAction ? { status: nextStatus } : {}),
-      ...(args.result === "failed" && args.errorCode ? { errorCode: args.errorCode } : {}), updatedAt: args.now,
-      ...(structuralFailure ? { status: "setup_failed", generation: installation.generation + 1, controlBusy: false, controlAction: undefined } : {}),
-    });
-    if (disconnecting) await ctx.scheduler.runAfter(0, notionActions.disconnect, { installationId: installation._id });
-    else if (pendingCredentials) await ctx.scheduler.runAfter(0, notionActions.setup, { installationId: installation._id, expectedGeneration: installation.generation });
-    else if (installation.controlAction === "setup") await ctx.scheduler.runAfter(0, notionActions.setup, { installationId: installation._id, expectedGeneration: installation.generation });
-    else if (installation.status === "active" || installation.controlAction === "resume") await ctx.scheduler.runAfter(0, notionActions.run, { installationId: installation._id });
-    if (args.result === "retry" && installation.status === "active") await ctx.scheduler.runAfter(Math.max(1_000, (args.retryAt ?? args.now + 5_000) - args.now), notionActions.run, { installationId: installation._id });
+    if (transition.deleteLeaseSlot) for (const row of slot) if (row.leaseId === args.leaseId) await ctx.db.delete(row._id);
+    if (transition.jobMutation.type === "delete") await ctx.db.delete(job._id);
+    else await ctx.db.patch(job._id, transition.jobMutation.patch);
+    await ctx.db.patch(installation._id, transition.installationPatch);
+    await scheduleNotionCommands(ctx, installation._id, transition.commands);
     if (args.result !== "retry") {
       const active = await ctx.db.query("notionInstallations").withIndex("by_status", (q) => q.eq("status", "active")).take(MAX_INSTALLATIONS);
       for (const candidate of active) {

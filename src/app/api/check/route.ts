@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
     const parsed = CheckRequestSchema.safeParse(body.ok ? body.value : null);
     if (!parsed.success) return jsonResponse({ error: "The product details were not valid." }, 400, cookieValue);
 
-    const { result } = await checkProduct(parsed.data.observation, parsed.data.region);
+    const { result } = await checkProduct(parsed.data.observation, parsed.data.region, { signal: request.signal });
+    request.signal.throwIfAborted();
     const response = jsonResponse({ ...result, shareToken: createShareToken(result) ?? undefined }, 200, cookieValue, {
       "X-RateLimit-Remaining": String(Math.min(...limits.map((limit) => limit.remaining))),
     });

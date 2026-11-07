@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { NotionRestClient } from "../integrations/notion/shopping-core.ts";
+import { NotionRestClient, WorkerError } from "../integrations/notion/shopping-core.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
+function deferred<A = void>() {
+  let resolve!: (value: A) => void;
+  const promise = new Promise<A>((done) => { resolve = done; });
+  return { promise, resolve };
+}
 function harness() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const gates = new Map<string, { promise: Promise<Response>; resolve: (response: Response) => void }>();
@@ -64,6 +69,14 @@ describe("Notion REST request admission", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("tags Notion authorization failures with their provider source", async () => {
+    const client = new NotionRestClient("test-token", async () => new Response("unauthorized", { status: 401 }));
+    await expect(client.getPage("private-page", new AbortController().signal)).rejects.toMatchObject({
+      code: "revoked",
+      source: "notion",
+    } satisfies Partial<WorkerError>);
+  });
+
   it("removes cancelled waiters so surviving and subsequent requests finish after held requests drain", async () => {
     const context = harness();
     const first = context.request("first");
@@ -115,5 +128,44 @@ describe("Notion REST request admission", () => {
     expect(await queued).toEqual({ id: "queued" });
     expect(await arrival).toEqual({ id: "arrival" });
     expect(context.peak()).toBe(2);
+  });
+
+  it("honors Retry-After for transient GETs and stops after the bounded attempt count", async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn(async () => new Response("temporary", { status: 503, headers: { "retry-after": "2" } }));
+    const client = new NotionRestClient("test-token", fetcher);
+    const pending = client.getPage("retry-page", new AbortController().signal).then(
+      (value) => value,
+      (error: unknown) => error,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    const failure = await pending;
+    expect(failure).toMatchObject({ code: "temporary" });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it("honors cancellation while waiting to retry a transient GET", async () => {
+    const started = deferred<void>();
+    const fetcher = vi.fn(async () => {
+      started.resolve();
+      return new Response("temporary", { status: 503, headers: { "retry-after": "30" } });
+    });
+    const controller = new AbortController();
+    const reason = new Error("cancel retry");
+    const client = new NotionRestClient("test-token", fetcher);
+    const pending = client.getPage("cancel-retry", controller.signal);
+    await started.promise;
+    await Promise.resolve();
+    controller.abort(reason);
+
+    await expect(pending).rejects.toBe(reason);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
