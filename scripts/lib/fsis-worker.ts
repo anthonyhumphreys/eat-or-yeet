@@ -43,6 +43,7 @@ export async function runFsisWorker(options: {
   sync: () => Promise<unknown>;
   signal: AbortSignal;
   once?: boolean;
+  poll?: () => Promise<void>;
   log?: (message: string) => void;
 }): Promise<boolean> {
   const log = options.log ?? console.log;
@@ -66,7 +67,19 @@ export async function runFsisWorker(options: {
     const delay = state.failed ? FSIS_RETRY_INTERVAL_MS : FSIS_SYNC_INTERVAL_MS;
     log(`Next USDA sync in ${delay / (60 * 60 * 1_000)} hour(s).`);
     try {
-      await pause(delay, undefined, { signal: options.signal });
+      // FDA requests use the existing authenticated listing transport. Polling
+      // never runs the USDA import early or advances its daily success timestamp.
+      if (!options.poll) await pause(delay, undefined, { signal: options.signal });
+      else {
+        const dueAt = Date.now() + delay;
+        while (Date.now() < dueAt && !options.signal.aborted) {
+          await pause(Math.min(5 * 60_000, dueAt - Date.now()), undefined, { signal: options.signal });
+          if (!options.signal.aborted && Date.now() < dueAt) {
+            try { await options.poll(); }
+            catch { log(JSON.stringify({ event: "fda_monitor_poll_failed" })); }
+          }
+        }
+      }
     } catch (error) {
       if (!options.signal.aborted) throw error;
     }

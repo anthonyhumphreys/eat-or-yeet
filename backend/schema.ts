@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "./values";
 import { v } from "./values";
 import { notionTables } from "./lib/notion_schema";
+import { fdaMonitorTables } from "./lib/fda-monitor-state";
 
 const region = v.union(v.literal("UK"), v.literal("US"));
 const status = v.union(v.literal("draft"), v.literal("active"), v.literal("resolved"), v.literal("reported"));
@@ -68,6 +69,7 @@ const incidentTarget = v.object({
 
 export default defineSchema({
   ...notionTables,
+  ...fdaMonitorTables,
   incidents: defineTable({
     title: v.string(),
     slug: v.string(),
@@ -193,6 +195,7 @@ export default defineSchema({
     updated: v.number(),
     errors: v.array(v.string()),
     pipeline: v.optional(v.object({ prefix: v.string(), batches: v.number(), nextBatch: v.number() })),
+    monitorVersion: v.optional(v.number()),
   })
     .index("by_startedAt", ["startedAt"])
     .index("by_source_startedAt", ["source", "startedAt"])

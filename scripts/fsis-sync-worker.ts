@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { syncFoodSources } from "./lib/food-source-sync";
 import { fsisUploadEnvironment, fsisWorkerHealthy, runFsisWorker } from "./lib/fsis-worker";
+import { pollFdaMonitor } from "./lib/fda-monitor-sync";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -32,6 +33,7 @@ async function main() {
     const ok = await runFsisWorker({
       stateFile, signal: controller.signal, once: args[0] === "--once",
       sync: () => syncFoodSources(env, syncFDA),
+      poll: syncFDA && env.FDA_MONITOR_ENABLED === "true" && env.FDA_ANNOUNCEMENTS_UPLOAD_MODE === "listings" ? () => pollFdaMonitor(env) : undefined,
     });
     if (args[0] === "--once" && !ok) process.exitCode = 1;
   } finally {

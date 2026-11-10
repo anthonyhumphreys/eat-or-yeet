@@ -2,12 +2,12 @@ import { setTimeout as pause } from "node:timers/promises";
 import { z } from "zod";
 import { readResponseJson } from "../../src/lib/http/bounded-response";
 const importResultSchema = z.object({ status: z.string(), runId: z.string().optional(), found: z.number(), created: z.number(), updated: z.number(), errors: z.array(z.string()) });
-export async function uploadSnapshot(url: URL, token: string, label: string, payload: unknown[], fetchedAt: number, completionMinutes = 15) {
+export async function uploadSnapshot(url: URL, token: string, label: string, payload: unknown[], fetchedAt: number, completionMinutes = 15, monitorVersion?: number) {
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ fetchedAt, payload }),
+      body: JSON.stringify({ fetchedAt, payload, ...(monitorVersion === undefined ? {} : { monitorVersion }) }),
       redirect: "error", signal: AbortSignal.timeout(5 * 60 * 1_000),
     });
   } catch { throw new Error(`${label} upload request failed; check backend access and the ingestion ledger`); }

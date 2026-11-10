@@ -10,6 +10,7 @@ services:
       FSIS_BACKEND_URL: ${FSIS_BACKEND_URL:?Set FSIS_BACKEND_URL to the Cloudflare backend URL}
       FDA_ANNOUNCEMENTS_SYNC_ENABLED: ${FDA_ANNOUNCEMENTS_SYNC_ENABLED:-true}
       FDA_ANNOUNCEMENTS_UPLOAD_MODE: ${FDA_ANNOUNCEMENTS_UPLOAD_MODE:-full}
+      FDA_MONITOR_ENABLED: ${FDA_MONITOR_ENABLED:-false}
     secrets:
       - fsis_upload_token
       - fda_upload_token

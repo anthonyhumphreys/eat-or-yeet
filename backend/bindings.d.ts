@@ -11,6 +11,9 @@ export interface CloudflareBindings {
 	BACKEND_RESTORE_ENABLED: "false";
 	FDA_ANNOUNCEMENTS_FETCH_MODE: "firecrawl" | "snapshot";
 	FDA_ALEXANDRIA_FALLBACK: "true" | "false";
+	FDA_MONITOR_ENABLED: "false";
+	FDA_MONITOR_ID: "";
+	FDA_MONITOR_DETAIL_LIMIT: "5";
 	BACKEND_SECRET: string;
 	BACKEND_ADMIN_TOKEN: string;
 	FSIS_UPLOAD_TOKEN: string;

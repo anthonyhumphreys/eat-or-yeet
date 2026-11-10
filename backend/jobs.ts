@@ -44,4 +44,5 @@ export async function scheduleCron(env: CloudflareBindings, cron: string, schedu
   if (ref) await env.DB.prepare("INSERT OR IGNORE INTO job_outbox(id, operation, args, due_at) VALUES (?, ?, '{}', ?)").bind(`cron:${cron}:${scheduledTime}`, ref.name, scheduledTime).run();
   await publishDueJobs(env);
   await env.DB.prepare("DELETE FROM job_outbox WHERE status='done' AND completed_at < ?").bind(Date.now() - 7 * 86_400_000).run();
+  if (cron === "17 5 * * *") await workerRuntime(env).invoke(internal.fdaMonitor.cleanup, {});
 }
