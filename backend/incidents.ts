@@ -28,6 +28,7 @@ import { bumpDatasetVersions, datasetVersion } from "./lib/dataset_version";
 import { sameIncidentContent } from "../src/lib/incidents/unchanged";
 import { incidentFingerprint } from "../src/lib/incidents/fingerprint";
 import { IMPORT_ARCHIVE_AUDIT_MS, invalidateImportState } from "./lib/import_state";
+import { clearMonitorPending, monitorControl, monitorNotice } from "./lib/fda-monitor-state";
 
 const sources: IncidentSource[] = [fsaSource, fdaSource, fdaAnnouncementsSource, fsisSource, fdaDrugSource];
 // Pack checks only cover food, so only food sources gate a "no match" result.
@@ -332,7 +333,14 @@ export const getDatasetStatus = query({
       return [source.id, { latest: summary(latest), latestSuccessful: summary(latestSuccessful) }] as const;
     }));
 
-    return { ...buildDatasetStatus(args.region, requiredSources, Object.fromEntries(pairs)), version: await datasetVersion(ctx, args.region) };
+    const runs = Object.fromEntries(pairs);
+    if (process.env.FDA_MONITOR_ENABLED === "true" && args.region === "US") {
+      const control = await monitorControl(ctx);
+      if (!control || control.pending > 0 || control.requestedVersion > control.fulfilledVersion) {
+        runs["fda-announcements"] = { ...runs["fda-announcements"], latest: { source: "fda-announcements", status: "running", startedAt: Date.now() } };
+      }
+    }
+    return { ...buildDatasetStatus(args.region, requiredSources, runs), version: await datasetVersion(ctx, args.region) };
   },
 });
 
@@ -426,6 +434,7 @@ export const beginRun = internalMutation({
     sourceName: v.string(),
     region: v.union(v.literal("UK"), v.literal("US")),
     scope: v.string(),
+    monitorVersion: v.optional(v.number()),
   },
   handler: (ctx, args) => ctx.db.insert("ingestionRuns", {
     ...args,
@@ -704,7 +713,20 @@ export const applyImportBatch = internalMutation({
       return { applied: false };
     }
     if (items.some(item => item.sourceKey !== run.source || item.sourceRunId !== runId)) throw new Error("Import batch belongs to another refresh");
-    const result = await upsertBatch.handler(ctx, { items });
+    const eligible = [];
+    for (const item of items) {
+      if (run.source === "fda-announcements" && process.env.FDA_MONITOR_ENABLED === "true") {
+        const notice = await monitorNotice(ctx, item.authorityUrl.replace("https://www.fda.gov", ""));
+        // An older full snapshot cannot undo a newer incremental import or event.
+        if (notice && (notice.appliedAt > run.startedAt || notice.requiredVersion > (run.monitorVersion ?? 0))) continue;
+        if (notice) {
+          await clearMonitorPending(ctx, notice);
+          await ctx.db.patch(notice._id, { appliedAt: run.startedAt });
+        }
+      }
+      eligible.push(item);
+    }
+    const result = await upsertBatch.handler(ctx, { items: eligible });
     const nextBatch = index + 1;
     const done = nextBatch === run.pipeline.batches;
     await ctx.db.patch(runId, { created: run.created + result.created, updated: run.updated + result.updated,
@@ -773,9 +795,9 @@ export const reserveFdaAlexandriaLookup = internalMutation({
 
 function fdaFirecrawlPrefix(runId: Id<"ingestionRuns">) { return `source-imports/${runId}/firecrawl`; }
 
-async function prepareFdaFirecrawlImport(ctx: ActionCtx, loadListings: () => ReturnType<typeof readFdaListingSnapshot>): Promise<ImportResult> {
+async function prepareFdaFirecrawlImport(ctx: ActionCtx, loadListings: () => ReturnType<typeof readFdaListingSnapshot>, monitorVersion = 0): Promise<ImportResult> {
   const source = fdaAnnouncementsSource;
-  const runId = await ctx.runMutation(internal.incidents.beginRun, { source: source.id, sourceName: source.name, region: source.region, scope: source.scope });
+  const runId = await ctx.runMutation(internal.incidents.beginRun, { source: source.id, sourceName: source.name, region: source.region, scope: source.scope, monitorVersion });
   try {
     if (!process.env.FIRECRAWL_API_KEY?.trim()) throw new Error("Provision FIRECRAWL_API_KEY on the Cloudflare Worker before enabling FDA Firecrawl imports");
     const listings = await loadListings();
@@ -844,11 +866,14 @@ export const fetchFdaFirecrawlBatch = internalAction({
 });
 
 export const importFdaListingSnapshotInternal = internalAction({
-  args: { storageId: v.string(), fetchedAt: v.number() },
-  handler: async (ctx, { storageId, fetchedAt }): Promise<ImportResult> => {
+  args: { storageId: v.string(), fetchedAt: v.number(), monitorVersion: v.optional(v.number().int().nonnegative()) },
+  handler: async (ctx, { storageId, fetchedAt, monitorVersion = 0 }): Promise<ImportResult> => {
     try {
       if (process.env.FDA_ANNOUNCEMENTS_FETCH_MODE !== "firecrawl") throw new Error("Cloudflare FDA Firecrawl mode is not enabled");
-      return await prepareFdaFirecrawlImport(ctx, async () => readFdaListingSnapshot(await ctx.storage.get(storageId), fetchedAt));
+      return await prepareFdaFirecrawlImport(ctx, async () => {
+        if (process.env.FDA_MONITOR_ENABLED === "true") await ctx.runAction(internal.fdaMonitor.acceptListing, { storageId, fetchedAt, version: monitorVersion, full: true });
+        return readFdaListingSnapshot(await ctx.storage.get(storageId), fetchedAt);
+      }, monitorVersion);
     } finally { await ctx.storage.delete(storageId); }
   },
 });

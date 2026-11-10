@@ -8,6 +8,7 @@ import { equalSecrets } from "./security";
 import { BackendError } from "./values";
 import { consumeJob, publishDueJobs, scheduleCron } from "./jobs";
 import { internal } from "./api";
+import { receiveMonitorWebhook } from "./fda-monitor-webhook";
 
 const requestSchema = z.strictObject({ operation: z.string().max(100), args: z.record(z.string(), z.unknown()) });
 const queueMessage = z.strictObject({ jobId: z.string().min(1).max(100), leaseToken: z.string().uuid() });
@@ -16,6 +17,7 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
 const worker = {
   async fetch(request: Request, env: CloudflareBindings, ctx: Pick<ExecutionContext, "waitUntil">) {
     const url = new URL(request.url);
+    if (url.pathname === "/webhooks/firecrawl/fda") return receiveMonitorWebhook(request, env);
     if (url.pathname === "/health") {
       await env.DB.prepare("SELECT revision FROM transaction_state WHERE id=1").first();
       return json({ service: "eat-or-yeet-backend", status: "ok" });
@@ -23,11 +25,26 @@ const worker = {
     const nested = url.pathname === "/internal/rpc";
     const admin = nested || url.pathname.startsWith("/admin/");
     const fdaListingUpload = url.pathname === "/admin/fda-announcement-listings";
+    const monitorUpload = url.pathname === "/admin/fda-monitor";
     const snapshotSource = url.pathname === "/admin/fsis" ? "fsis" : url.pathname === "/admin/fda-announcements" || fdaListingUpload ? "fda-announcements" : null;
     const secret = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-    const credential = snapshotSource === "fsis" ? env.FSIS_UPLOAD_TOKEN : snapshotSource === "fda-announcements" ? env.FDA_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
+    const credential = snapshotSource === "fsis" ? env.FSIS_UPLOAD_TOKEN : snapshotSource === "fda-announcements" || monitorUpload ? env.FDA_UPLOAD_TOKEN : admin ? env.BACKEND_ADMIN_TOKEN : env.BACKEND_SECRET;
     if (!equalSecrets(secret, credential)) return json({ error: "Unauthorized" }, 401);
     try {
+      if (monitorUpload) {
+        if (process.env.FDA_MONITOR_ENABLED !== "true" || process.env.FDA_ANNOUNCEMENTS_FETCH_MODE !== "firecrawl") return json({ error: "FDA monitoring is disabled" }, 409);
+        if (request.method === "GET") return json({ result: await workerRuntime(env).invoke(internal.fdaMonitor.getStatus, {}) });
+        if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+        const body = z.strictObject({ fetchedAt: z.number().nonnegative(), version: z.number().int().nonnegative(), payload: z.array(z.unknown()).max(10_000) })
+          .parse(await readResponseJson(new Response(request.body, { headers: request.headers }), 20 * 1024 * 1024));
+        const storageId = `fda-monitor/${crypto.randomUUID()}.json`;
+        await env.SNAPSHOTS.put(storageId, JSON.stringify(body.payload));
+        try {
+          const result = await workerRuntime(env).invoke(internal.fdaMonitor.acceptListing, { storageId, fetchedAt: body.fetchedAt, version: body.version, full: false });
+          ctx.waitUntil(publishDueJobs(env));
+          return json({ result });
+        } finally { await env.SNAPSHOTS.delete(storageId); }
+      }
       if (snapshotSource && request.method === "GET") {
         const runId = z.string().min(1).max(200).safeParse(url.searchParams.get("runId"));
         if (!runId.success) return json({ error: "Invalid run identifier" }, 400);
@@ -42,11 +59,11 @@ const worker = {
         if (snapshotSource === "fda-announcements" && !fdaListingUpload && cloudFda) {
           return json({ error: "FDA announcement imports are owned by the Cloudflare Worker" }, 409);
         }
-        const snapshot = z.strictObject({ fetchedAt: z.number().nonnegative(), payload: z.array(z.unknown()).max(20_000) }).parse(body);
+        const snapshot = z.strictObject({ fetchedAt: z.number().nonnegative(), payload: z.array(z.unknown()).max(20_000), monitorVersion: z.number().int().nonnegative().optional() }).parse(body);
         const key = `${snapshotSource}/${crypto.randomUUID()}.json`;
         await env.SNAPSHOTS.put(key, JSON.stringify(snapshot.payload), { httpMetadata: { contentType: "application/json" } });
         try {
-          const result = await workerRuntime(env).invoke(snapshotSource === "fsis" ? internal.incidents.importFsisSnapshotInternal : fdaListingUpload ? internal.incidents.importFdaListingSnapshotInternal : internal.incidents.importFdaSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt });
+          const result = await workerRuntime(env).invoke(snapshotSource === "fsis" ? internal.incidents.importFsisSnapshotInternal : fdaListingUpload ? internal.incidents.importFdaListingSnapshotInternal : internal.incidents.importFdaSnapshotInternal, { storageId: key, fetchedAt: snapshot.fetchedAt, ...(fdaListingUpload && snapshot.monitorVersion !== undefined ? { monitorVersion: snapshot.monitorVersion } : {}) });
           ctx.waitUntil(publishDueJobs(env));
           return json({ result }, result.status === "queued" ? 202 : 200);
         } finally { await env.SNAPSHOTS.delete(key); }

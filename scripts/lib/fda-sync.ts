@@ -2,6 +2,7 @@ import { fdaAnnouncementsSource, fetchFdaAnnouncementListings } from "../../src/
 import { fdaListingSnapshotSchema } from "../../src/lib/incidents/fda-listing-snapshot";
 import { serialiseSourceIncident } from "../../src/lib/incidents/serialise";
 import { uploadSnapshot } from "./snapshot-upload";
+import { readFdaMonitorStatus } from "./fda-monitor-sync";
 
 export async function syncFdaAnnouncements(env: NodeJS.ProcessEnv) {
   if (!env.BACKEND_URL || !env.FDA_UPLOAD_TOKEN) throw new Error("BACKEND_URL and FDA_UPLOAD_TOKEN are required");
@@ -10,7 +11,9 @@ export async function syncFdaAnnouncements(env: NodeJS.ProcessEnv) {
   const url = new URL(mode === "listings" ? "/admin/fda-announcement-listings" : "/admin/fda-announcements", env.BACKEND_URL);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) throw new Error("The backend requires HTTPS");
   if (mode === "listings") {
+    const monitor = env.FDA_MONITOR_ENABLED === "true" ? await readFdaMonitorStatus(env) : null;
     const listings = fdaListingSnapshotSchema.parse((await fetchFdaAnnouncementListings()).map(item => ({ ...item, publishedAt: item.publishedAt.getTime() })));
+    if (monitor) return uploadSnapshot(url, env.FDA_UPLOAD_TOKEN, "FDA announcement listings", listings, Date.now(), 60, monitor.requestedVersion);
     return uploadSnapshot(url, env.FDA_UPLOAD_TOKEN, "FDA announcement listings", listings, Date.now(), 60);
   }
   const incidents = await fdaAnnouncementsSource.fetchIncidents();

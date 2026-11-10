@@ -35,7 +35,8 @@
     "backend:deploy:production": "wrangler deploy --env production",
     "backend:migrate:local": "wrangler d1 migrations apply DB --local",
     "backend:restore": "tsx scripts/restore-backend.ts",
-    "backend:run": "tsx scripts/backend-run.ts"
+    "backend:run": "tsx scripts/backend-run.ts",
+    "data:configure:monitor": "tsx scripts/configure-fda-monitor.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",

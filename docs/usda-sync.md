@@ -1,5 +1,7 @@
 # NAS USDA and FDA announcement sync
 
+The optional [FDA Monitor flow](firecrawl-monitor.md) polls for requested FDA listing refreshes between the existing daily imports. It requires the updated image, `FDA_MONITOR_ENABLED=true`, and listing upload mode; it does not run USDA imports early or renew daily import health from incremental work.
+
 The production [Cloudflare Firecrawl integration](firecrawl.md) runs FDA detail-page retrieval in the Worker. The NAS uses `FDA_ANNOUNCEMENTS_UPLOAD_MODE=listings` and uploads only the validated FDA listing; all Firecrawl requests and its key stay in Cloudflare. The generic container default remains `full` for legacy snapshot deployments, so production must keep its explicit listing-mode override. USDA API transport is unchanged.
 
 USDA's public FSIS Recall API returns an Akamai 403 from our Convex backend, a Vercel function in `iad1`, standard GitHub Linux/ARM/macOS runners, and a Cloudflare Worker in Amsterdam. Curl and Chrome on GitHub also fail. A fetch from the maintainer's home network succeeds. The exact upstream blocking rule is unknown.

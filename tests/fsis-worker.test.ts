@@ -113,4 +113,21 @@ describe("NAS USDA worker", () => {
     }
     expect(() => fsisUploadEnvironment(key, "http://example.test", { NODE_ENV: "test" })).toThrow(/HTTPS/);
   });
+
+  it("polls FDA intent during the daily wait without rerunning USDA or renewing full-import health", async () => {
+    const sync = vi.fn().mockResolvedValue({ status: "success" });
+    const poll = vi.fn().mockRejectedValueOnce(new Error("private poll error"));
+    const log = vi.fn();
+    const worker = runFsisWorker({ stateFile, sync, poll, signal: controller.signal, log });
+    await vi.waitFor(() => expect(sleeps).toHaveLength(1));
+    const before = await readFsisWorkerState(stateFile);
+    expect(sleeps[0].milliseconds).toBe(5 * 60_000);
+    sleeps[0].resume();
+    await vi.waitFor(() => expect(sleeps).toHaveLength(2));
+    expect(poll).toHaveBeenCalledTimes(1);
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(await readFsisWorkerState(stateFile)).toEqual(before);
+    expect(log).toHaveBeenCalledWith(JSON.stringify({ event: "fda_monitor_poll_failed" }));
+    controller.abort(); await worker;
+  });
 });

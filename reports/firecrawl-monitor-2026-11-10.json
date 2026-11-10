@@ -1,0 +1,169 @@
+{
+  "date": "2026-11-10",
+  "repositoryBaseline": "4d573329070de78678f3ece129ff7eabd7461583",
+  "listingCount": 821,
+  "accountMonitorAccess": true,
+  "checks": [
+    {
+      "id": "01a1c59d-e5f4-7582-a6da-666c119e023b",
+      "status": "completed",
+      "actualCredits": 3,
+      "summary": {
+        "totalPages": 3,
+        "same": 0,
+        "changed": 0,
+        "new": 3,
+        "removed": 0,
+        "error": 0
+      },
+      "pages": [
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/fresh-ready-foods-llc-recalls-fresh-you-brand-sausage-egg-cheese-biscuit-sandwich-due-possible",
+          "status": "new",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts",
+          "status": "new",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+          "status": "new",
+          "statusCode": 200,
+          "diffPresent": false
+        }
+      ]
+    },
+    {
+      "id": "01a1c59e-e35f-7619-8970-c26900c1bcbb",
+      "status": "completed",
+      "actualCredits": 3,
+      "summary": {
+        "totalPages": 3,
+        "same": 3,
+        "changed": 0,
+        "new": 0,
+        "removed": 0,
+        "error": 0
+      },
+      "pages": [
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/fresh-ready-foods-llc-recalls-fresh-you-brand-sausage-egg-cheese-biscuit-sandwich-due-possible",
+          "status": "same",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts",
+          "status": "same",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+          "status": "same",
+          "statusCode": 200,
+          "diffPresent": false
+        }
+      ]
+    },
+    {
+      "id": "01a1c5a0-07c1-7296-bcf7-33cbc3d4b971",
+      "status": "completed",
+      "actualCredits": 3,
+      "summary": {
+        "totalPages": 3,
+        "same": 2,
+        "changed": 1,
+        "new": 0,
+        "removed": 0,
+        "error": 0
+      },
+      "pages": [
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts",
+          "status": "same",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/fresh-ready-foods-llc-recalls-fresh-you-brand-sausage-egg-cheese-biscuit-sandwich-due-possible",
+          "status": "same",
+          "statusCode": 200,
+          "diffPresent": false
+        },
+        {
+          "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+          "status": "changed",
+          "statusCode": 200,
+          "diffPresent": true
+        }
+      ]
+    }
+  ],
+  "originalByteParserComparisons": [
+    {
+      "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/fresh-ready-foods-llc-recalls-fresh-you-brand-sausage-egg-cheese-biscuit-sandwich-due-possible",
+      "direct": "fulfilled",
+      "originalBytes": "fulfilled",
+      "matches": true,
+      "changedFields": [],
+      "sourceId": "announcement:/safety/recalls-market-withdrawals-safety-alerts/fresh-ready-foods-llc-recalls-fresh-you-brand-sausage-egg-cheese-biscuit-sandwich-due-possible",
+      "targetCount": 4,
+      "summaryLength": 614
+    },
+    {
+      "url": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+      "direct": "fulfilled",
+      "originalBytes": "fulfilled",
+      "matches": true,
+      "changedFields": [],
+      "sourceId": "announcement:/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+      "targetCount": 27,
+      "summaryLength": 96
+    }
+  ],
+  "controlledChange": {
+    "simulatedBrowserEdit": true,
+    "upstreamFdaModified": false,
+    "status": "changed",
+    "markerPresentInDiff": true,
+    "revalidatedWithExistingParser": true,
+    "matchesDirect": true,
+    "changedFields": [],
+    "markerBecameRecallData": false
+  },
+  "storedChangedScrape": {
+    "responseKeys": [
+      "success",
+      "data"
+    ],
+    "dataKeys": [
+      "markdown",
+      "warning",
+      "actions",
+      "metadata"
+    ],
+    "sourceURL": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/updated-company-announcement-august-28-2025-recall-announcement",
+    "containsProbeMarker": true
+  },
+  "billing": {
+    "monitorReportedCredits": 9,
+    "standaloneOriginalByteRetrievals": 3,
+    "accountBalanceDecreaseDuringTest": 13,
+    "note": "The account-level balance decreased by one more credit than the nine reported monitor credits plus three base scrape credits; the available per-request metadata did not attribute that difference."
+  },
+  "cleanup": {
+    "temporaryMonitorDeleted": true,
+    "verifiedAbsent": true,
+    "remainingMonitorCount": 0
+  },
+  "limitations": [
+    "The changed-page test used a simulated edit only inside the temporary Firecrawl browser.",
+    "Page results were consumed through the check API; webhook delivery and signature verification were not exercised.",
+    "Full-archive detection coverage and natural FDA edits over time were not measured."
+  ]
+}

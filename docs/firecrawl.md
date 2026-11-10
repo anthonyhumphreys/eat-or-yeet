@@ -1,5 +1,7 @@
 # Firecrawl sponsorship and Cloudflare integration
 
+The optional [FDA Monitor import flow](firecrawl-monitor.md) adds signed change-triggered imports behind a disabled-by-default flag. Daily full reconciliation remains enabled.
+
 Firecrawl sponsors Eat or Yeet. The website acknowledges the sponsorship below the navigation and in the footer, using unmodified [official wordmarks](https://www.firecrawl.dev/press-brand).
 
 ## Who runs what
